@@ -1,0 +1,13 @@
+node_modules/
+.env
+.git
+.gitignore
+venv/
+.venv
+*.pyc
+__pycache__
+.DS_Store
+apps/web/node_modules
+apps/web/dist
+*.onnx
+ml/models/
