@@ -1,0 +1,33 @@
+app = "poonawala-backend"
+primary_region = "sjc"
+
+[build]
+  builder = "paketobuildpacks"
+
+[env]
+  PYTHONUNBUFFERED = "true"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+  processes = ["app"]
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = false
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+[checks]
+  [checks.alive]
+    type = "http"
+    interval = "10s"
+    timeout = "5s"
+    grace_period = "5s"
+    method = "get"
+    path = "/health"

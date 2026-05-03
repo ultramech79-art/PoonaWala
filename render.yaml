@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: poonawala-backend
+    runtime: python
+    buildCommand: pip install -r apps/api/requirements.txt
+    startCommand: cd apps/api && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ALLOWED_ORIGINS
+        value: https://YOUR_VERCEL_URL
+      - key: DATABASE_URL
+        scope: all
+        value: ${DATABASE_URL}
+      - key: GEMINI_API_KEY
+        scope: all
+        value: ${GEMINI_API_KEY}
+      - key: TWOFACTOR_API_KEY
+        scope: all
+        value: ${TWOFACTOR_API_KEY}
+      - key: VLM_API_URL
+        scope: all
+        value: ${VLM_API_URL}
+      - key: VLM_MODEL
+        scope: all
+        value: ${VLM_MODEL}
+      - key: SECRET_KEY
+        scope: all
+        value: ${SECRET_KEY}
+      - key: ENABLE_GEMINI
+        scope: all
+        value: "true"
+      - key: ENABLE_VLM_FALLBACK
+        scope: all
+        value: "true"
+      - key: REDIS_URL
+        scope: all
+        value: ${REDIS_URL}
+databases:
+  - name: goldeye-db
+    plan: free
+    ipAllowList: []

@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd apps/web && VITE_API_URL=https://poonawala.onrender.com npm install && VITE_API_URL=https://poonawala.onrender.com npm run build",
+  "outputDirectory": "apps/web/dist",
+  "framework": "vite",
+  "env": {
+    "VITE_API_URL": "https://poonawala.onrender.com"
+  }
+}
