@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F5C842"/>
+      <stop offset="100%" stop-color="#D4A017"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="22" fill="#111"/>
+  <rect width="100" height="100" rx="22" fill="url(#g)" opacity="0.15"/>
+  <!-- Eye shape -->
+  <ellipse cx="50" cy="50" rx="28" ry="18" fill="none" stroke="url(#g)" stroke-width="4"/>
+  <!-- Pupil -->
+  <circle cx="50" cy="50" r="9" fill="url(#g)"/>
+  <circle cx="50" cy="50" r="4" fill="#111"/>
+  <!-- Gleam -->
+  <circle cx="57" cy="44" r="3" fill="white" opacity="0.7"/>
+</svg>
