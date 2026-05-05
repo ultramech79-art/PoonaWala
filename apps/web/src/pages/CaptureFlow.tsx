@@ -289,9 +289,9 @@ export function CaptureFlow() {
 
       {/* Step hint */}
       <div className="px-5 pb-3">
-        <p className="text-sm text-stone-600 leading-relaxed">
+        <p className="text-sm font-semibold text-stone-800 leading-relaxed">
           {t(step.hintKey)}
-          {step.optional && <span className="ml-2 text-xs text-stone-400">(optional)</span>}
+          {step.optional && <span className="ml-2 text-xs text-stone-500">(optional)</span>}
         </p>
       </div>
 

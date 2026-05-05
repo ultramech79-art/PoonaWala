@@ -58,7 +58,7 @@
   "capture_skip": "Skip (optional)",
 
   "step_top_title": "Top-down shot",
-  "step_top_hint": "Full piece + ₹10 coin in frame",
+  "step_top_hint": "Full piece + ₹10 coin (optional) in frame",
   "step_45_title": "45° angle shot",
   "step_45_hint": "Tilt your phone slightly to show depth",
   "step_side_title": "Side view",

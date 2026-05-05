@@ -402,7 +402,7 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
 
           {/* Poonawala AI Guidance */}
           {!isVideo && !isAudio && (
-            <div className="absolute -bottom-1 left-4 right-4 py-2.5 px-4 rounded-b-2xl flex items-center gap-2 text-xs font-medium bg-black/60 text-white/90 border border-white/10 backdrop-blur-sm">
+            <div className="absolute -bottom-1 left-4 right-4 py-2.5 px-4 rounded-b-2xl flex items-center gap-2 text-xs font-bold bg-black/70 text-white border border-white/20 backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
               <span className="truncate">{guidanceText}</span>
             </div>

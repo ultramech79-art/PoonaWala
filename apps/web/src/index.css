@@ -90,7 +90,7 @@
   /* ── BUTTONS ── */
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-2
-           px-6 py-4 rounded-2xl font-display font-semibold text-base
+           px-6 py-4 rounded-2xl font-display font-bold text-base
            bg-brand-600 text-white
            transition-all duration-200 ease-out
            shadow-brand active:scale-[0.97]
@@ -106,7 +106,7 @@
 
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2
-           px-6 py-4 rounded-2xl font-display font-medium text-base
+           px-6 py-4 rounded-2xl font-display font-semibold text-base
            text-brand-600 bg-white border border-stone-200
            transition-all duration-200 ease-out
            hover:bg-stone-50 hover:border-stone-300
