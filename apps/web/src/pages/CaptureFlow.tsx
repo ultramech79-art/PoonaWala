@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
-import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video } from 'lucide-react'
+import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield } from 'lucide-react'
 import { clsx } from 'clsx'
 import { evaluateFrameAPI, type FrameEvalResult } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
@@ -106,9 +106,11 @@ export function CaptureFlow() {
   const [stepIdx, setStepIdx] = useState(0)
   const [captured, setCaptured] = useState<Set<number>>(new Set())
   const [evals, setEvals] = useState<Record<number, StepEval>>({})
+  const [cameraKey, setCameraKey] = useState(0)
+  const [showDemo, setShowDemo] = useState(false)
   const [showManualHuid, setShowManualHuid] = useState(false)
   const [manualHuid, setManualHuid] = useState(state.huidCode || '')
-  const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat)
+  const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat || null)
   const [activeTab, setActiveTab] = useState<'scan' | 'manual'>('scan')
   const spokenStep = useRef(-1)
 
@@ -153,7 +155,7 @@ export function CaptureFlow() {
         result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000)
       }
 
-      if (step.type === 'macro' && result.detected?.karat_numeric) {
+      if (step.type === 'macro' && result.detected?.karat_numeric && typeof result.detected.karat_numeric === 'number') {
         setScannedKarat(result.detected.karat_numeric)
         setSelectedKarat(result.detected.karat_numeric)
       }
