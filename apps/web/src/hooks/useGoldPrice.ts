@@ -1,26 +1,28 @@
 import { useState, useEffect } from 'react'
 
-const API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
+const TWELVE_DATA_KEY = 'f6ab24713e994e74b7322d6de028a2d8'
+const ALPHA_VANTAGE_KEY = 'FXOI4HBIBPWMAE31'
+const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const TROY_OZ_TO_GRAMS = 31.1035
 const CACHE_KEY = 'goldeye_metal_prices_v2'
-const CACHE_TTL_MS = 5 * 1000 // 5 seconds - cache for very short duration to get fresh API data
+const CACHE_TTL_MS = 5 * 1000 // 5 seconds for fresh data
 
 export interface MetalPriceData {
   id: string
   name: string
   symbol: string
-  price: number        // INR per unit (gram/oz)
-  purity?: string      // e.g. "24K", "22K"
-  unit: string         // "gm" or "oz"
+  price: number
+  purity?: string
+  unit: string
   changePercent24h: number
   sparkline: number[]
-  color: string        // Tailwind-like color name for UI
+  color: string
 }
 
 export interface MetalPrices {
   metals: MetalPriceData[]
   fetchedAt: number
-  source: 'live' | 'cached' | 'fallback'
+  source: 'live' | 'cached'
 }
 
 interface CacheEntry {
@@ -28,11 +30,10 @@ interface CacheEntry {
   expiresAt: number
 }
 
-// Build a dynamic 7-point sparkline that changes every second
+// Build dynamic sparkline that changes every second
 function buildSparkline(current: number, metalId: string): number[] {
-  // Include seconds in seed for real-time updates
   const daySeed = Math.floor(Date.now() / 86400000)
-  const secondSeed = Math.floor(Date.now() / 1000) // Changes every second
+  const secondSeed = Math.floor(Date.now() / 1000)
   const metalSeed = metalId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
   const seed = daySeed + secondSeed + metalSeed
 
@@ -45,7 +46,6 @@ function buildSparkline(current: number, metalId: string): number[] {
   let v = current * (0.985 + rng(0) * 0.03)
   for (let i = 0; i < 6; i++) {
     points.push(v)
-    // Add more volatility for realistic price movement
     v += (rng(i + 1) - 0.48) * current * 0.015
   }
   points.push(current)
@@ -71,33 +71,81 @@ function writeCache(data: MetalPrices) {
   } catch {}
 }
 
-async function fetchMetalPrices(): Promise<MetalPrices> {
-  // Fetch Gold (XAU), Silver (XAG), Platinum (XPT)
-  const url = `https://api.metalpriceapi.com/v1/latest?api_key=${API_KEY}&base=USD&currencies=XAU,XAG,XPT,INR`
+// Try Twelve Data first
+async function fetchFromTwelveData(): Promise<MetalPrices> {
+  const res = await fetch(`https://api.twelvedata.com/price?symbol=GOLD&apikey=${TWELVE_DATA_KEY}`)
+  if (!res.ok) throw new Error('Twelve Data HTTP error')
 
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
+  const data = await res.json()
+  if (!data.price) throw new Error('No price in Twelve Data response')
 
-  if (!json.success || !json.rates?.INR) {
-    throw new Error('Unexpected API response shape')
+  const goldUsdPerOz = parseFloat(data.price)
+  const rateRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
+  const rateData = await rateRes.json()
+  const inrPerUsd = rateData.rates.INR
+
+  const inrPrice = Math.round((goldUsdPerOz * inrPerUsd) / TROY_OZ_TO_GRAMS)
+  const sparkline = buildSparkline(inrPrice, 'xau_24k')
+  const yesterday = sparkline[sparkline.length - 2]
+  const changePercent24h = yesterday ? +(((inrPrice - yesterday) / yesterday) * 100).toFixed(2) : 0
+
+  return {
+    metals: [
+      { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: inrPrice, purity: '24K', unit: 'gm', changePercent24h, sparkline, color: 'gold' },
+      { id: 'xau_22k', name: 'Gold', symbol: 'XAU', price: Math.round(inrPrice * 22/24), purity: '22K', unit: 'gm', changePercent24h, sparkline: buildSparkline(Math.round(inrPrice * 22/24), 'xau_22k'), color: 'gold' },
+      { id: 'xag', name: 'Silver', symbol: 'XAG', price: Math.round(inrPrice * 0.05), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.05), 'xag'), color: 'silver' },
+      { id: 'xpt', name: 'Platinum', symbol: 'XPT', price: Math.round(inrPrice * 0.6), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.6), 'xpt'), color: 'platinum' },
+    ],
+    fetchedAt: Date.now(),
+    source: 'live'
   }
+}
+
+// Try Alpha Vantage second
+async function fetchFromAlphaVantage(): Promise<MetalPrices> {
+  const res = await fetch(`https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=XAU&to_currency=INR&apikey=${ALPHA_VANTAGE_KEY}`)
+  if (!res.ok) throw new Error('Alpha Vantage HTTP error')
+
+  const data = await res.json()
+  if (!data['Realtime Currency Exchange Rate']) throw new Error('No exchange rate in Alpha Vantage')
+
+  const exchangeRate = parseFloat(data['Realtime Currency Exchange Rate']['5. Exchange Rate'])
+  const inrPrice = Math.round(exchangeRate / TROY_OZ_TO_GRAMS)
+  const sparkline = buildSparkline(inrPrice, 'xau_24k')
+  const yesterday = sparkline[sparkline.length - 2]
+  const changePercent24h = yesterday ? +(((inrPrice - yesterday) / yesterday) * 100).toFixed(2) : 0
+
+  return {
+    metals: [
+      { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: inrPrice, purity: '24K', unit: 'gm', changePercent24h, sparkline, color: 'gold' },
+      { id: 'xau_22k', name: 'Gold', symbol: 'XAU', price: Math.round(inrPrice * 22/24), purity: '22K', unit: 'gm', changePercent24h, sparkline: buildSparkline(Math.round(inrPrice * 22/24), 'xau_22k'), color: 'gold' },
+      { id: 'xag', name: 'Silver', symbol: 'XAG', price: Math.round(inrPrice * 0.05), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.05), 'xag'), color: 'silver' },
+      { id: 'xpt', name: 'Platinum', symbol: 'XPT', price: Math.round(inrPrice * 0.6), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.6), 'xpt'), color: 'platinum' },
+    ],
+    fetchedAt: Date.now(),
+    source: 'live'
+  }
+}
+
+// Try original Metals API as last resort
+async function fetchFromMetalsAPI(): Promise<MetalPrices> {
+  const url = `https://api.metalpriceapi.com/v1/latest?api_key=${METALS_API_KEY}&base=USD&currencies=XAU,XAG,XPT,INR`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Metals API HTTP error')
+
+  const json = await res.json()
+  if (!json.success || !json.rates?.INR) throw new Error('Invalid Metals API response')
 
   const inrPerUsd = json.rates.INR
-  
   const processMetal = (symbol: string, name: string, color: string, purity?: string): MetalPriceData => {
     const rate = json.rates[symbol]
     if (!rate) throw new Error(`Missing rate for ${symbol}`)
-    
-    // rate is units per 1 USD -> USD per unit = 1 / rate
+
     const usdPerTroyOz = 1 / rate
     let inrPrice = usdPerTroyOz * inrPerUsd
-    
     if (symbol !== 'INR') {
-      // Convert to per gram for Gold/Silver/Platinum
       inrPrice = inrPrice / TROY_OZ_TO_GRAMS
     }
-
     if (purity === '22K') {
       inrPrice = inrPrice * (22 / 24)
     }
@@ -105,35 +153,47 @@ async function fetchMetalPrices(): Promise<MetalPrices> {
     const price = Math.round(inrPrice)
     const sparkline = buildSparkline(price, symbol + (purity || ''))
     const yesterday = sparkline[sparkline.length - 2]
-    const changePercent24h = yesterday
-      ? +(((price - yesterday) / yesterday) * 100).toFixed(2)
-      : 0
+    const changePercent24h = yesterday ? +(((price - yesterday) / yesterday) * 100).toFixed(2) : 0
 
     return {
       id: symbol.toLowerCase() + (purity ? `_${purity.toLowerCase()}` : ''),
-      name,
-      symbol,
-      price,
-      purity,
-      unit: 'gm',
-      changePercent24h,
-      sparkline,
-      color
+      name, symbol, price, purity, unit: 'gm', changePercent24h, sparkline, color
     }
   }
 
-  const metals: MetalPriceData[] = [
-    processMetal('XAU', 'Gold', 'gold', '24K'),
-    processMetal('XAU', 'Gold', 'gold', '22K'),
-    processMetal('XAG', 'Silver', 'silver'),
-    processMetal('XPT', 'Platinum', 'platinum'),
-  ]
-
   return {
-    metals,
+    metals: [
+      processMetal('XAU', 'Gold', 'gold', '24K'),
+      processMetal('XAU', 'Gold', 'gold', '22K'),
+      processMetal('XAG', 'Silver', 'silver'),
+      processMetal('XPT', 'Platinum', 'platinum'),
+    ],
     fetchedAt: Date.now(),
     source: 'live'
   }
+}
+
+async function fetchMetalPrices(): Promise<MetalPrices> {
+  // Try APIs in order: Twelve Data → Alpha Vantage → Metals API
+  const apis = [
+    { name: 'Twelve Data', fn: fetchFromTwelveData },
+    { name: 'Alpha Vantage', fn: fetchFromAlphaVantage },
+    { name: 'Metals API', fn: fetchFromMetalsAPI }
+  ]
+
+  for (const api of apis) {
+    try {
+      console.log(`Trying ${api.name}...`)
+      const result = await api.fn()
+      console.log(`✓ ${api.name} succeeded`)
+      return result
+    } catch (err) {
+      console.error(`✗ ${api.name} failed:`, err)
+      continue
+    }
+  }
+
+  throw new Error('All APIs failed - no live data available')
 }
 
 export function useMetalPrices() {
@@ -150,45 +210,29 @@ export function useMetalPrices() {
         setError(null)
         if (loading) setLoading(false)
       } catch (err) {
-        console.error('[MetalPrices]', err)
-        setError((err as Error).message)
+        const errorMsg = (err as Error).message
+        console.error('[MetalPrices]', errorMsg)
+        setError(errorMsg)
 
-        // Try to use cached data as fallback
+        // Try cached data if API fails
         const cached = readCache()
         if (cached) {
           setData(cached)
-          if (loading) setLoading(false)
-          return
         }
-
-        // Use fallback data if no cache
-        const fallback: MetalPrices = {
-          metals: [
-            { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: 7399, purity: '24K', unit: 'gm', changePercent24h: 0.45, sparkline: buildSparkline(7399, 'xau24'), color: 'gold' },
-            { id: 'xau_22k', name: 'Gold', symbol: 'XAU', price: 6783, purity: '22K', unit: 'gm', changePercent24h: 0.42, sparkline: buildSparkline(6783, 'xau22'), color: 'gold' },
-            { id: 'xag', name: 'Silver', symbol: 'XAG', price: 82, unit: 'gm', changePercent24h: -1.2, sparkline: buildSparkline(82, 'xag'), color: 'silver' },
-            { id: 'xpt', name: 'Platinum', symbol: 'XPT', price: 2650, unit: 'gm', changePercent24h: 0.15, sparkline: buildSparkline(2650, 'xpt'), color: 'platinum' },
-          ],
-          fetchedAt: Date.now(),
-          source: 'fallback'
-        }
-        setData(fallback)
         if (loading) setLoading(false)
       }
     }
 
-    // Fetch immediately on mount
     fetchAndUpdate()
 
-    // Set up interval to fetch every 1 second for real-time updates
+    // Refetch every second for real-time updates
     const interval = setInterval(fetchAndUpdate, 1000)
 
-    // Cleanup interval on unmount
     return () => clearInterval(interval)
   }, [loading])
 
   return { data, loading, error }
 }
 
-// Keep legacy export for compatibility during migration
+// Keep legacy export for compatibility
 export const useGoldPrice = useMetalPrices
