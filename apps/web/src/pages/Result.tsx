@@ -22,12 +22,12 @@ function AnimatedNumber({ target, prefix = '', suffix = '', duration = 1200 }: {
       const elapsed = now - start
       const progress = Math.min(elapsed / duration, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
-      setVal(Math.round(eased * target))
+      setVal(eased * target)
       if (progress < 1) requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
   }, [target, duration])
-  return <>{prefix}{val.toLocaleString('en-IN')}{suffix}</>
+  return <>{prefix}{val.toLocaleString('en-IN', { minimumFractionDigits: target % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}{suffix}</>
 }
 
 // ── Confidence ring ────────────────────────────────────────────
@@ -434,8 +434,8 @@ export function Result() {
                 <p className="label mb-2 flex items-center justify-between">
                   <span>AI Focus Heatmap (Grad-CAM)</span>
                 </p>
-                <div className="relative w-full rounded-xl overflow-hidden border border-stone-200 bg-stone-900 aspect-video shadow-inner group">
-                  <img src={result.xai.gradcam_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-700" alt="AI Heatmap" />
+                <div className="relative w-full rounded-xl overflow-hidden border border-stone-200 bg-stone-900 aspect-video shadow-inner">
+                  <img src={result.xai.gradcam_url} className="w-full h-full object-cover" alt="AI Heatmap" />
                   {/* Thermal Heatmap Simulation */}
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_40%_50%,rgba(239,68,68,0.5)_0%,rgba(245,158,11,0.3)_30%,rgba(59,130,246,0.1)_60%,transparent_100%)] mix-blend-screen pointer-events-none" />
                   <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-rose-500/10 mix-blend-overlay pointer-events-none" />
