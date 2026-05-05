@@ -26,12 +26,17 @@ _MAX_24K = 30_000.0
 _CACHE_TTL_S = 10 # 10 seconds for live market updates
 
 _cache: dict = {
-    "24K": 0.0,
-    "22K": 0.0,
-    "18K": 0.0,
+    # Karat labels (24K=999 purity, 22K=916, 18K=750, 14K=585)
+    "24K": 0.0, "22K": 0.0, "18K": 0.0, "14K": 0.0,
+    # IBJA purity labels (authoritative Indian market rates)
+    "999": 0.0, "995": 0.0, "916": 0.0, "750": 0.0, "585": 0.0,
     "fetched_at": 0.0,
     "source": "none",
 }
+
+# Purity ↔ karat canonical mapping
+_PURITY_TO_KARAT = {"999": "24K", "995": "24K", "916": "22K", "750": "18K", "585": "14K"}
+_KARAT_TO_PURITY = {"24K": "999", "22K": "916", "18K": "750", "14K": "585"}
 
 _YAHOO_HDRS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
 _GOLD_URL   = "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1d&range=1d"
@@ -44,8 +49,9 @@ def current_price_24k() -> float:
 def price_for_karat(karat: float) -> float:
     _maybe_refresh_sync()
     k = int(karat)
-    if k in (24, 22, 18) and _cache[f"{k}K"] > 0:
-        return _cache[f"{k}K"]
+    key = f"{k}K"
+    if key in _cache and _cache[key] > 0:
+        return _cache[key]
     base = _cache["24K"]
     if base <= 0: return 0.0
     return round(base * (karat / 24), 2)
@@ -55,9 +61,12 @@ def price_metadata() -> dict:
     age = int(time.time() - _cache["fetched_at"])
     return {
         "prices": {
-            "24K": _cache["24K"],
-            "22K": _cache["22K"],
-            "18K": _cache["18K"],
+            # By karat
+            "24K": _cache["24K"], "22K": _cache["22K"],
+            "18K": _cache["18K"], "14K": _cache["14K"],
+            # By IBJA purity
+            "999": _cache["999"], "995": _cache["995"],
+            "916": _cache["916"], "750": _cache["750"], "585": _cache["585"],
         },
         "source": _cache["source"],
         "age_s": age,
@@ -79,13 +88,24 @@ def _maybe_refresh_sync():
 def _accept(p24: float) -> bool:
     return _MIN_24K < p24 < _MAX_24K
 
-def _store(p24: float, source: str, p22: float = 0, p18: float = 0):
+def _store(p24: float, source: str, p22: float = 0, p18: float = 0, p14: float = 0, p995: float = 0):
+    # Karat prices (fall back to ratio if not provided)
     _cache["24K"] = round(p24, 2)
     _cache["22K"] = round(p22 if p22 > 0 else p24 * 22 / 24, 2)
     _cache["18K"] = round(p18 if p18 > 0 else p24 * 18 / 24, 2)
+    _cache["14K"] = round(p14 if p14 > 0 else p24 * 14 / 24, 2)
+    # IBJA purity prices (mirror karat values — overwritten if directly fetched)
+    _cache["999"] = _cache["24K"]
+    _cache["995"] = round(p995 if p995 > 0 else p24 * 995 / 999, 2)
+    _cache["916"] = _cache["22K"]
+    _cache["750"] = _cache["18K"]
+    _cache["585"] = _cache["14K"]
     _cache["fetched_at"] = time.time()
     _cache["source"] = source
-    logger.info(f"IBJA prices updated: 24K={_cache['24K']} 22K={_cache['22K']} 18K={_cache['18K']} (src={source})")
+    logger.info(
+        f"IBJA prices: 999={_cache['999']} 916={_cache['916']} "
+        f"750={_cache['750']} 585={_cache['585']} (src={source})"
+    )
 
 async def _fetch_via_groq(client: httpx.AsyncClient) -> float:
     if not _GROQ_GOLD_KEY: raise ValueError("No GROQ key")
@@ -141,12 +161,17 @@ def _parse_inr(s: str) -> float:
         return 0.0
 
 async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
+    """
+    Fetch IBJA purity-based rates via Google Search (SerpAPI).
+    IBJA publishes: 999 purity (24K), 916 purity (22K), 750 purity (18K), 585 purity (14K).
+    These are the official Indian market rates used for gold loan evaluation.
+    """
     if not _SERPAPI_KEY:
         raise ValueError("No SerpAPI key")
 
     params = {
         "engine": "google",
-        "q": "gold rate today india 24k 22k 18k per gram",
+        "q": "IBJA gold rate today 999 916 750 585 purity per gram india",
         "api_key": _SERPAPI_KEY,
         "gl": "in",
         "hl": "en",
@@ -169,58 +194,84 @@ async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
     if not context:
         raise ValueError("No content from SerpAPI")
 
-    p24, p22, p18 = 0.0, 0.0, 0.0
+    # IBJA purity → karat mapping
+    # 999 = 24K (99.9%), 916 = 22K (91.6%), 750 = 18K (75.0%), 585 = 14K (58.5%)
+    purity_map = [
+        ("999", "p24"), ("995", "p24_alt"),
+        ("916", "p22"),
+        ("750", "p18"),
+        ("585", "p14"),
+    ]
+    prices: dict[str, float] = {}
 
-    # Indian gold prices are 5-digit per gram (e.g. 14918, 15122) or
-    # 6-digit per 10g in Indian comma format (e.g. 1,51,780 → 151780 → /10 = 15178).
-    # Patterns target "24 karat ... ₹14,918 per gram" and "1 gm. ₹15,122.18" style.
-    for karat, store_var in [("24", "p24"), ("22", "p22"), ("18", "p18")]:
-        # Direct per-gram mention near karat label
-        per_gram = re.search(
-            rf'{karat}\s*[Kk](?:arat|carat)?[^₹\d]{{0,40}}[₹₹]\s*([\d,]+(?:\.\d{{1,2}})?)\s*(?:per gram|/g)',
-            context, re.IGNORECASE
-        )
-        # "1 gm" table style: karat mentioned then ₹ amount
-        one_gm = re.search(
-            rf'{karat}\s*[Kk][^₹\d]{{0,60}}1\s*gm[^₹\d]{{0,10}}[₹₹]\s*([\d,]+(?:\.\d{{1,2}})?)',
-            context, re.IGNORECASE
-        )
-        # Reverse: "₹14,918 per gram for 24 karat"
-        reverse = re.search(
-            rf'[₹₹]\s*([\d,]+(?:\.\d{{1,2}})?)\s*per gram[^.{{0,60}}]{karat}\s*[Kk]',
-            context, re.IGNORECASE
-        )
-
+    for purity, key in purity_map:
         raw_val = 0.0
-        for m in [per_gram, one_gm, reverse]:
-            if m:
-                raw_val = _parse_inr(m.group(1))
-                break
 
-        # Fallback: "18K Gold. ₹1,12,210" style (per 10g in Indian comma format)
-        if raw_val == 0.0:
-            fallback = re.search(
-                rf'{karat}\s*[Kk][^₹₹\d]{{0,30}}[₹₹]\s*([\d,]{{5,10}}(?:\.\d{{1,2}})?)',
+        # "999 Purity ₹14,764" or "999 Purity: ₹14,764 (1 Gram)"
+        m = re.search(
+            rf'{purity}\s*[Pp]urity[^₹\d]{{0,30}}[₹]\s*([\d,]+(?:\.\d{{1,2}})?)',
+            context, re.IGNORECASE
+        )
+        if not m:
+            # "₹14,764 ... 999"
+            m = re.search(
+                rf'[₹]\s*([\d,]+(?:\.\d{{1,2}})?)[^₹\d]{{0,30}}{purity}',
                 context, re.IGNORECASE
             )
-            if fallback:
-                raw_val = _parse_inr(fallback.group(1))
+        if m:
+            raw_val = _parse_inr(m.group(1))
+            if raw_val > 50_000:
+                raw_val = round(raw_val / 10, 2)
 
-        # If value looks like per-10g (> 50000), divide by 10
-        if raw_val > 50_000:
-            raw_val = round(raw_val / 10, 2)
+        if raw_val > 0:
+            prices[key] = raw_val
 
-        if karat == "24": p24 = raw_val
-        elif karat == "22": p22 = raw_val
-        elif karat == "18": p18 = raw_val
+    # Map to standard karat prices — prefer direct IBJA purity rates
+    p24 = prices.get("p24") or prices.get("p24_alt", 0.0)
+    p22 = prices.get("p22", 0.0)
+    p18 = prices.get("p18", 0.0)
 
-    logger.info(f"SerpAPI parsed: 24K={p24} 22K={p22} 18K={p18}")
+    logger.info(f"SerpAPI IBJA purity parsed: 24K(999)={p24} 22K(916)={p22} 18K(750)={p18}")
 
-    if _accept(p24):
-        _store(p24, "serp", p22, p18)
-        return p24
+    # If IBJA purity query returned nothing, fall back to karat-label search
+    if not _accept(p24):
+        params["q"] = "gold rate today india 24k 22k 18k per gram"
+        resp2 = await client.get("https://serpapi.com/search", params=params, timeout=20)
+        resp2.raise_for_status()
+        data2 = resp2.json()
+        snippets2: list[str] = []
+        for r in data2.get("organic_results", [])[:5]:
+            s = r.get("snippet", "")
+            if s:
+                snippets2.append(f"{r.get('title','')}: {s}")
+        context2 = "\n".join(snippets2)
 
-    raise ValueError(f"SerpAPI: could not parse valid 24K price. Got {p24}. Context snippet: {context[:400]}")
+        for karat, attr in [("24", "p24"), ("22", "p22"), ("18", "p18")]:
+            m = re.search(
+                rf'[₹]\s*([\d,]+(?:\.\d{{1,2}})?)\s*per gram[^\n]{{0,60}}{karat}\s*[Kk]',
+                context2, re.IGNORECASE
+            )
+            if not m:
+                m = re.search(
+                    rf'{karat}\s*[Kk](?:arat|carat)?[^\d]{{0,40}}[₹]\s*([\d,]+(?:\.\d{{1,2}})?)\s*(?:per gram|/g)',
+                    context2, re.IGNORECASE
+                )
+            if m:
+                val = _parse_inr(m.group(1))
+                if val > 50_000: val = round(val / 10, 2)
+                if karat == "24": p24 = val
+                elif karat == "22": p22 = val
+                elif karat == "18": p18 = val
+
+        logger.info(f"SerpAPI karat fallback: 24K={p24} 22K={p22} 18K={p18}")
+
+    if not _accept(p24):
+        raise ValueError(f"SerpAPI: could not parse valid 24K price. Got {p24}. Context: {context[:300]}")
+
+    p14 = prices.get("p14", 0.0)
+    p995 = prices.get("p24_alt", 0.0)
+    _store(p24, "serp", p22, p18, p14, p995)
+    return p24
 
 async def _refresh_async():
     async with httpx.AsyncClient() as client:

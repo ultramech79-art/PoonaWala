@@ -42,12 +42,21 @@ async function fetchFromBackend(): Promise<MetalPrices> {
   const data = await res.json()
   const { prices, source } = data
   
+  // IBJA purity prices take precedence over karat-label prices
+  const p24  = prices['999'] || prices['24K'] || 0
+  const p995 = prices['995'] || 0
+  const p22  = prices['916'] || prices['22K'] || 0
+  const p18  = prices['750'] || prices['18K'] || 0
+  const p14  = prices['585'] || prices['14K'] || 0
+
   const metals: MetalPriceData[] = [
-    { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: prices['24K'], purity: '24K', unit: 'gm', changePercent24h: 0.12, sparkline: buildSparkline(prices['24K'], '24k'), color: 'gold' },
-    { id: 'xau_22k', name: 'Gold', symbol: 'XAU', price: prices['22K'], purity: '22K', unit: 'gm', changePercent24h: 0.08, sparkline: buildSparkline(prices['22K'], '22k'), color: 'gold' },
-    { id: 'xau_18k', name: 'Gold', symbol: 'XAU', price: prices['18K'], purity: '18K', unit: 'gm', changePercent24h: 0.05, sparkline: buildSparkline(prices['18K'], '18k'), color: 'gold' },
+    { id: 'xau_24k', name: 'Gold 24K', symbol: 'XAU', price: p24,  purity: '24K · 999', unit: 'gm', changePercent24h: 0.12, sparkline: buildSparkline(p24,  '24k'), color: 'gold' },
+    { id: 'xau_22k', name: 'Gold 22K', symbol: 'XAU', price: p22,  purity: '22K · 916', unit: 'gm', changePercent24h: 0.08, sparkline: buildSparkline(p22,  '22k'), color: 'gold' },
+    { id: 'xau_18k', name: 'Gold 18K', symbol: 'XAU', price: p18,  purity: '18K · 750', unit: 'gm', changePercent24h: 0.05, sparkline: buildSparkline(p18,  '18k'), color: 'gold' },
+    ...(p14  > 0 ? [{ id: 'xau_14k', name: 'Gold 14K', symbol: 'XAU', price: p14,  purity: '14K · 585', unit: 'gm', changePercent24h: 0.03, sparkline: buildSparkline(p14,  '14k'), color: 'gold' as const }] : []),
+    ...(p995 > 0 ? [{ id: 'xau_995', name: 'Gold 995', symbol: 'XAU', price: p995, purity: '24K · 995', unit: 'gm', changePercent24h: 0.11, sparkline: buildSparkline(p995, '995'),  color: 'gold' as const }] : []),
   ]
-  
+
   return { metals, fetchedAt: Date.now(), source: 'live' }
 }
 

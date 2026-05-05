@@ -287,18 +287,18 @@ export function Result() {
                 </div>
                 <div className="flex items-center gap-3 text-right">
                   <div>
-                    <p className="text-[10px] text-stone-400 leading-none mb-0.5">24K</p>
+                    <p className="text-[10px] text-stone-400 leading-none mb-0.5">24K <span className="text-stone-300">·</span> 999</p>
                     <p className="font-display font-black text-sm text-stone-900">₹{livePrice24K.toLocaleString('en-IN')}<span className="text-[10px] font-normal text-stone-400">/g</span></p>
                   </div>
                   {livePrice22K > 0 && (
                     <div>
-                      <p className="text-[10px] text-stone-400 leading-none mb-0.5">22K</p>
+                      <p className="text-[10px] text-stone-400 leading-none mb-0.5">22K <span className="text-stone-300">·</span> 916</p>
                       <p className="font-display font-black text-sm text-stone-900">₹{livePrice22K.toLocaleString('en-IN')}<span className="text-[10px] font-normal text-stone-400">/g</span></p>
                     </div>
                   )}
                   {livePrice18K > 0 && (
                     <div>
-                      <p className="text-[10px] text-stone-400 leading-none mb-0.5">18K</p>
+                      <p className="text-[10px] text-stone-400 leading-none mb-0.5">18K <span className="text-stone-300">·</span> 750</p>
                       <p className="font-display font-black text-sm text-stone-900">₹{livePrice18K.toLocaleString('en-IN')}<span className="text-[10px] font-normal text-stone-400">/g</span></p>
                     </div>
                   )}
@@ -306,7 +306,7 @@ export function Result() {
                     'text-[9px] font-bold px-1.5 py-0.5 rounded-full',
                     livePriceSrc === 'live' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'
                   )}>
-                    {livePriceSrc === 'live' ? '● LIVE' : 'CACHED'}
+                    {livePriceSrc === 'live' ? '● IBJA' : 'CACHED'}
                   </span>
                 </div>
               </div>
@@ -508,21 +508,25 @@ export function Result() {
             {hasLivePrice && (
               <>
                 <div className="flex justify-between items-center border-b border-stone-100 pb-2">
-                  <span className="text-xs text-stone-500">Live 24K Rate (SerpAPI)</span>
+                  <span className="text-xs text-stone-500">IBJA 24K (999 purity)</span>
                   <span className="text-sm font-medium text-emerald-700">₹{livePrice24K.toLocaleString('en-IN')}/g</span>
                 </div>
                 {livePrice22K > 0 && (
                   <div className="flex justify-between items-center border-b border-stone-100 pb-2">
-                    <span className="text-xs text-stone-500">Live 22K Rate (SerpAPI)</span>
+                    <span className="text-xs text-stone-500">IBJA 22K (916 purity)</span>
                     <span className="text-sm font-medium text-emerald-700">₹{livePrice22K.toLocaleString('en-IN')}/g</span>
                   </div>
                 )}
                 {livePrice18K > 0 && (
                   <div className="flex justify-between items-center border-b border-stone-100 pb-2">
-                    <span className="text-xs text-stone-500">Live 18K Rate (SerpAPI)</span>
+                    <span className="text-xs text-stone-500">IBJA 18K (750 purity)</span>
                     <span className="text-sm font-medium text-emerald-700">₹{livePrice18K.toLocaleString('en-IN')}/g</span>
                   </div>
                 )}
+                <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+                  <span className="text-xs text-stone-500">Rate Used for This Gold</span>
+                  <span className="text-sm font-bold text-emerald-700">₹{livePriceForKarat.toLocaleString('en-IN')}/g ({detectedKarat}K)</span>
+                </div>
               </>
             )}
             <div className="flex justify-between items-center border-b border-stone-100 pb-2">
