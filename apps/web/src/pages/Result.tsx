@@ -186,6 +186,34 @@ export function Result() {
         </div>
       </div>
 
+      {/* Low confidence - manual purity entry option */}
+      {!isFail && result.confidence.score < 0.65 && !result.purity.huid_verified && (
+        <div className="mx-5 mb-4">
+          <div className="card p-4 border-2 border-amber-200 bg-amber-50/50">
+            <div className="flex items-start gap-3 mb-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-stone-900 text-sm mb-1">Verify Purity Manually</p>
+                <p className="text-xs text-stone-600">Photos unclear. Please verify the karat marking on your jewelry and confirm.</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg p-3 mb-3 border border-stone-200">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-stone-500">Current Estimate</span>
+                <span className="font-bold text-lg text-brand-600">{result.purity.point_estimate_karat}K</span>
+              </div>
+              <input
+                type="text"
+                placeholder="e.g., 18K, 22K, 24K"
+                className="input-field mt-2 text-sm"
+                id="manual-purity-entry"
+              />
+              <p className="text-[10px] text-stone-400 mt-2">Enter purity if different from estimate</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Happy path */}
       {!isFail && (
         <>
