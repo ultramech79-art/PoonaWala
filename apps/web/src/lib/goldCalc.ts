@@ -28,19 +28,18 @@ export interface GoldValueBand {
 }
 
 /**
- * Compute gold market value band from live 24K price per gram.
- * Stones are excluded before calling this (passed as stoneExclusionG).
+ * Compute gold market value band using the karat-specific price per gram.
+ * Pass the live price for the detected karat directly (e.g. livePrice22K for 22K gold).
  * ±7% band matches banking confidence interval for valuation.
  */
 export function computeGoldMarketValue(
-  pricePerGram24K: number,
+  pricePerGramAtKarat: number,
   weightG: number,
-  karatEstimate: number,
+  _karatEstimate: number,
   stoneExclusionG: number
 ): GoldValueBand {
   const netWeight = Math.max(weightG - stoneExclusionG, weightG * 0.94)
-  const purityFactor = karatEstimate / 24
-  const mid = pricePerGram24K * netWeight * purityFactor
+  const mid = pricePerGramAtKarat * netWeight
   return {
     band_low:  Math.round((mid * 0.93) / 100) * 100,
     band_high: Math.round((mid * 1.07) / 100) * 100,

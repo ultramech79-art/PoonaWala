@@ -159,11 +159,19 @@ export function Result() {
   const livePriceSrc = metalData?.source ?? 'cached'
   const hasLivePrice  = livePrice24K > 5000
 
+  // Pick the karat-specific price from SerpAPI for the detected karat
+  const detectedKarat = result.purity.point_estimate_karat
+  const livePriceForKarat =
+    detectedKarat >= 23 ? livePrice24K :
+    detectedKarat >= 21 ? (livePrice22K || livePrice24K * 22 / 24) :
+    detectedKarat >= 17 ? (livePrice18K || livePrice24K * 18 / 24) :
+    livePrice24K * detectedKarat / 24
+
   const displayValue = hasLivePrice
     ? computeGoldMarketValue(
-        livePrice24K,
+        livePriceForKarat,
         result.weight.estimated_g,
-        result.purity.point_estimate_karat,
+        detectedKarat,
         result.value_inr.stone_weight_excluded_g ?? 0.4,
       )
     : { band_low: result.value_inr.band_low, band_high: result.value_inr.band_high }
@@ -324,7 +332,7 @@ export function Result() {
               </div>
               <p className="text-xs text-stone-400 mt-2">
                 {result.purity.point_estimate_karat}K gold · {result.weight.estimated_g}g · stone excl. {result.value_inr.stone_weight_excluded_g}g
-                {hasLivePrice && <span className="ml-1 text-emerald-600">· @₹{livePrice24K.toLocaleString('en-IN')}/g</span>}
+                {hasLivePrice && <span className="ml-1 text-emerald-600">· @₹{livePriceForKarat.toLocaleString('en-IN')}/g ({detectedKarat}K)</span>}
               </p>
             </div>
           </div>
