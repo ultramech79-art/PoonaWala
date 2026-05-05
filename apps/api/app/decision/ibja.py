@@ -67,34 +67,31 @@ def _maybe_refresh_sync():
 
 
 async def _refresh_async():
-    """Fetch live gold price from Metal API (primary) or Yahoo Finance (fallback)."""
+    """Fetch live gold price from Metalpriceapi (primary) or Yahoo Finance (fallback)."""
     try:
         async with httpx.AsyncClient(timeout=8) as client:
-            # Try Metal API first (no API key needed for basic endpoint)
+            # Try Metalpriceapi first using the specific API key
             try:
-                metal_resp = await client.get(_METAL_API_URL)
+                metal_url = "https://api.metalpriceapi.com/v1/latest?api_key=ae1f3e7e6228ea2b1aa0ef56f9019b68&base=XAU&currencies=USD,INR"
+                metal_resp = await client.get(metal_url)
                 metal_resp.raise_for_status()
                 metal_data = metal_resp.json()
 
-                # Metal API returns {bid, ask} in USD per oz
-                usd_per_oz = float(metal_data.get("bid", metal_data.get("price", 0)))
+                if metal_data.get("success"):
+                    rates = metal_data.get("rates", {})
+                    inr_per_oz = float(rates.get("INR", 0))
+                    usd_per_oz = float(rates.get("USD", 0))
 
-                if usd_per_oz > 0:
-                    # Fetch USD/INR rate from Yahoo
-                    forex_resp = await client.get(_FOREX_URL, headers=_YAHOO_HEADERS)
-                    forex_resp.raise_for_status()
-                    forex_data = forex_resp.json()["chart"]["result"][0]["meta"]
-                    usd_inr = float(forex_data["regularMarketPrice"])
-
-                    if usd_inr > 0:
-                        price_inr_g = round((usd_per_oz * usd_inr) / _G_PER_OZ, 2)
+                    if inr_per_oz > 0:
+                        price_inr_g = round(inr_per_oz / _G_PER_OZ, 2)
                         _cache["price_24k_per_g"] = price_inr_g
                         _cache["fetched_at"]      = time.time()
-                        _cache["source"]          = "metal_api"
+                        _cache["source"]          = "metalpriceapi"
+                        usd_inr = inr_per_oz / usd_per_oz if usd_per_oz > 0 else 0
                         logger.info(f"IBJA refresh: ₹{price_inr_g:.0f}/g 24K (XAU ${usd_per_oz:.2f}/oz, USD/INR {usd_inr:.2f})")
                         return
             except Exception as e:
-                logger.debug(f"Metal API failed: {e} — trying Yahoo Finance")
+                logger.debug(f"Metalpriceapi failed: {e} — trying Yahoo Finance")
 
             # Fallback to Yahoo Finance
             gold_resp, forex_resp = await asyncio.gather(
