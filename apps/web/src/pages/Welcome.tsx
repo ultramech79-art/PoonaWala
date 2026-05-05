@@ -62,13 +62,21 @@ function NativeGoldChart() {
   const pathData = `${lineData} L 100,100 L 0,100 Z`
 
   return (
+<<<<<<< HEAD
     <div className="p-5 relative overflow-hidden" style={{ height: '160px' }}>
       <div className="relative z-10 flex justify-between items-start">
         <div>
           <p className="text-xs font-bold text-stone-500 uppercase tracking-widest">{gold.name}</p>
           <p className="text-3xl font-display font-bold text-stone-900 mt-1">
+=======
+    <div className="mx-5 mt-4 p-5 rounded-3xl border border-brand-100 bg-white shadow-card relative overflow-hidden" style={{ height: '180px' }}>
+      <div className="relative z-10 flex justify-between items-start">
+        <div>
+          <p className="text-[10px] font-black text-brand-600/40 uppercase tracking-[0.2em]">{gold.name}</p>
+          <p className="text-2xl font-display font-black text-brand-600 mt-1">
+>>>>>>> 6efeb04 (feat: complete frontend redesign with premium animations and light theme)
             ₹{gold.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            <span className="text-sm font-medium text-stone-500 ml-1">/ g</span>
+            <span className="text-sm font-medium text-stone-400 ml-1">/ g</span>
           </p>
         </div>
         <div className={`px-3 py-2 rounded-lg text-xs font-bold ${gold.changePercent24h >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
@@ -79,12 +87,21 @@ function NativeGoldChart() {
       <svg className="absolute bottom-0 left-0 w-full h-24 opacity-70" preserveAspectRatio="none" viewBox="0 0 100 100">
         <defs>
           <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
+<<<<<<< HEAD
             <stop offset="0%" stopColor="#2563EB" stopOpacity="0.1" />
             <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
           </linearGradient>
         </defs>
         <path d={pathData} fill="url(#goldGrad)" />
         <path d={lineData} fill="none" stroke="#2563EB" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+=======
+            <stop offset="0%" stopColor="#9B2C2C" stopOpacity="0.1" />
+            <stop offset="100%" stopColor="#9B2C2C" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={pathData} fill="url(#goldGrad)" />
+        <path d={lineData} fill="none" stroke="#9B2C2C" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" />
+>>>>>>> 6efeb04 (feat: complete frontend redesign with premium animations and light theme)
       </svg>
     </div>
   )
@@ -145,6 +162,7 @@ export function Welcome() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Feature list - 3 columns grid with enhanced styling */}
       <div className="px-5 mb-8">
         <div className="grid grid-cols-3 gap-2.5">
@@ -163,6 +181,18 @@ export function Welcome() {
             </div>
           ))}
         </div>
+=======
+      {/* Feature list */}
+      <div className="px-5 mb-8 space-y-2.5">
+        {FEATURES.map(({ icon: Icon, label }) => (
+          <div key={label} className="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-brand-50 shadow-sm transition-all hover:shadow-md">
+            <div className="w-8 h-8 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
+              <Icon className="w-4 h-4 text-brand-600" strokeWidth={2.5} />
+            </div>
+            <span className="text-sm text-stone-800 font-semibold">{label}</span>
+          </div>
+        ))}
+>>>>>>> 6efeb04 (feat: complete frontend redesign with premium animations and light theme)
       </div>
 
       {/* Live Market Ticker */}

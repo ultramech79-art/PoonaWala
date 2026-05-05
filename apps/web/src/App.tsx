@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Home } from './pages/Home'
 import { LanguagePicker } from './pages/LanguagePicker'
 import { Welcome } from './pages/Welcome'
 import { Consent } from './pages/Consent'
@@ -19,7 +20,7 @@ function App() {
     <BrowserRouter>
       <div className="max-w-md mx-auto relative w-full" style={{ height: '100dvh' }}>
         <Routes>
-          <Route path="/" element={<Navigate to="/language" replace />} />
+          <Route path="/" element={<Home />} />
           <Route path="/language" element={<LanguagePicker />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/consent" element={<Consent />} />

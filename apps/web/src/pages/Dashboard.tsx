@@ -196,7 +196,7 @@ export function Dashboard() {
 
   const ROUTING_CONFIG = {
     INSTANT: { icon: Zap,           label: t('routing_instant'), color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-    AGENT:   { icon: UserCheck,     label: t('routing_agent'),   color: 'text-brand-600',   bg: 'bg-brand-50',   border: 'border-brand-200'   },
+    AGENT:   { icon: UserCheck,     label: t('routing_agent'),   color: 'text-brand-600',   bg: 'bg-brand-50',   border: 'border-brand-600/20'   },
     REJECT:  { icon: AlertTriangle, label: t('routing_reject'),  color: 'text-orange-600',  bg: 'bg-orange-50',  border: 'border-orange-200'  },
   }
 
@@ -212,7 +212,7 @@ export function Dashboard() {
         </div>
         <button className="btn-icon relative">
           <Bell className="w-5 h-5 text-stone-600" />
-          <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-brand-500" />
+          <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-brand-600" />
         </button>
       </div>
 
@@ -230,9 +230,9 @@ export function Dashboard() {
         {/* Start New Assessment CTA */}
         <button
           onClick={() => navigate('/setup')}
-          className="w-full card p-4 flex items-center gap-4 hover:border-brand-300 hover:bg-brand-50/30 transition-all duration-200 active:scale-[0.98] mb-6"
+          className="w-full card p-4 flex items-center gap-4 hover:border-brand-300 hover:bg-brand-50 transition-all duration-200 active:scale-[0.98] mb-6"
         >
-          <div className="w-12 h-12 rounded-2xl bg-brand-500 flex items-center justify-center flex-shrink-0 shadow-brand-sm">
+          <div className="w-12 h-12 rounded-2xl bg-brand-600 flex items-center justify-center flex-shrink-0 shadow-brand-sm">
             <Eye className="w-6 h-6 text-white" strokeWidth={2} />
           </div>
           <div className="flex-1 text-left">
@@ -253,7 +253,7 @@ export function Dashboard() {
 
           {loading ? (
             <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-brand-400" />
+              <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
             </div>
           ) : sessions.length === 0 ? (
             <div className="card p-8 text-center">

@@ -217,29 +217,29 @@ export function CaptureFlow() {
   const canProceed = evalState === 'approved' || step.optional || (evalState === 'rejected' && hasManualHuidOverride)
 
   return (
-    <div className="page-dark animate-fade-in overflow-y-auto">
+    <div className="page animate-fade-in overflow-y-auto">
       {/* Header */}
-      <div className="page-header-dark">
+      <div className="page-header">
         <button
           id="capture-back"
           onClick={() => stepIdx > 0 ? setStepIdx(i => i - 1) : navigate('/setup')}
-          className="btn-icon-dark"
+          className="btn-icon"
         >
-          <ChevronRight className="w-5 h-5 rotate-180" />
+          <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
         <div className="flex flex-col items-center">
-          <span className="text-xs text-white/40 uppercase tracking-widest font-medium">
+          <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">
             Step {stepIdx + 1} of {STEPS.length}
           </span>
-          <span className="text-sm font-semibold text-white mt-0.5">{STEP_LABELS[stepIdx]}</span>
+          <span className="text-sm font-semibold text-stone-900 mt-0.5">{STEP_LABELS[stepIdx]}</span>
         </div>
         <button
           id="capture-voice"
           onClick={() => speak(step.voiceGuide)}
-          className="btn-icon-dark"
+          className="btn-icon"
           title="Replay instructions"
         >
-          <Volume2 className="w-4 h-4" />
+          <Volume2 className="w-4 h-4 text-stone-500" />
         </button>
       </div>
 
@@ -248,9 +248,9 @@ export function CaptureFlow() {
         <div className="px-5 pb-2">
           <button
             onClick={() => setShowDemo(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] text-white/60 hover:bg-white/10 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-100 transition-colors font-medium"
           >
-            <div className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
             Enter Example Demo
           </button>
         </div>
@@ -263,9 +263,9 @@ export function CaptureFlow() {
             key={s.type}
             className={clsx(
               'transition-all duration-300 rounded-full',
-              i === stepIdx ? 'step-dot-active-dark' :
-              captured.has(i) ? 'step-dot-done-dark' :
-              'step-dot-dark'
+              i === stepIdx ? 'step-dot-active' :
+              captured.has(i) ? 'step-dot-done' :
+              'step-dot'
             )}
           />
         ))}
@@ -273,9 +273,9 @@ export function CaptureFlow() {
 
       {/* Step hint */}
       <div className="px-5 pb-3">
-        <p className="text-sm text-white/60 leading-relaxed">
+        <p className="text-sm text-stone-600 leading-relaxed">
           {t(step.hintKey)}
-          {step.optional && <span className="ml-2 text-xs text-white/30">(optional)</span>}
+          {step.optional && <span className="ml-2 text-xs text-stone-400">(optional)</span>}
         </p>
       </div>
 
@@ -294,14 +294,14 @@ export function CaptureFlow() {
         {/* Hallmark Analysis & Manual Override Widget */}
         {step.type === 'macro' && (
           <div className="mt-4 animate-slide-up">
-            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-card">
               {/* Tabs */}
-              <div className="flex border-b border-white/10">
+              <div className="flex border-b border-stone-200">
                 <button
                   onClick={() => setActiveTab('scan')}
                   className={clsx(
                     'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
-                    activeTab === 'scan' ? 'bg-brand-500/10 text-brand-400 border-b-2 border-brand-500' : 'text-white/40 hover:text-white/60'
+                    activeTab === 'scan' ? 'bg-brand-50 text-brand-600 border-b-2 border-brand-600' : 'text-stone-400 hover:text-stone-600'
                   )}
                 >
                   Scan Result
@@ -310,7 +310,7 @@ export function CaptureFlow() {
                   onClick={() => setActiveTab('manual')}
                   className={clsx(
                     'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
-                    activeTab === 'manual' ? 'bg-brand-500/10 text-brand-400 border-b-2 border-brand-500' : 'text-white/40 hover:text-white/60'
+                    activeTab === 'manual' ? 'bg-brand-50 text-brand-600 border-b-2 border-brand-600' : 'text-stone-400 hover:text-stone-600'
                   )}
                 >
                   Manual Entry
@@ -321,23 +321,23 @@ export function CaptureFlow() {
                 {activeTab === 'scan' ? (
                   <div className="min-h-[100px] flex flex-col justify-center">
                     {evalState === 'idle' ? (
-                      <p className="text-center text-xs text-white/30 italic">Capture an image to see hallmark details</p>
+                      <p className="text-center text-xs text-stone-400 italic">Capture an image to see hallmark details</p>
                     ) : evalState === 'evaluating' ? (
                       <div className="flex items-center justify-center gap-3">
-                        <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
-                        <span className="text-xs text-brand-300">Scanning for markings...</span>
+                        <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
+                        <span className="text-xs text-brand-600">Scanning for markings...</span>
                       </div>
                     ) : (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-white/40">Detected Purity</span>
-                          <span className="text-sm font-bold text-emerald-400">{selectedKarat ? `${selectedKarat}K` : 'Not Detected'}</span>
+                          <span className="text-xs text-stone-500">Detected Purity</span>
+                          <span className="text-sm font-bold text-emerald-600">{selectedKarat ? `${selectedKarat}K` : 'Not Detected'}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-white/40">HUID Status</span>
-                          <span className="text-sm font-bold text-emerald-400">{manualHuid || currentEval?.result?.detected?.huid_code ? 'Verified' : 'Manual Entry Needed'}</span>
+                          <span className="text-xs text-stone-500">HUID Status</span>
+                          <span className="text-sm font-bold text-emerald-600">{manualHuid || currentEval?.result?.detected?.huid_code ? 'Verified' : 'Manual Entry Needed'}</span>
                         </div>
-                        <p className="text-[11px] text-white/50 leading-relaxed italic border-t border-white/5 pt-2">
+                        <p className="text-[11px] text-stone-600 leading-relaxed italic border-t border-stone-200 pt-2">
                           {currentEval?.result?.feedback || 'Take a clear photo of the Hallmark stamp for automatic extraction.'}
                         </p>
                       </div>
@@ -346,7 +346,7 @@ export function CaptureFlow() {
                 ) : (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-white/30 mb-2 block tracking-widest">HUID Alphanumeric Code</label>
+                      <label className="label mb-2 block">HUID Alphanumeric Code</label>
                       <input
                         type="text"
                         value={manualHuid}
@@ -356,13 +356,13 @@ export function CaptureFlow() {
                           setHuid(val || null);
                         }}
                         placeholder="e.g., A3F2K1"
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-brand-500 transition-colors"
+                        className="input-field font-mono"
                         maxLength={10}
                       />
                     </div>
-                    
+
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-white/30 mb-2 block tracking-widest">Purity / Karat</label>
+                      <label className="label mb-2 block">Purity / Karat</label>
                       <div className="flex gap-2">
                         {[18, 22, 24].map(k => (
                           <button
@@ -373,9 +373,9 @@ export function CaptureFlow() {
                             }}
                             className={clsx(
                               'flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border',
-                              selectedKarat === k 
-                                ? 'bg-brand-500 border-brand-400 text-white shadow-lg shadow-brand-500/20' 
-                                : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                              selectedKarat === k
+                                ? 'bg-brand-600 border-brand-600 text-white shadow-brand-sm'
+                                : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
                             )}
                           >
                             {k}K
@@ -383,8 +383,8 @@ export function CaptureFlow() {
                         ))}
                       </div>
                     </div>
-                    
-                    <p className="text-[10px] text-brand-400 flex items-center gap-1.5 pt-1">
+
+                    <p className="text-[10px] text-brand-600 flex items-center gap-1.5 pt-1 font-medium">
                       <Shield className="w-3 h-3" />
                       Settings saved instantly to your assessment.
                     </p>
@@ -397,50 +397,50 @@ export function CaptureFlow() {
 
         {/* Feedback */}
         {evalState === 'evaluating' && (
-          <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl bg-brand-500/15 border border-brand-500/25">
-            <Loader2 className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
+          <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl bg-brand-50 border border-brand-200">
+            <Loader2 className="w-5 h-5 text-brand-600 animate-spin flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-brand-300">Analysing image…</p>
-              <p className="text-xs text-brand-300/60 mt-0.5">Poonawalla AI is checking quality</p>
+              <p className="text-sm font-medium text-brand-700">Analysing image…</p>
+              <p className="text-xs text-brand-600/70 mt-0.5">Poonawalla AI is checking quality</p>
             </div>
           </div>
         )}
 
         {evalState === 'approved' && currentEval?.result && (
-          <div className="mt-3 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+          <div className="mt-3 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200">
             <div className="flex items-start gap-3">
-              <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-emerald-300">{currentEval.result.feedback}</p>
+                <p className="text-sm font-medium text-emerald-700">{currentEval.result.feedback}</p>
                 {currentEval.result.quality_score > 0 && (
                   <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 progress-bar-dark">
+                    <div className="flex-1 progress-bar">
                       <div
-                        className="progress-fill-dark"
+                        className="progress-fill"
                         style={{ width: `${Math.round(currentEval.result.quality_score * 100)}%` }}
                       />
                     </div>
-                    <span className="text-[10px] text-white/40">{Math.round(currentEval.result.quality_score * 100)}%</span>
+                    <span className="text-[10px] text-stone-400">{Math.round(currentEval.result.quality_score * 100)}%</span>
                   </div>
                 )}
               </div>
-              <button onClick={() => speak(currentEval.result!.feedback)} className="opacity-40 hover:opacity-80 flex-shrink-0">
-                <Volume2 className="w-4 h-4 text-emerald-300" />
+              <button onClick={() => speak(currentEval.result!.feedback)} className="opacity-50 hover:opacity-80 flex-shrink-0">
+                <Volume2 className="w-4 h-4 text-emerald-600" />
               </button>
             </div>
           </div>
         )}
 
         {evalState === 'rejected' && currentEval?.result && (
-          <div className="mt-3 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20">
+          <div className="mt-3 px-4 py-3 rounded-2xl bg-red-50 border border-red-200">
             <div className="flex items-start gap-3">
-              <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-red-300">{currentEval.result.feedback}</p>
+                <p className="text-sm font-medium text-red-700">{currentEval.result.feedback}</p>
                 {currentEval.result.issues.length > 0 && (
                   <ul className="mt-1.5 space-y-0.5">
                     {currentEval.result.issues.map((issue, i) => (
-                      <li key={i} className="text-xs text-red-300/60">• {issue}</li>
+                      <li key={i} className="text-xs text-red-600/70">• {issue}</li>
                     ))}
                   </ul>
                 )}
@@ -452,20 +452,20 @@ export function CaptureFlow() {
         {/* Captured thumbnails */}
         {Object.keys(state.captures).length > 0 && (
           <div className="mt-3">
-            <p className="label-dark mb-2">Captured</p>
+            <p className="label mb-2">Captured</p>
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
               {(Object.entries(state.captures) as [CaptureType, any][]).map(([ctype, asset]) => (
                 <div key={ctype} className="relative flex-shrink-0">
                   {ctype === 'audio' ? (
-                    <div className="w-14 h-14 rounded-2xl bg-ink-700 border border-emerald-500/25 flex items-center justify-center">
-                      <Music className="w-5 h-5 text-emerald-400" />
+                    <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-300 flex items-center justify-center">
+                      <Music className="w-5 h-5 text-brand-600" />
                     </div>
                   ) : ctype === 'video' ? (
-                    <div className="w-14 h-14 rounded-2xl bg-ink-700 border border-emerald-500/25 flex items-center justify-center">
-                      <Video className="w-5 h-5 text-emerald-400" />
+                    <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-300 flex items-center justify-center">
+                      <Video className="w-5 h-5 text-brand-600" />
                     </div>
                   ) : (
-                    <img src={asset.dataUrl} className="w-14 h-14 rounded-2xl object-cover border border-emerald-500/30" alt={ctype} />
+                    <img src={asset.dataUrl} className="w-14 h-14 rounded-2xl object-cover border border-stone-300" alt={ctype} />
                   )}
                   <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
                     <CheckCircle className="w-3 h-3 text-white" strokeWidth={3} />
@@ -478,7 +478,7 @@ export function CaptureFlow() {
       </div>
 
       {/* Bottom actions */}
-      <div className="px-5 pb-6 pt-3 border-t border-white/10 space-y-2 sticky bottom-0 bg-ink-900">
+      <div className="px-5 pb-6 pt-3 border-t border-stone-200 space-y-2 sticky bottom-0 bg-white/95 backdrop-blur-sm">
         {evalState === 'rejected' && !hasManualHuidOverride ? (
           <button onClick={handleRetake} className="w-full btn-primary">
             <RotateCcw className="w-5 h-5" />
@@ -490,7 +490,7 @@ export function CaptureFlow() {
               id={`capture-next-${step.type}`}
               onClick={next}
               disabled={!canProceed || evalState === 'evaluating'}
-              className={clsx('w-full', (canProceed && evalState !== 'evaluating') ? 'btn-primary' : 'btn-ghost-dark opacity-40 cursor-not-allowed')}
+              className={clsx('w-full', (canProceed && evalState !== 'evaluating') ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed')}
             >
               {evalState === 'evaluating' ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Analysing…</>
@@ -498,54 +498,54 @@ export function CaptureFlow() {
               {evalState !== 'evaluating' && <ChevronRight className="w-5 h-5" />}
             </button>
             {evalState === 'rejected' && hasManualHuidOverride && (
-              <button onClick={handleRetake} className="btn-ghost-dark w-full text-sm mt-2">
+              <button onClick={handleRetake} className="btn-secondary w-full text-sm mt-2">
                 <RotateCcw className="w-4 h-4 mr-2 inline" /> Retake Photo Instead
               </button>
             )}
           </>
         )}
         {step.optional && evalState !== 'evaluating' && (
-          <button id={`capture-skip-${step.type}`} onClick={skip} className="btn-ghost-dark w-full text-sm">
+          <button id={`capture-skip-${step.type}`} onClick={skip} className="btn-secondary w-full text-sm">
             {t('capture_skip')}
           </button>
         )}
       </div>
       {/* Demo Overlay */}
       {showDemo && step.demoUrl && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/90 backdrop-blur-md p-6 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-md p-6 animate-fade-in">
           <div className="relative w-full max-w-sm flex flex-col items-center">
             <button
               onClick={() => setShowDemo(false)}
-              className="absolute -top-12 right-0 p-2 rounded-full bg-white/10 text-white"
+              className="absolute -top-12 right-0 p-2 rounded-full bg-stone-200 text-stone-600 hover:bg-stone-300 transition-colors"
             >
               <XCircle className="w-6 h-6" />
             </button>
-            <div className="w-full aspect-[3/4] rounded-3xl overflow-hidden border-2 border-white/10 shadow-2xl bg-black flex items-center justify-center">
+            <div className="w-full aspect-[3/4] rounded-3xl overflow-hidden border-2 border-stone-300 shadow-2xl bg-stone-100 flex items-center justify-center">
               {step.isVideo ? (
                 <video src={step.demoUrl} className="w-full h-full object-cover" controls autoPlay loop muted playsInline />
               ) : step.isAudio ? (
                 <div className="flex flex-col items-center gap-4">
-                  <Music className="w-16 h-16 text-brand-500 animate-bounce" />
+                  <Music className="w-16 h-16 text-brand-600 animate-bounce" />
                   <audio src={step.demoUrl} controls className="w-4/5" />
                 </div>
               ) : (
                 <img src={step.demoUrl} className="w-full h-full object-cover" alt="Example demo" />
               )}
             </div>
-            <p className="mt-6 text-white font-medium text-center">Reference: {STEP_LABELS[stepIdx]}</p>
-            <p className="mt-2 text-white/40 text-xs text-center px-6">
+            <p className="mt-6 text-stone-900 font-semibold text-center">Reference: {STEP_LABELS[stepIdx]}</p>
+            <p className="mt-2 text-stone-500 text-xs text-center px-6">
               This is how your photo should look. Ensure the gold is clear and well-lit.
             </p>
             <div className="mt-8 flex gap-3 w-full px-2">
-              <button
-                onClick={handleEnterDemo}
-                className="flex-1 px-6 py-3 rounded-full bg-brand-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 active:scale-95 transition-transform hover:bg-brand-600"
-              >
+                <button
+                  onClick={handleEnterDemo}
+                  className="flex-1 px-6 py-3 rounded-full bg-brand-600 text-white font-semibold text-sm shadow-brand active:scale-95 transition-transform hover:bg-brand-700"
+                >
                 Enter Demo
               </button>
               <button
                 onClick={() => setShowDemo(false)}
-                className="flex-1 px-6 py-3 rounded-full bg-white/10 text-white font-semibold text-sm border border-white/20 active:scale-95 transition-transform hover:bg-white/20"
+                className="flex-1 px-6 py-3 rounded-full bg-white text-stone-700 font-semibold text-sm border border-stone-300 active:scale-95 transition-transform hover:bg-stone-50"
               >
                 View Only
               </button>

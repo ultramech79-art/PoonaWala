@@ -49,13 +49,13 @@ export function Setup() {
                 className={clsx(
                   'flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-200 active:scale-[0.96]',
                   active
-                    ? 'border-brand-500 bg-brand-50 shadow-brand-sm'
+                    ? 'border-brand-600 bg-brand-50 shadow-brand-sm'
                     : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50'
                 )}
               >
                 <div className={clsx(
                   'w-11 h-11 rounded-2xl flex items-center justify-center transition-colors',
-                  active ? 'bg-brand-500' : 'bg-stone-100'
+                  active ? 'bg-brand-600' : 'bg-stone-100'
                 )}>
                   <Icon className={clsx('w-5 h-5', active ? 'text-white' : 'text-stone-500')} strokeWidth={1.8} />
                 </div>
@@ -80,7 +80,7 @@ export function Setup() {
               { n: 3, text: t('setup_tip3') },
             ].map(({ n, text }) => (
               <div key={n} className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-6 h-6 rounded-full bg-brand-50 border border-brand-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <span className="text-xs font-bold text-brand-600">{n}</span>
                 </div>
                 <p className="text-sm text-stone-600 leading-relaxed">{text}</p>

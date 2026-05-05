@@ -8,31 +8,31 @@ export default {
     extend: {
       colors: {
         brand: {
-          50:  '#E6EBFA',
-          100: '#CDD6F5',
-          200: '#9AAEEA',
-          300: '#6886DF',
-          400: '#355ED5',
-          500: '#1C315E', // Poonawalla Navy
-          600: '#16274B',
-          700: '#101D38',
-          800: '#0B1425',
-          900: '#050A13',
+          50:  '#FFF5F5',
+          100: '#FED7D7',
+          200: '#FEB2B2',
+          300: '#FC8181',
+          400: '#F56565',
+          500: '#C53030', // Deep Red
+          600: '#9B2C2C', // Deep Crimson
+          700: '#742A2A',
+          800: '#63171B',
+          900: '#4A1215',
         },
         gold: {
-          50:  '#FFF9E6',
-          100: '#FFF3CC',
-          200: '#FFE499',
-          300: '#FFD166',
-          400: '#F5C030',
-          500: '#D4A017',
-          600: '#B8860B',
-          700: '#8B6508',
-          800: '#5E4405',
-          900: '#312202',
+          50:  '#FFFBEB',
+          100: '#FEF3C7',
+          200: '#FDE68A',
+          300: '#FCD34D',
+          400: '#FBBF24',
+          500: '#D97706', // Vibrant Gold/Amber
+          600: '#B45309',
+          700: '#92400E',
+          800: '#78350F',
+          900: '#451A03',
         },
         poonawala: {
-          red:  '#5B47FA',
+          red:  '#C53030',
           gold: '#D4A017',
         },
         ink: {
@@ -92,7 +92,7 @@ export default {
 
       backgroundImage: {
         'gold-gradient':     'linear-gradient(135deg, #D4A017 0%, #F5C030 50%, #D4A017 100%)',
-        'brand-gradient':    'linear-gradient(135deg, #1C315E 0%, #2C4685 100%)',
+        'brand-gradient':    'linear-gradient(135deg, #9B2C2C 0%, #C53030 100%)',
         'dark-gradient':     'linear-gradient(180deg, #0C0B18 0%, #07060F 100%)',
         'shimmer-gradient':  'linear-gradient(90deg, transparent 0%, rgba(212,160,23,0.12) 50%, transparent 100%)',
       },

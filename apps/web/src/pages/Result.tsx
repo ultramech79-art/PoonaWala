@@ -114,9 +114,9 @@ export function Result() {
     AGENT: {
       label: t('routing_agent_label'),
       icon: UserCheck,
-      colorClass: 'text-brand-700',
+      colorClass: 'text-brand-600',
       bgClass: 'bg-brand-50',
-      borderClass: 'border-brand-200',
+      borderClass: 'border-brand-600/20',
       action: t('routing_agent_action'),
       desc: t('routing_agent_desc'),
     },
@@ -235,12 +235,12 @@ export function Result() {
 
           {/* Loan offer */}
           <div className="mx-5 mb-4">
-            <div className="card p-5 border-brand-200 bg-brand-50">
+            <div className="card p-5 border-brand-600/20 bg-brand-50">
               <div className="flex items-center justify-between mb-2">
                 <p className="label">{t('result_loan')}</p>
-                <span className="text-[10px] text-brand-500 font-semibold">RBI 75% LTV</span>
+                <span className="text-[10px] text-brand-600 font-semibold uppercase tracking-wider">RBI 75% LTV</span>
               </div>
-              <div className="font-display font-black text-4xl text-brand-700 mb-0.5 leading-none">
+              <div className="font-display font-black text-4xl text-brand-600 mb-0.5 leading-none">
                 <AnimatedNumber target={result.loan_offer.band_low_inr} prefix="₹" duration={1400} />
               </div>
               <div className="flex items-baseline gap-2 mb-3">
@@ -295,7 +295,7 @@ export function Result() {
           className="w-full card flex items-center justify-between p-4"
         >
           <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-brand-500" />
+            <Info className="w-4 h-4 text-brand-600" />
             <span className="text-sm font-medium text-stone-900">{t('xai_heading')}</span>
           </div>
           {showXAI
@@ -344,7 +344,7 @@ export function Result() {
           className="w-full card flex items-center justify-between p-4"
         >
           <div className="flex items-center gap-2">
-            <Calculator className="w-4 h-4 text-brand-500" />
+            <Calculator className="w-4 h-4 text-brand-600" />
             <span className="text-sm font-medium text-stone-900">Detailed Calculation Breakdown</span>
           </div>
           {showBreakdown
@@ -377,7 +377,7 @@ export function Result() {
             </div>
             <div className="flex justify-between items-center pt-1">
               <span className="text-xs text-stone-500">Max Loan Eligibility (75% LTV)</span>
-              <span className="text-sm font-bold text-brand-700">~ {fmt(Math.round((result.loan_offer.band_low_inr + result.loan_offer.band_high_inr) / 2))}</span>
+              <span className="text-sm font-bold text-brand-600">~ {fmt(Math.round((result.loan_offer.band_low_inr + result.loan_offer.band_high_inr) / 2))}</span>
             </div>
             <div className="mt-2 p-2 bg-stone-50 rounded-lg text-[10px] text-stone-400 leading-snug">
               * Value = Live 24K Price × Net Weight × (Karat / 24) ± 7%<br/>

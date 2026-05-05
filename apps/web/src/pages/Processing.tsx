@@ -262,19 +262,19 @@ export function Processing() {
   const circumference = 2 * Math.PI * 52
 
   return (
-    <div className="page-dark items-center justify-center animate-fade-in">
+    <div className="page items-center justify-center animate-fade-in">
       {/* Subtle bg glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-brand-500/6 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-brand-600/5 blur-3xl pointer-events-none" />
 
       <div className="flex flex-col items-center px-8 text-center w-full">
         {/* Circular progress ring */}
         <div className="relative w-32 h-32 mb-8">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
+            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="6" />
             <circle
               cx="60" cy="60" r="52"
               fill="none"
-              stroke="#5B47FA"
+              stroke="#2D4336"
               strokeWidth="6"
               strokeLinecap="round"
               strokeDasharray={circumference}
@@ -284,29 +284,29 @@ export function Processing() {
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             {done ? (
-              <CheckCircle className="w-10 h-10 text-emerald-400 animate-scale-in" />
+              <CheckCircle className="w-10 h-10 text-emerald-600 animate-scale-in" />
             ) : (
-              <span className="font-display font-black text-2xl text-white">{pct}%</span>
+              <span className="font-display font-black text-2xl text-stone-900">{pct}%</span>
             )}
           </div>
         </div>
 
-        <h1 className="font-display font-bold text-2xl text-white mb-2">
+        <h1 className="font-display font-bold text-2xl text-stone-900 mb-2">
           {done ? t('processing_complete') : t('processing_analysing')}
         </h1>
-        <p className="text-sm text-white/40 mb-10">{t('processing_note')}</p>
+        <p className="text-sm text-stone-500 mb-10">{t('processing_note')}</p>
 
         {/* Step checklist */}
         <div className="w-full max-w-xs space-y-3">
           {STEPS.map(({ label }, i) => (
             <div
               key={label}
-              className={`flex items-center gap-3 transition-all duration-300 ${i <= activeStep ? 'opacity-100' : 'opacity-20'}`}
+              className={`flex items-center gap-3 transition-all duration-300 ${i <= activeStep ? 'opacity-100' : 'opacity-30'}`}
             >
               <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-                i < activeStep ? 'bg-emerald-500' :
-                i === activeStep ? 'bg-brand-500 animate-pulse' :
-                'bg-white/10'
+                i < activeStep ? 'bg-emerald-600' :
+                i === activeStep ? 'bg-brand-600 animate-pulse' :
+                'bg-stone-200'
               }`}>
                 {i < activeStep
                   ? <CheckCircle className="w-3.5 h-3.5 text-white" strokeWidth={3} />
@@ -315,7 +315,7 @@ export function Processing() {
                     : null
                 }
               </div>
-              <p className={`text-sm transition-colors duration-300 ${i <= activeStep ? 'text-white' : 'text-white/30'}`}>
+              <p className={`text-sm transition-colors duration-300 ${i <= activeStep ? 'text-stone-900' : 'text-stone-400'}`}>
                 {label}
               </p>
             </div>
@@ -323,7 +323,7 @@ export function Processing() {
         </div>
 
         {/* Trust line */}
-        <div className="mt-10 flex items-center gap-2 text-xs text-white/20">
+        <div className="mt-10 flex items-center gap-2 text-xs text-stone-400">
           <Lock className="w-3.5 h-3.5" />
           <span>{t('consent_secure')}</span>
         </div>

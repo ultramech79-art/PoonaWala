@@ -142,8 +142,8 @@ export function OTP() {
               key={s}
               className={clsx(
                 'h-1.5 flex-1 rounded-full transition-all duration-300',
-                s === step ? 'bg-brand-500' :
-                i < (['name', 'phone', 'otp'] as Step[]).indexOf(step) ? 'bg-brand-300' :
+                s === step ? 'bg-brand-600' :
+                i < (['name', 'phone', 'otp'] as Step[]).indexOf(step) ? 'bg-brand-400' :
                 'bg-stone-200'
               )}
             />
@@ -163,7 +163,7 @@ export function OTP() {
             {step === 'verified'
               ? <CheckCircle className="w-8 h-8 text-emerald-500" />
               : step === 'name'
-                ? <User className="w-8 h-8 text-brand-500" />
+                ? <User className="w-8 h-8 text-brand-600" />
                 : <Phone className="w-8 h-8 text-stone-600" />
             }
           </div>
@@ -277,7 +277,7 @@ export function OTP() {
                     'w-12 h-14 text-center text-xl font-mono font-bold rounded-2xl border-2 outline-none transition-all duration-200',
                     verifying ? 'opacity-50' : '',
                     digit
-                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      ? 'border-brand-600 bg-brand-50 text-brand-700'
                       : 'border-stone-200 bg-white text-stone-900 focus:border-brand-400 focus:bg-white'
                   )}
                 />
