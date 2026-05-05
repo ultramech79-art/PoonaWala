@@ -427,6 +427,25 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes popExpand {
+  0% { transform: scale(0); opacity: 0.8; }
+  50% { opacity: 0.6; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes popPulse {
+  0% { transform: scale(0.2); opacity: 1; }
+  40% { opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes popContract {
+  0% { transform: scale(1.4); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
 .animate-ring {
   animation: floatAndRotate 6s ease-in-out infinite;
   perspective: 1000px;
@@ -476,6 +495,18 @@
 
 .hover-scale:hover {
   transform: scale(1.05);
+}
+
+.animate-pop-expand {
+  animation: popExpand 2s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.animate-pop-pulse {
+  animation: popPulse 2.4s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.animate-pop-contract {
+  animation: popContract 2.8s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
 }
 
 /* ─── Camera ─────────────────────────────────────────────────── */

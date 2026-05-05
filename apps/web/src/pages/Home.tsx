@@ -100,6 +100,13 @@ export function Home() {
         <div className="absolute top-20 left-0 w-64 h-64 rounded-full bg-gradient-to-r from-blue-300/5 to-transparent blur-3xl" />
         {/* Right accent */}
         <div className="absolute top-1/3 right-0 w-80 h-80 rounded-full bg-gradient-to-l from-amber-300/5 to-transparent blur-3xl" />
+
+        {/* Popping circles */}
+        <div className="absolute top-1/3 left-1/4 w-12 h-12 rounded-full bg-gradient-to-br from-brand-400 to-amber-400 animate-pop-expand" style={{ animationDelay: '0s' }} />
+        <div className="absolute top-2/3 right-1/4 w-8 h-8 rounded-full bg-gradient-to-br from-amber-300 to-orange-400 animate-pop-pulse" style={{ animationDelay: '0.3s' }} />
+        <div className="absolute top-1/2 left-1/3 w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-amber-500 animate-pop-contract" style={{ animationDelay: '0.6s' }} />
+        <div className="absolute top-1/4 right-1/3 w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-yellow-400 animate-pop-expand" style={{ animationDelay: '0.9s' }} />
+        <div className="absolute top-3/5 left-1/2 w-9 h-9 rounded-full bg-gradient-to-br from-brand-300 to-amber-400 animate-pop-pulse" style={{ animationDelay: '1.2s' }} />
       </div>
 
       {/* Spline Ring - Hero Element (60% height) */}
