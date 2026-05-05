@@ -4,7 +4,7 @@
 
 <br/>
 
-[![Live App](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20App-goldeye--poona.vercel.app-FFD700?style=for-the-badge&labelColor=1a1a1a)](https://goldeye-poona.vercel.app)
+[![Live App](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20App-goldeye--poona.vercel.app-FFD700?style=for-the-badge&labelColor=1a1a1a)](https://poona-wala.vercel.app)
 &nbsp;
 [![API](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F%20Backend%20API-poonawala.onrender.com-46E3B7?style=for-the-badge&labelColor=1a1a1a)](https://poonawala.onrender.com/health)
 
@@ -59,7 +59,7 @@ A borrower opens the app, photographs their jewelry from 7 angles, taps the ring
 
 | Service | URL | Purpose |
 |---|---|---|
-| Frontend PWA | [goldeye-poona.vercel.app](https://goldeye-poona.vercel.app) | React 18 PWA — borrower-facing |
+| Frontend PWA | [poona-wala.vercel.app](https://poona-wala.vercel.app) | React 18 PWA — borrower-facing |
 | Backend API | [poonawala.onrender.com](https://poonawala.onrender.com) | FastAPI — all ML inference |
 | API Health | [/health](https://poonawala.onrender.com/health) | Live model status check |
 | Gold Price | [/api/price](https://poonawala.onrender.com/api/price) | Live IBJA gold feed |
