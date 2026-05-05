@@ -436,6 +436,70 @@ Respond with JSON:
         logger.exception(f"Gemini decision error: {e}")
         return {"decision": None, "error": str(e)}
 
+async def analyze_multimodal_fusion(
+    signals: dict,
+    images_urls: list[str],
+    audio_url: Optional[str] = None
+) -> dict:
+    """
+    A final high-level review using Groq/Gemini to cross-reference ALL signals.
+    Identifies red flags (e.g. Color says 22K, but Audio says Plated).
+    """
+    import os
+    import json
+    import aiohttp
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        return {}
+
+    prompt = f"""You are a Lead Gold Appraiser. Review these automated signals and find inconsistencies.
+{json.dumps(signals, indent=2)}
+
+Look for RED FLAGS:
+1. Visual color (s3_color) says 22K but Audio (s11_audio) says Plated.
+2. Hallmark (s2_ocr) is blurry but Weight (s6_weight) is too high for the size.
+3. HUID (s1_huid) verified but Specular (s4_specular) shows non-metallic reflection.
+
+Respond with JSON:
+{{
+  "final_purity_estimate": int,
+  "risk_score": 0.0-1.0,
+  "expert_commentary": "Detailed reasoning explaining any inconsistencies.",
+  "verdict": "APPROVE|REJECT|MANUAL_REVIEW"
+}}"""
+
+    payload = {
+        "model": "llama-3.2-90b-vision-preview",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                ] + [
+                    {"type": "image_url", "image_url": {"url": url}}
+                    for url in images_urls[:2] if url and not url.startswith('local://')
+                ]
+            }
+        ],
+        "response_format": {"type": "json_object"}
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {groq_key}"},
+                timeout=15
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return json.loads(data["choices"][0]["message"]["content"])
+    except Exception as e:
+        logger.debug(f"Fusion review failed: {e}")
+    return {}
+
+
 
 def _build_frame_prompts(gold_price_24k: float = 0.0) -> dict:
     """Build per-step evaluation prompts, optionally embedding the live gold price."""

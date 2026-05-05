@@ -46,6 +46,7 @@ from app.xai.gradcam import generate_gradcam_url
 from app.decision.rules import apply_rbi_rules
 from app.decision.routing import route_session
 from app.decision.ibja import price_for_karat, price_metadata
+from app.data.gemini import analyze_multimodal_fusion
 from app.limiter import limiter
 
 logger = logging.getLogger("goldeye.assess")
@@ -218,7 +219,18 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
     shap_data = explain(features)
     shap_features = [SHAPFeature(feature=d["feature"], contribution=d["contribution"]) for d in shap_data]
 
+    expert_review = await analyze_multimodal_fusion(
+        signals=signals_dict,
+        images_urls=req.frames,
+        audio_url=req.audio
+    )
+    if expert_review.get("verdict") == "REJECT":
+        logger.warning(f"[{trace_id}] Groq Expert Review REJECTED: {expert_review.get('expert_commentary')}")
+
     reasoning    = generate_reasoning(routing, confidence, lang=req.lang)
+    if expert_review.get("expert_commentary"):
+        reasoning += f"\n\nExpert Review: {expert_review['expert_commentary']}"
+
     counterfactual = generate_counterfactual(routing, huid_verified, confidence, lang=req.lang)
     gradcam_url  = await generate_gradcam_url(macro_url, req.session_id)
 
