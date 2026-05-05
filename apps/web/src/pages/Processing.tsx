@@ -82,7 +82,7 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
 
   // Realistic Indian jewelry purity distribution: 22K most common, 18K for rings
   // If session has a HUID code, use 22K (most hallmarked jewelry); otherwise ±
-  const karatEstimate = isFail ? 16 : (state.huidCode ? 22 : (Math.random() < 0.6 ? 22 : 18))
+  const karatEstimate = isFail ? 16 : (state.scannedKarat || (state.huidCode ? 22 : (Math.random() < 0.6 ? 22 : 18)))
   const pricePerGram24K = getLiveGoldPer24KGram()
 
   const goldValue = computeGoldMarketValue(pricePerGram24K, weightG, karatEstimate, stoneExclusionG)

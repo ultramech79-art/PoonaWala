@@ -19,6 +19,7 @@ export interface SessionState {
   captures: Partial<Record<CaptureType, CapturedAsset>>
   weightG: number | null
   huidCode: string | null
+  scannedKarat: number | null
   result: AssessmentResult | null
 }
 
@@ -92,6 +93,7 @@ let _state: SessionState = {
   captures: {},
   weightG: null,
   huidCode: null,
+  scannedKarat: null,
   result: null,
 }
 
@@ -130,6 +132,7 @@ export function useSessionStore() {
     },
     setWeight: (g: number | null) => setState({ weightG: g }),
     setHuid: (code: string | null) => setState({ huidCode: code }),
+    setScannedKarat: (karat: number | null) => setState({ scannedKarat: karat }),
     setResult: (result: AssessmentResult) => setState({ result }),
     setSessionId: (id: string) => setState({ sessionId: id }),
     initSession: () => {
@@ -144,6 +147,7 @@ export function useSessionStore() {
       captures: {},
       weightG: null,
       huidCode: null,
+      scannedKarat: null,
       result: null,
     }),
   }

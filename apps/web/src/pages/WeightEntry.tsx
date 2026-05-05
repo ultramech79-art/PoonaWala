@@ -89,32 +89,7 @@ export function WeightEntry() {
           )}
         </div>
 
-        {/* HUID input (optional) */}
-        <div className="mb-6">
-          <label className="label mb-2 block">HUID Code (Optional)</label>
-          <div className="relative">
-            <input
-              id="huid-input"
-              type="text"
-              value={huid}
-              onChange={e => setHuidValue(e.target.value.toUpperCase())}
-              placeholder="e.g., A3F2K1"
-              className="input-field text-lg font-mono font-bold tracking-wider"
-              maxLength={10}
-              pattern="[A-Z0-9]*"
-              inputMode="text"
-            />
-          </div>
-          <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-            📌 Found a faint hallmark? Enter the HUID code here to help us verify authenticity. This is optional but improves accuracy.
-          </p>
-          {huid && (
-            <p className="text-xs text-brand-500 mt-2 flex items-center gap-1">
-              ✓ HUID {huid} will be checked
-            </p>
-          )}
-        </div>
-
+        {/* HUID input moved to Hallmark screen */}
         {/* How to weigh tip */}
         <div className="card p-4 mb-6">
 

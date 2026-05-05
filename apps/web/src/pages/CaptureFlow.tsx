@@ -40,7 +40,7 @@ function speak(text: string) {
 export function CaptureFlow() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { addCapture, state } = useSessionStore()
+  const { addCapture, state, setScannedKarat, setHuid } = useSessionStore()
 
   const STEPS: Step[] = [
     {
@@ -108,6 +108,8 @@ export function CaptureFlow() {
   const [evals, setEvals] = useState<Record<number, StepEval>>({})
   const [cameraKey, setCameraKey] = useState(0)
   const [showDemo, setShowDemo] = useState(false)
+  const [showManualHuid, setShowManualHuid] = useState(false)
+  const [manualHuid, setManualHuid] = useState(state.huidCode || '')
   const spokenStep = useRef(-1)
 
   const step = STEPS[stepIdx]
@@ -149,6 +151,10 @@ export function CaptureFlow() {
         // Automatic retry once after 2 seconds
         await new Promise(r => setTimeout(r, 2000))
         result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000)
+      }
+
+      if (step.type === 'macro' && result.detected?.karat_numeric) {
+        setScannedKarat(result.detected.karat_numeric)
       }
 
       setEvals(prev => ({
@@ -280,6 +286,49 @@ export function CaptureFlow() {
           isAudio={step.isAudio}
           capturedDataUrl={currentEval?.dataUrl}
         />
+
+        {/* Manual HUID Entry for Macro Step */}
+        {step.type === 'macro' && (
+          <div className="mt-4">
+            {!showManualHuid ? (
+              <button
+                onClick={() => setShowManualHuid(true)}
+                className="w-full py-3 px-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-white/60 font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+              >
+                Faint or no hallmark? Enter HUID manually
+              </button>
+            ) : (
+              <div className="card p-4 bg-white/5 border border-white/10 rounded-2xl animate-fade-in">
+                <label className="text-xs text-white/60 mb-2 block font-medium">Enter HUID Code</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualHuid}
+                    onChange={e => {
+                      const val = e.target.value.toUpperCase();
+                      setManualHuid(val);
+                      setHuid(val || null);
+                    }}
+                    placeholder="e.g., A3F2K1"
+                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-brand-500"
+                    maxLength={10}
+                  />
+                  <button
+                    onClick={() => setShowManualHuid(false)}
+                    className="px-4 py-2.5 rounded-xl bg-brand-500 text-white text-xs font-semibold hover:bg-brand-600 transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+                {manualHuid && (
+                  <p className="text-[10px] text-brand-400 mt-2 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> HUID {manualHuid} saved
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Feedback */}
         {evalState === 'evaluating' && (
