@@ -122,9 +122,9 @@ export function Welcome() {
         className="relative mx-5 mt-6 rounded-3xl overflow-hidden mb-8 shadow-lg border border-brand-200"
         style={{
           minHeight: '240px',
-          backgroundImage: 'url(https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=600&q=85&fm=jpg)',
+          backgroundImage: 'url(https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&q=85&fm=jpg)',
           backgroundSize: 'cover',
-          backgroundPosition: 'center right',
+          backgroundPosition: 'center',
         }}
       >
         {/* Enhanced gradient overlay for better readability */}
