@@ -194,9 +194,6 @@ export function Welcome() {
         </div>
       </div>
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
       {/* CTA */}
       <div className="px-5 pb-8 space-y-4">
         <div className="relative group">
