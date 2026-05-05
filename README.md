@@ -129,13 +129,18 @@ GoldEye's primary assessment pipeline runs entirely on **custom-trained, in-hous
 
 ### Fallback Models (Confidence-Gated, External)
 
-When local model confidence falls below a safe threshold, GoldEye can optionally route to a **vision-language model** as a secondary opinion. This fallback:
-- Is **never** the primary signal
-- Is **never** used for the final loan decision
-- Acts only as an additional evidence point when the in-house model is uncertain
-- Can be disabled entirely — the system degrades gracefully
+When local model confidence falls below a safe threshold, GoldEye routes to external vision-language models as a secondary opinion. Two fallbacks are integrated and have performed well in testing:
 
-The fallback VLM endpoint is configurable (`VLM_API_URL`, `VLM_MODEL`) and works with any OpenAI-compatible API, including locally hosted models via Ollama.
+| Fallback | Provider | Role |
+|---|---|---|
+| **Gemini Vision** | Google AI | VLM fallback for jewelry image analysis when primary CNN confidence is low |
+| **Grok Vision** | xAI | Secondary VLM fallback; cross-validates Gemini output under high-ambiguity cases |
+
+Both fallbacks:
+- Are **never** the primary signal — in-house models always run first
+- Are **never** solely responsible for the loan decision
+- Activate only when the primary model confidence drops below threshold
+- Can be disabled independently — the system degrades gracefully to in-house-only mode
 
 ---
 
