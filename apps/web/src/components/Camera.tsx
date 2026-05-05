@@ -95,6 +95,7 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
 
   const liveWsRef = useRef<WebSocket | null>(null)
   const lastGuidanceRef = useRef<number>(0)
+  const hasAutoStarted = useRef(false)
 
   const startCamera = useCallback(async () => {
     setStatus('starting')
@@ -306,6 +307,13 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [status, startCamera])
 
+  // Auto-start camera on mount — no tap required
+  useEffect(() => {
+    if (hasAutoStarted.current) return
+    hasAutoStarted.current = true
+    startCamera()
+  }, [startCamera])
+
   // Stop camera on unmount
   useEffect(() => () => stopCamera(), [stopCamera])
 
@@ -319,30 +327,18 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
 
       {status === 'idle' && (
         <div className="space-y-3">
-          <button
-            id={`camera-start-${type}`}
-            onClick={startCamera}
-            className="w-full camera-viewport flex flex-col items-center justify-center gap-4 cursor-pointer bg-ink-800 border border-white/10 rounded-3xl hover:border-brand-500/30 transition-all"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center">
-              {isAudio
-                ? <Mic className="w-7 h-7 text-brand-400" strokeWidth={1.8} />
-                : isVideo
-                  ? <Video className="w-7 h-7 text-brand-400" strokeWidth={1.8} />
-                  : <CameraIcon className="w-7 h-7 text-brand-400" strokeWidth={1.8} />
-              }
+          <div className="camera-viewport flex items-center justify-center bg-black rounded-3xl">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 rounded-full border-2 border-gold-400 border-t-transparent animate-spin" />
+              <p className="text-sm text-white/50">Starting camera…</p>
             </div>
-            <div className="text-center">
-              <p className="font-display font-semibold text-white">Tap to {isAudio || isVideo ? 'record' : 'open camera'}</p>
-              <p className="text-xs text-white/40 mt-1">{isVideo ? '5 second video' : isAudio ? '3 second audio' : 'Photo'}</p>
-            </div>
-          </button>
+          </div>
           <button
             id={`demo-capture-${type}`}
             onClick={useDemoCapture}
-            className="w-full py-2.5 text-xs text-white/30 hover:text-white/60 transition-colors text-center border border-white/5 rounded-2xl hover:border-white/10"
+            className="w-full py-2.5 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5"
           >
-            Use demo {isAudio ? 'audio' : isVideo ? 'video' : 'image'} (no hardware needed)
+            ⚡ TenzorX Hackathon Demo
           </button>
         </div>
       )}
@@ -403,30 +399,39 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
           )}
 
           {/* Capture / Record button */}
-          <div className="flex justify-center mt-6">
-            {isVideo || isAudio ? (
-              status === 'live' ? (
-                <button
-                  id={`record-start-${type}`}
-                  onClick={startRecording}
-                  className="w-20 h-20 rounded-full bg-red-500 border-4 border-white/20 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-                >
-                  <div className="w-7 h-7 rounded-sm bg-white" />
-                </button>
+          <div className="flex flex-col items-center gap-3 mt-6">
+            <div className="flex justify-center">
+              {isVideo || isAudio ? (
+                status === 'live' ? (
+                  <button
+                    id={`record-start-${type}`}
+                    onClick={startRecording}
+                    className="w-20 h-20 rounded-full bg-red-500 border-4 border-white/20 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-sm bg-white" />
+                  </button>
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-red-500 border-4 border-white/20 flex items-center justify-center shadow-lg">
+                    <div className="w-5 h-5 rounded-full bg-white animate-pulse" />
+                  </div>
+                )
               ) : (
-                <div className="w-20 h-20 rounded-full bg-red-500 border-4 border-white/20 flex items-center justify-center shadow-lg">
-                  <div className="w-5 h-5 rounded-full bg-white animate-pulse" />
-                </div>
-              )
-            ) : (
-              <button
-                id={`capture-${type}`}
-                onClick={capture}
-                className="w-20 h-20 rounded-full border-4 flex items-center justify-center shadow-lg transition-all bg-white border-brand-400/40 active:scale-90 shadow-brand"
-              >
-                <div className="w-14 h-14 rounded-full bg-white" />
-              </button>
-            )}
+                <button
+                  id={`capture-${type}`}
+                  onClick={capture}
+                  className="w-20 h-20 rounded-full border-4 flex items-center justify-center shadow-lg transition-all bg-white border-brand-400/40 active:scale-90 shadow-brand"
+                >
+                  <div className="w-14 h-14 rounded-full bg-white" />
+                </button>
+              )}
+            </div>
+            <button
+              id={`demo-capture-live-${type}`}
+              onClick={useDemoCapture}
+              className="px-4 py-1.5 text-[11px] font-semibold text-brand-400 hover:text-brand-300 transition-colors border border-brand-500/20 rounded-full hover:border-brand-500/40 hover:bg-brand-500/5"
+            >
+              ⚡ TenzorX Hackathon Demo
+            </button>
           </div>
       </div>
 
@@ -458,9 +463,9 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
             <button
               id={`demo-capture-error-${type}`}
               onClick={useDemoCapture}
-              className="w-full py-2.5 text-xs text-white/30 hover:text-white/60 transition-colors text-center border border-white/5 rounded-2xl hover:border-white/10"
+              className="w-full py-2.5 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5"
             >
-              Use demo {isAudio ? 'audio' : isVideo ? 'video' : 'image'} (bypass camera)
+              ⚡ TenzorX Hackathon Demo
             </button>
           </div>
         </div>
@@ -484,13 +489,22 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
           <div className="absolute top-3 right-3">
             <span className="badge-green"><CheckCircle className="w-3 h-3" /> Captured</span>
           </div>
-          <button
-            id={`retake-${type}`}
-            onClick={retake}
-            className="mt-3 w-full btn-secondary text-sm"
-          >
-            Retake
-          </button>
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              id={`retake-${type}`}
+              onClick={retake}
+              className="w-full btn-secondary text-sm"
+            >
+              Retake
+            </button>
+            <button
+              id={`demo-capture-done-${type}`}
+              onClick={useDemoCapture}
+              className="w-full py-2 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5"
+            >
+              ⚡ TenzorX Hackathon Demo
+            </button>
+          </div>
         </div>
       )}
     </div>

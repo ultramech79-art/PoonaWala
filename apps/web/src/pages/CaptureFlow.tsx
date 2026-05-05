@@ -72,6 +72,7 @@ const STEPS: Step[] = [
     hintKey: 'step_selfie_hint',
     voiceGuide: 'Last step. Take a selfie while holding the gold jewellery clearly in the same frame.',
     facingMode: 'user',
+    demoUrl: '/assets/demo/selfie.jpg',
   },
 ]
 
