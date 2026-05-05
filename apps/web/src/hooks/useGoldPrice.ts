@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 
 const TWELVE_DATA_KEY = 'f6ab24713e994e74b7322d6de028a2d8'
 const ALPHA_VANTAGE_KEY = 'FXOI4HBIBPWMAE31'
+const GOLD_API_KEY = 'b0902699324a7b4bfaf5d17bd23f76474130daf6e2eb19f066b322e1efbde59e'
 const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const TROY_OZ_TO_GRAMS = 31.1035
 const CACHE_KEY = 'goldeye_metal_prices_v2'
@@ -84,17 +85,26 @@ async function fetchFromTwelveData(): Promise<MetalPrices> {
   const rateData = await rateRes.json()
   const inrPerUsd = rateData.rates.INR
 
-  const inrPrice = Math.round((goldUsdPerOz * inrPerUsd) / TROY_OZ_TO_GRAMS)
-  const sparkline = buildSparkline(inrPrice, 'xau_24k')
-  const yesterday = sparkline[sparkline.length - 2]
-  const changePercent24h = yesterday ? +(((inrPrice - yesterday) / yesterday) * 100).toFixed(2) : 0
+  // Convert USD per troy oz to INR per gram
+  const goldInrPerGram = (goldUsdPerOz * inrPerUsd) / TROY_OZ_TO_GRAMS
+  const silverInrPerGram = goldInrPerGram * 0.06  // Silver is ~6% of gold price
+  const platinumInrPerGram = goldInrPerGram * 0.55  // Platinum is ~55% of gold price
+
+  const goldPrice24k = Math.round(goldInrPerGram)
+  const goldPrice22k = Math.round(goldInrPerGram * 22/24)
+  const silverPrice = Math.round(silverInrPerGram)
+  const platinumPrice = Math.round(platinumInrPerGram)
+
+  const goldSparkline = buildSparkline(goldPrice24k, 'xau_24k')
+  const yesterday = goldSparkline[goldSparkline.length - 2]
+  const changePercent24h = yesterday ? +(((goldPrice24k - yesterday) / yesterday) * 100).toFixed(2) : 0
 
   return {
     metals: [
-      { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: inrPrice, purity: '24K', unit: 'gm', changePercent24h, sparkline, color: 'gold' },
-      { id: 'xau_22k', name: 'Gold', symbol: 'XAU', price: Math.round(inrPrice * 22/24), purity: '22K', unit: 'gm', changePercent24h, sparkline: buildSparkline(Math.round(inrPrice * 22/24), 'xau_22k'), color: 'gold' },
-      { id: 'xag', name: 'Silver', symbol: 'XAG', price: Math.round(inrPrice * 0.05), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.05), 'xag'), color: 'silver' },
-      { id: 'xpt', name: 'Platinum', symbol: 'XPT', price: Math.round(inrPrice * 0.6), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.6), 'xpt'), color: 'platinum' },
+      { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: goldPrice24k, purity: '24K', unit: 'gm', changePercent24h, sparkline: goldSparkline, color: 'gold' },
+      { id: 'xau_22k', name: 'Gold', symbol: 'XAU', price: goldPrice22k, purity: '22K', unit: 'gm', changePercent24h, sparkline: buildSparkline(goldPrice22k, 'xau_22k'), color: 'gold' },
+      { id: 'xag', name: 'Silver', symbol: 'XAG', price: silverPrice, unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(silverPrice, 'xag'), color: 'silver' },
+      { id: 'xpt', name: 'Platinum', symbol: 'XPT', price: platinumPrice, unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(platinumPrice, 'xpt'), color: 'platinum' },
     ],
     fetchedAt: Date.now(),
     source: 'live'
@@ -111,6 +121,37 @@ async function fetchFromAlphaVantage(): Promise<MetalPrices> {
 
   const exchangeRate = parseFloat(data['Realtime Currency Exchange Rate']['5. Exchange Rate'])
   const inrPrice = Math.round(exchangeRate / TROY_OZ_TO_GRAMS)
+  const sparkline = buildSparkline(inrPrice, 'xau_24k')
+  const yesterday = sparkline[sparkline.length - 2]
+  const changePercent24h = yesterday ? +(((inrPrice - yesterday) / yesterday) * 100).toFixed(2) : 0
+
+  return {
+    metals: [
+      { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: inrPrice, purity: '24K', unit: 'gm', changePercent24h, sparkline, color: 'gold' },
+      { id: 'xau_22k', name: 'Gold', symbol: 'XAU', price: Math.round(inrPrice * 22/24), purity: '22K', unit: 'gm', changePercent24h, sparkline: buildSparkline(Math.round(inrPrice * 22/24), 'xau_22k'), color: 'gold' },
+      { id: 'xag', name: 'Silver', symbol: 'XAG', price: Math.round(inrPrice * 0.05), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.05), 'xag'), color: 'silver' },
+      { id: 'xpt', name: 'Platinum', symbol: 'XPT', price: Math.round(inrPrice * 0.6), unit: 'gm', changePercent24h: 0, sparkline: buildSparkline(Math.round(inrPrice * 0.6), 'xpt'), color: 'platinum' },
+    ],
+    fetchedAt: Date.now(),
+    source: 'live'
+  }
+}
+
+// Try Gold API
+async function fetchFromGoldAPI(): Promise<MetalPrices> {
+  const res = await fetch(`https://api.gold-api.com/latest?api_key=${GOLD_API_KEY}`)
+  if (!res.ok) throw new Error('Gold API HTTP error')
+
+  const data = await res.json()
+  if (!data.price || !data.currency) throw new Error('No price in Gold API response')
+
+  // Gold API returns price in specified currency (default USD per troy oz)
+  const goldUsdPerOz = parseFloat(data.price)
+  const rateRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
+  const rateData = await rateRes.json()
+  const inrPerUsd = rateData.rates.INR
+
+  const inrPrice = Math.round((goldUsdPerOz * inrPerUsd) / TROY_OZ_TO_GRAMS)
   const sparkline = buildSparkline(inrPrice, 'xau_24k')
   const yesterday = sparkline[sparkline.length - 2]
   const changePercent24h = yesterday ? +(((inrPrice - yesterday) / yesterday) * 100).toFixed(2) : 0
@@ -174,10 +215,11 @@ async function fetchFromMetalsAPI(): Promise<MetalPrices> {
 }
 
 async function fetchMetalPrices(): Promise<MetalPrices> {
-  // Try APIs in order: Twelve Data → Alpha Vantage → Metals API
+  // Try APIs in order: Twelve Data → Alpha Vantage → Gold API → Metals API
   const apis = [
     { name: 'Twelve Data', fn: fetchFromTwelveData },
     { name: 'Alpha Vantage', fn: fetchFromAlphaVantage },
+    { name: 'Gold API', fn: fetchFromGoldAPI },
     { name: 'Metals API', fn: fetchFromMetalsAPI }
   ]
 
