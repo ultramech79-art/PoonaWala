@@ -134,13 +134,12 @@ async function fetchMetalPrices(): Promise<MetalPrices> {
 }
 
 export function useMetalPrices() {
-  const [data, setData] = useState<MetalPrices | null>(() => readCache())
-  const [loading, setLoading] = useState<boolean>(!readCache())
+  const [data, setData] = useState<MetalPrices | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (readCache()) return
-
+    // Always fetch fresh data on component mount
     setLoading(true)
     fetchMetalPrices()
       .then(d => {
@@ -151,8 +150,15 @@ export function useMetalPrices() {
       .catch(err => {
         console.error('[MetalPrices]', err)
         setError(err.message)
-        
-        // Fallback data
+
+        // Try to use cached data as fallback
+        const cached = readCache()
+        if (cached) {
+          setData(cached)
+          return
+        }
+
+        // Use fallback data if no cache
         const fallback: MetalPrices = {
           metals: [
             { id: 'xau_24k', name: 'Gold', symbol: 'XAU', price: 7399, purity: '24K', unit: 'gm', changePercent24h: 0.45, sparkline: buildSparkline(7399, 'xau24'), color: 'gold' },
