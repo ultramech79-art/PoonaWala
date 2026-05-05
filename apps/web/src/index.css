@@ -12,22 +12,32 @@
   html {
     @apply antialiased;
     -webkit-tap-highlight-color: transparent;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
   }
 
   body {
     @apply bg-stone-50 text-stone-900 font-sans;
     font-feature-settings: 'kern' 1, 'liga' 1;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-    overflow-y: auto;
-    touch-action: pan-y;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html, body {
-    overscroll-behavior: auto;
-  }
 
   button { cursor: pointer; border: none; background: none; }
 
@@ -42,19 +52,21 @@
 
   /* ── PAGE SHELLS ── */
   .page {
-    @apply min-h-screen flex flex-col bg-stone-50 overflow-y-auto;
+    @apply flex flex-col bg-stone-50;
     padding-top: max(0px, var(--safe-top));
     padding-bottom: max(0px, var(--safe-bottom));
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
   }
 
   .page-dark {
-    @apply min-h-screen flex flex-col bg-ink-900 overflow-y-auto;
+    @apply flex flex-col bg-ink-900;
     padding-top: max(0px, var(--safe-top));
     padding-bottom: max(0px, var(--safe-bottom));
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
   }
 
   .page-header {
@@ -313,6 +325,18 @@
   .scrollable {
     -webkit-overflow-scrolling: touch;
     overflow-y: auto;
+    touch-action: pan-y;
+  }
+
+  /* Fix flex overflow on Android - critical for nested scroll */
+  .flex-1 {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* Ensure all overflow-y-auto elements support touch scrolling */
+  [class*="overflow-y-auto"] {
+    -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
   }
 

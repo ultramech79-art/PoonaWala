@@ -16,7 +16,7 @@ import { useSessionStore } from './store/session'
 function App() {
   return (
     <BrowserRouter>
-      <div className="max-w-md mx-auto min-h-screen relative overflow-hidden" style={{ height: '100dvh', WebkitOverflowScrolling: 'touch' }}>
+      <div className="max-w-md mx-auto relative w-full" style={{ height: '100dvh' }}>
         <Routes>
           <Route path="/" element={<Navigate to="/language" replace />} />
           <Route path="/language" element={<LanguagePicker />} />
