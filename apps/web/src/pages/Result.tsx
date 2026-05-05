@@ -152,19 +152,28 @@ export function Result() {
   const isFail = result.routing === 'REJECT' || result.routing === 'RECAPTURE'
   const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`
 
-  // Recalculate value and loan with the latest live price on every render
+  // Recalculate value and loan with the latest live IBJA price on every render
   const livePrice24K = metalData?.metals.find(m => m.id === 'xau_24k')?.price ?? 0
   const livePrice22K = metalData?.metals.find(m => m.id === 'xau_22k')?.price ?? 0
   const livePrice18K = metalData?.metals.find(m => m.id === 'xau_18k')?.price ?? 0
+  const livePrice14K = metalData?.metals.find(m => m.id === 'xau_14k')?.price ?? 0
   const livePriceSrc = metalData?.source ?? 'cached'
-  const hasLivePrice  = livePrice24K > 5000
+  const hasLivePrice  = livePrice24K > 8000
 
-  // Pick the karat-specific price from SerpAPI for the detected karat
+  // Karat → IBJA purity label (for display)
   const detectedKarat = result.purity.point_estimate_karat
+  const purityLabel =
+    detectedKarat >= 23 ? '999' :
+    detectedKarat >= 21 ? '916' :
+    detectedKarat >= 17 ? '750' :
+    detectedKarat >= 13 ? '585' : `${Math.round(detectedKarat / 24 * 1000)}`
+
+  // Use the IBJA purity-specific rate for this gold's karat
   const livePriceForKarat =
     detectedKarat >= 23 ? livePrice24K :
     detectedKarat >= 21 ? (livePrice22K || livePrice24K * 22 / 24) :
     detectedKarat >= 17 ? (livePrice18K || livePrice24K * 18 / 24) :
+    detectedKarat >= 13 ? (livePrice14K || livePrice24K * 14 / 24) :
     livePrice24K * detectedKarat / 24
 
   const displayValue = hasLivePrice
@@ -332,7 +341,7 @@ export function Result() {
               </div>
               <p className="text-xs text-stone-400 mt-2">
                 {result.purity.point_estimate_karat}K gold · {result.weight.estimated_g}g · stone excl. {result.value_inr.stone_weight_excluded_g}g
-                {hasLivePrice && <span className="ml-1 text-emerald-600">· @₹{livePriceForKarat.toLocaleString('en-IN')}/g ({detectedKarat}K)</span>}
+                {hasLivePrice && <span className="ml-1 text-emerald-600">· IBJA {detectedKarat}K ({purityLabel}) @₹{livePriceForKarat.toLocaleString('en-IN')}/g</span>}
               </p>
             </div>
           </div>
@@ -523,9 +532,9 @@ export function Result() {
                     <span className="text-sm font-medium text-emerald-700">₹{livePrice18K.toLocaleString('en-IN')}/g</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center border-b border-stone-100 pb-2">
-                  <span className="text-xs text-stone-500">Rate Used for This Gold</span>
-                  <span className="text-sm font-bold text-emerald-700">₹{livePriceForKarat.toLocaleString('en-IN')}/g ({detectedKarat}K)</span>
+                <div className="flex justify-between items-center border-b border-stone-100 pb-2 bg-amber-50/60 -mx-1 px-1 rounded">
+                  <span className="text-xs font-semibold text-stone-700">IBJA Rate Applied ({detectedKarat}K · {purityLabel})</span>
+                  <span className="text-sm font-bold text-emerald-700">₹{livePriceForKarat.toLocaleString('en-IN')}/g</span>
                 </div>
               </>
             )}

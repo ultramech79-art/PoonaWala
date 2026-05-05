@@ -138,6 +138,58 @@ async def _fetch_via_groq(client: httpx.AsyncClient) -> float:
     _store(p24, "groq", p22, p18)
     return p24
 
+async def _fetch_via_ibja_direct(client: httpx.AsyncClient) -> float:
+    """
+    Directly scrapes ibjarates.com — the authoritative IBJA rate source.
+    - 999/916: from HdnGold JSON chart array (last value ÷ 10)
+    - 995/750/585: from GoldRatesCompareXXX span elements (already per gram)
+    """
+    resp = await client.get(
+        "https://ibjarates.com/",
+        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"},
+        timeout=15,
+        follow_redirects=True,
+    )
+    resp.raise_for_status()
+    html = resp.text
+
+    import html as htmllib
+
+    prices: dict[str, float] = {}
+
+    # 999 and 916 from HdnGold JSON chart data (per 10g → ÷ 10)
+    m = re.search(r'id="HdnGold"[^>]*value="([^"]*)"', html)
+    if m:
+        try:
+            chart = json.loads(htmllib.unescape(m.group(1)))
+            for key in ("purity999", "purity916"):
+                arr = chart.get(key, [])
+                if arr:
+                    purity = key.replace("purity", "")
+                    prices[purity] = round(int(arr[-1]) / 10, 2)
+        except Exception as e:
+            logger.warning(f"IBJA direct: HdnGold parse error: {e}")
+
+    # 995, 750, 585 from GoldRatesCompare spans (already per gram)
+    for purity in ("995", "750", "585"):
+        span = re.search(rf'id="GoldRatesCompare{purity}"[^>]*>([\d,]+)<', html)
+        if span:
+            prices[purity] = float(span.group(1).replace(",", ""))
+
+    p24  = prices.get("999", 0.0)
+    p995 = prices.get("995", 0.0)
+    p22  = prices.get("916", 0.0)
+    p18  = prices.get("750", 0.0)
+    p14  = prices.get("585", 0.0)
+
+    logger.info(f"IBJA direct: 999={p24} 995={p995} 916={p22} 750={p18} 585={p14}")
+
+    if not _accept(p24):
+        raise ValueError(f"IBJA direct: invalid 999 purity price {p24}")
+
+    _store(p24, "ibja", p22, p18, p14, p995)
+    return p24
+
 async def _fetch_via_yahoo(client: httpx.AsyncClient) -> float:
     g, f = await asyncio.gather(
         client.get(_GOLD_URL, headers=_YAHOO_HDRS),
@@ -275,7 +327,14 @@ async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
 
 async def _refresh_async():
     async with httpx.AsyncClient() as client:
-        # 1. SerpAPI — Google Search, actual Indian market price (IBJA/goodreturns)
+        # 1. ibjarates.com — official IBJA source, all 5 purities (999/995/916/750/585)
+        try:
+            await _fetch_via_ibja_direct(client)
+            return
+        except Exception as e:
+            logger.warning(f"Source ibja_direct failed: {e}")
+
+        # 2. SerpAPI — Google Search scrape of IBJA/goodreturns
         if _SERPAPI_KEY:
             try:
                 await _fetch_via_search_api(client)
@@ -283,14 +342,14 @@ async def _refresh_async():
             except Exception as e:
                 logger.warning(f"Source serp failed: {e}")
 
-        # 2. Yahoo Finance — international GC=F × USDINR (excludes Indian import duty)
+        # 3. Yahoo Finance — international GC=F × USDINR (no Indian import duty)
         try:
             await _fetch_via_yahoo(client)
             return
         except Exception as e:
             logger.warning(f"Source yahoo failed: {e}")
 
-        # 3. Groq estimate — last resort
+        # 4. Groq estimate — last resort
         try:
             await _fetch_via_groq(client)
             return
