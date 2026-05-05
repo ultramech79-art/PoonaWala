@@ -224,7 +224,7 @@ export function Processing() {
         {/* Trust line */}
         <div className="mt-10 flex items-center gap-2 text-xs text-white/20">
           <Lock className="w-3.5 h-3.5" />
-          <span>Secure · Encrypted · India-resident servers</span>
+          <span>{t('consent_secure')}</span>
         </div>
       </div>
     </div>

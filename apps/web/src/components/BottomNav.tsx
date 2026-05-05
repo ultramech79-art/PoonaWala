@@ -1,18 +1,20 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Home, ScanLine, Bell, User, Crosshair } from 'lucide-react'
 import { clsx } from 'clsx'
-
-const NAV_ITEMS = [
-  { icon: Home, label: 'Home', path: '/dashboard' },
-  { icon: Crosshair, label: 'Assess', path: '/setup' },
-  { icon: ScanLine, label: 'Scan', path: '/capture' },
-  { icon: Bell, label: 'Alerts', path: '#' },
-  { icon: User, label: 'Profile', path: '#' },
-]
+import { useTranslation } from 'react-i18next'
 
 export function BottomNav() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const { t } = useTranslation()
+
+  const NAV_ITEMS = [
+    { icon: Home, label: t('nav_home'), path: '/dashboard' },
+    { icon: Crosshair, label: t('nav_assess'), path: '/setup' },
+    { icon: ScanLine, label: t('nav_scan'), path: '/capture' },
+    { icon: Bell, label: t('nav_alerts'), path: '#' },
+    { icon: User, label: t('nav_profile'), path: '#' },
+  ]
 
   return (
     <nav className="bottom-nav">

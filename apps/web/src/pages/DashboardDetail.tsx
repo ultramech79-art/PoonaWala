@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { apiBase } from '../lib/api';
 export function DashboardDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [reason, setReason] = useState('');
@@ -44,7 +46,7 @@ export function DashboardDetail() {
   );
   if (!data || !data.assessment) return (
     <div className="flex h-screen items-center justify-center text-white bg-zinc-950">
-      Session not found or not finalized.
+      {t('detail_not_found')}
     </div>
   );
 
@@ -54,7 +56,7 @@ export function DashboardDetail() {
     <div className="min-h-screen bg-zinc-950 p-6 text-white overflow-y-auto">
       <div className="max-w-5xl mx-auto space-y-6">
         <Button variant="ghost" className="text-zinc-400 hover:text-white mb-4" onClick={() => navigate('/dashboard')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Sessions
+          <ArrowLeft className="mr-2 h-4 w-4" /> {t('detail_back')}
         </Button>
 
         <div className="grid md:grid-cols-3 gap-6">
@@ -62,7 +64,7 @@ export function DashboardDetail() {
             <Card className="bg-zinc-900 border-zinc-800">
               <CardHeader>
                 <div className="flex justify-between items-center">
-                  <CardTitle>Session Review</CardTitle>
+                  <CardTitle>{t('detail_session_review')}</CardTitle>
                   <Badge variant="outline" className="border-brand-400/50 text-brand-400">{assessment.routing}</Badge>
                 </div>
                 <CardDescription className="text-zinc-400">
@@ -72,25 +74,25 @@ export function DashboardDetail() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="space-y-1">
-                    <span className="text-zinc-500">Purity</span>
+                    <span className="text-zinc-500">{t('result_purity')}</span>
                     <p className="font-medium">{assessment.purity.point_estimate_karat}K</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-zinc-500">Estimated Value</span>
+                    <span className="text-zinc-500">{t('detail_estimated_value')}</span>
                     <p className="font-medium text-emerald-400">₹{assessment.value_inr.band_low.toLocaleString()}</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-zinc-500">Confidence</span>
+                    <span className="text-zinc-500">{t('result_confidence')}</span>
                     <p className="font-medium">{(assessment.confidence.score * 100).toFixed(1)}%</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-zinc-500">Fraud Score</span>
+                    <span className="text-zinc-500">{t('detail_fraud_score')}</span>
                     <p className="font-medium text-rose-400">{(assessment.fraud_signals.score * 100).toFixed(1)}%</p>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-zinc-800">
-                  <h4 className="text-sm font-medium text-zinc-300 mb-2">GoldEye AI Reasoning</h4>
+                  <h4 className="text-sm font-medium text-zinc-300 mb-2">{t('detail_ai_reasoning')}</h4>
                   <p className="text-sm text-zinc-400 bg-black/20 p-3 rounded-md italic">
                     "{assessment.reasoning_text.text}"
                   </p>
@@ -98,7 +100,7 @@ export function DashboardDetail() {
 
                 {assessment.xai?.gradcam_url && (
                   <div className="pt-4 border-t border-zinc-800">
-                    <h4 className="text-sm font-medium text-zinc-300 mb-2">Grad-CAM Heatmap</h4>
+                    <h4 className="text-sm font-medium text-zinc-300 mb-2">{t('detail_gradcam')}</h4>
                     <img src={assessment.xai.gradcam_url} alt="Grad-CAM" className="rounded-md max-w-full h-auto max-h-64 object-contain bg-black/50" />
                   </div>
                 )}
@@ -107,7 +109,7 @@ export function DashboardDetail() {
 
             <Card className="bg-zinc-900 border-zinc-800">
               <CardHeader>
-                <CardTitle>SHAP Feature Attributions</CardTitle>
+                <CardTitle>{t('detail_shap')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -127,14 +129,14 @@ export function DashboardDetail() {
           <div className="space-y-6">
             <Card className="bg-zinc-900 border-zinc-800">
               <CardHeader>
-                <CardTitle>Risk Officer Action</CardTitle>
+                <CardTitle>{t('detail_risk_action')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Decision Notes / Reason</label>
+                  <label className="text-sm text-zinc-400">{t('detail_notes_label')}</label>
                   <Textarea
                     className="bg-black/20 border-zinc-800 focus:border-brand-500 text-white min-h-[100px]"
-                    placeholder="Enter notes for field agent or audit log..."
+                    placeholder={t('detail_notes_placeholder')}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                   />
@@ -145,7 +147,7 @@ export function DashboardDetail() {
                     disabled={actionLoading}
                     onClick={() => handleAction('approve_dispatch')}
                   >
-                    <CheckCircle className="mr-2 h-4 w-4" /> Approve & Dispatch Agent
+                    <CheckCircle className="mr-2 h-4 w-4" /> {t('detail_approve')}
                   </Button>
                   <Button
                     variant="outline"
@@ -153,7 +155,7 @@ export function DashboardDetail() {
                     disabled={actionLoading}
                     onClick={() => handleAction('request_recapture')}
                   >
-                    <AlertTriangle className="mr-2 h-4 w-4" /> Request Recapture
+                    <AlertTriangle className="mr-2 h-4 w-4" /> {t('detail_recapture')}
                   </Button>
                   <Button
                     variant="outline"
@@ -161,7 +163,7 @@ export function DashboardDetail() {
                     disabled={actionLoading}
                     onClick={() => handleAction('decline')}
                   >
-                    <XCircle className="mr-2 h-4 w-4" /> Decline Loan
+                    <XCircle className="mr-2 h-4 w-4" /> {t('detail_decline')}
                   </Button>
                 </div>
               </CardContent>
@@ -171,7 +173,7 @@ export function DashboardDetail() {
               <Card className="bg-rose-950/20 border-rose-900/50">
                 <CardHeader>
                   <CardTitle className="text-rose-500 text-sm flex items-center">
-                    <AlertTriangle className="mr-2 h-4 w-4" /> Fraud Flags
+                    <AlertTriangle className="mr-2 h-4 w-4" /> {t('detail_fraud_flags')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import { apiBase } from '../lib/api';
 
 export function FieldAgent() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [sessionId, setSessionId] = useState('');
   const [step, setStep] = useState(1); // 1: Lookup, 2: Ground Truth Form
   
@@ -58,9 +60,9 @@ export function FieldAgent() {
             <div className="mx-auto w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4">
               <Banknote className="h-8 w-8 text-emerald-500" />
             </div>
-            <CardTitle className="text-2xl text-amber-500">Loan Disbursed</CardTitle>
+            <CardTitle className="text-2xl text-amber-500">{t('agent_disbursed_title')}</CardTitle>
             <CardDescription className="text-zinc-400">
-              Ground truth recorded. The active learning pipeline thanks you.
+              {t('agent_disbursed_desc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -69,7 +71,7 @@ export function FieldAgent() {
               setSessionId('');
               setSuccess(false);
             }}>
-              Start New Dispatch
+              {t('agent_new_dispatch')}
             </Button>
           </CardContent>
         </Card>
@@ -81,9 +83,9 @@ export function FieldAgent() {
     <div className="flex min-h-screen items-center justify-center p-4 bg-zinc-950 text-white">
       <Card className="w-full max-w-md bg-zinc-900 border-zinc-800">
         <CardHeader>
-          <CardTitle className="text-2xl text-amber-500">Field Agent Flow</CardTitle>
+          <CardTitle className="text-2xl text-amber-500">{t('agent_title')}</CardTitle>
           <CardDescription className="text-zinc-400">
-            {step === 1 ? 'Enter the dispatch session ID.' : 'Record ground truth values at the customer location.'}
+            {step === 1 ? t('agent_step1_desc') : t('agent_step2_desc')}
           </CardDescription>
         </CardHeader>
         
@@ -91,12 +93,12 @@ export function FieldAgent() {
           <form onSubmit={handleLookup}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="sessionId" className="text-zinc-300">Session ID</Label>
-                <Input 
-                  id="sessionId" 
-                  value={sessionId} 
-                  onChange={e => setSessionId(e.target.value)} 
-                  placeholder="e.g. 1234-abcd..." 
+                <Label htmlFor="sessionId" className="text-zinc-300">{t('agent_session_id')}</Label>
+                <Input
+                  id="sessionId"
+                  value={sessionId}
+                  onChange={e => setSessionId(e.target.value)}
+                  placeholder={t('agent_session_placeholder')} 
                   className="bg-black/50 border-zinc-700 text-white"
                   required 
                 />
@@ -104,7 +106,7 @@ export function FieldAgent() {
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-black">
-                Lookup Dispatch <ArrowRight className="ml-2 h-4 w-4" />
+                {t('agent_lookup')} <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </CardFooter>
           </form>
@@ -114,7 +116,7 @@ export function FieldAgent() {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label className="text-zinc-300 flex items-center"><Target className="mr-2 h-4 w-4 text-emerald-500"/> XRF Machine Karat</Label>
+                <Label className="text-zinc-300 flex items-center"><Target className="mr-2 h-4 w-4 text-emerald-500"/> {t('agent_xrf')}</Label>
                 <Input 
                   type="number" step="0.1" required 
                   value={xrfKarat} onChange={e => setXrfKarat(e.target.value)} 
@@ -123,7 +125,7 @@ export function FieldAgent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-zinc-300 flex items-center"><Scale className="mr-2 h-4 w-4 text-emerald-500"/> Verified Scale Weight (g)</Label>
+                <Label className="text-zinc-300 flex items-center"><Scale className="mr-2 h-4 w-4 text-emerald-500"/> {t('agent_weight_label')}</Label>
                 <Input 
                   type="number" step="0.01" required 
                   value={scaleWeight} onChange={e => setScaleWeight(e.target.value)} 
@@ -132,7 +134,7 @@ export function FieldAgent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-zinc-300 flex items-center"><Banknote className="mr-2 h-4 w-4 text-emerald-500"/> Final Loan Disbursed (₹)</Label>
+                <Label className="text-zinc-300 flex items-center"><Banknote className="mr-2 h-4 w-4 text-emerald-500"/> {t('agent_loan')}</Label>
                 <Input 
                   type="number" required 
                   value={finalLoan} onChange={e => setFinalLoan(e.target.value)} 
@@ -141,18 +143,18 @@ export function FieldAgent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-zinc-300">Agent Notes</Label>
-                <Textarea 
-                  value={notes} onChange={e => setNotes(e.target.value)} 
+                <Label className="text-zinc-300">{t('agent_notes')}</Label>
+                <Textarea
+                  value={notes} onChange={e => setNotes(e.target.value)}
                   className="bg-black/50 border-zinc-700 text-white"
-                  placeholder="Optional notes on customer behavior or item condition..." 
+                  placeholder={t('agent_notes_placeholder')}
                 />
               </div>
             </CardContent>
             <CardFooter>
               <Button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                Submit & Disburse
+                {t('agent_submit')}
               </Button>
             </CardFooter>
           </form>
