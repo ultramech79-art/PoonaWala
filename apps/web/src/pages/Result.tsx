@@ -310,6 +310,20 @@ export function Result() {
             {result.xai.shap_top_features.map(f => (
               <SHAPBar key={f.feature} feature={f.feature} contribution={f.contribution} />
             ))}
+            {result.xai.gradcam_url && (
+              <div className="mt-4 pt-4 border-t border-stone-100">
+                <p className="label mb-2 flex items-center justify-between">
+                  <span>AI Focus Heatmap (Grad-CAM)</span>
+                </p>
+                <div className="relative w-full rounded-xl overflow-hidden border border-stone-100 bg-stone-900 aspect-video">
+                  <img src={result.xai.gradcam_url} className="w-full h-full object-cover opacity-90" alt="AI Heatmap" />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-rose-500/30 via-amber-500/20 to-transparent mix-blend-color pointer-events-none" />
+                </div>
+                <p className="text-[10px] text-stone-400 mt-2 leading-snug">
+                  Highlighted regions indicate visual features driving the AI confidence score.
+                </p>
+              </div>
+            )}
             <div className="mt-4 pt-3 border-t border-stone-100">
               <p className="text-[10px] text-stone-400 font-mono break-all">
                 trace: {result.audit.trace_id}

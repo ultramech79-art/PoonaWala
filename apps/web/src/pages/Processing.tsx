@@ -58,7 +58,8 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
     ]
   }
 
-  // Happy path: weight each signal by what we actually captured
+  // Happy path: weight each signal by what we actually captured with some noise to look realistic
+  const jitter = () => (Math.random() * 0.04) - 0.02
   const huidContrib  = hasHuid ? 0.31 : has('macro') ? 0.18 : 0.08
   const audioContrib = has('audio') ? 0.15 : 0.02
   const weightContrib = hasWeight ? 0.20 : has('video') ? 0.10 : 0.04
@@ -67,12 +68,12 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
   const platedContrib = karatEstimate >= 22 ? 0.22 : karatEstimate >= 18 ? 0.14 : 0.06
 
   return [
-    { feature: 'huid_verified',      contribution: +parseFloat(huidContrib.toFixed(2)) },
-    { feature: 'plated_solid_score', contribution: +parseFloat(platedContrib.toFixed(2)) },
-    { feature: 'weight_consistency', contribution: +parseFloat(weightContrib.toFixed(2)) },
-    { feature: 'audio_solid_prob',   contribution: +parseFloat(audioContrib.toFixed(2)) },
-    { feature: 'hallmark_quality',   contribution: +parseFloat(hallmarkContrib.toFixed(2)) },
-  ]
+    { feature: 'huid_verified',      contribution: +(huidContrib + jitter()).toFixed(4) },
+    { feature: 'plated_solid_score', contribution: +(platedContrib + jitter()).toFixed(4) },
+    { feature: 'weight_consistency', contribution: +(weightContrib + jitter()).toFixed(4) },
+    { feature: 'audio_solid_prob',   contribution: +(audioContrib + jitter()).toFixed(4) },
+    { feature: 'hallmark_quality',   contribution: +(hallmarkContrib + jitter()).toFixed(4) },
+  ].sort((a, b) => b.contribution - a.contribution)
 }
 
 function buildMockResult(sessionId: string, state: SessionState, isFailCase = false): AssessmentResult {
@@ -131,7 +132,7 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
         : `${state.huidCode ? `BIS HUID ${state.huidCode} verified. ` : 'Visual hallmark detected. '}${karatEstimate}K gold, ${weightG}g net weight. Market value computed at ₹${pricePerGram24K.toLocaleString('en-IN')}/g (24K IBJA). No fraud signals. ${state.captures.audio ? 'Acoustic resonance: solid gold.' : ''}`,
     },
     xai: {
-      gradcam_url: null,
+      gradcam_url: state.captures['macro']?.dataUrl || state.captures['top']?.dataUrl || null,
       shap_top_features: buildShapFeatures(state, karatEstimate, isFail),
       counterfactual: isFail
         ? `If the hallmark were clearly readable, confidence would increase from 38% to ~${state.huidCode ? '72' : '62'}%.`
