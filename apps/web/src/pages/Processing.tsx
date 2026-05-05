@@ -130,17 +130,17 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
   }
 }
 
-const STEPS = [
-  { key: 'processing_step1', label: 'Detecting item & edges' },
-  { key: 'processing_step2', label: 'Estimating purity' },
-  { key: 'processing_step3', label: 'Analysing signals' },
-  { key: 'processing_step4', label: 'Calculating weight' },
-  { key: 'processing_step5', label: 'Finalising report' },
-]
-
 export function Processing() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+
+  const STEPS = [
+    { key: 'processing_step1', label: t('processing_step1_label') },
+    { key: 'processing_step2', label: t('processing_step2_label') },
+    { key: 'processing_step3', label: t('processing_step3_label') },
+    { key: 'processing_step4', label: t('processing_step4_label') },
+    { key: 'processing_step5', label: t('processing_step5_label') },
+  ]
   const { state, setResult } = useSessionStore()
   const [activeStep, setActiveStep] = useState(0)
   const [done, setDone] = useState(false)
@@ -191,7 +191,7 @@ export function Processing() {
         </div>
 
         <h1 className="font-display font-bold text-2xl text-white mb-2">
-          {done ? 'Analysis complete!' : 'Analysing your gold'}
+          {done ? t('processing_complete') : t('processing_analysing')}
         </h1>
         <p className="text-sm text-white/40 mb-10">{t('processing_note')}</p>
 

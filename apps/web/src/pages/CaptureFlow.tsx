@@ -20,62 +20,6 @@ interface Step {
   optional?: boolean
 }
 
-const STEPS: Step[] = [
-  {
-    type: 'top',
-    titleKey: 'step_top_title',
-    hintKey: 'step_top_hint',
-    voiceGuide: 'Step 1. Place your gold jewellery flat on a surface. Point your camera straight down from the top and tap Capture.',
-    demoUrl: '/assets/demo/top.jpg',
-  },
-  {
-    type: '45deg',
-    titleKey: 'step_45_title',
-    hintKey: 'step_45_hint',
-    voiceGuide: 'Step 2. Tilt your camera to a 45 degree angle so we can see the depth and thickness. Tap Capture when ready.',
-    demoUrl: '/assets/demo/45deg.jpg',
-  },
-  {
-    type: 'side',
-    titleKey: 'step_side_title',
-    hintKey: 'step_side_hint',
-    voiceGuide: 'Step 3. Hold the gold piece upright and shoot from the side. Tap Capture.',
-    demoUrl: '/assets/demo/side.jpg',
-  },
-  {
-    type: 'macro',
-    titleKey: 'step_macro_title',
-    hintKey: 'step_macro_hint',
-    voiceGuide: 'Step 4. Get close to the BIS hallmark stamp. Make sure it is sharp and well lit. Tap Capture.',
-    demoUrl: '/assets/demo/macro.jpg',
-  },
-  {
-    type: 'video',
-    titleKey: 'step_video_title',
-    hintKey: 'step_video_hint',
-    voiceGuide: 'Step 5. Hold record and slowly rotate the gold piece for about 3 seconds.',
-    isVideo: true,
-    demoUrl: '/assets/demo/video.mp4',
-  },
-  {
-    type: 'audio',
-    titleKey: 'step_audio_title',
-    hintKey: 'step_audio_hint',
-    voiceGuide: 'Step 6. Tap and hold record, then gently tap the gold with your fingernail.',
-    isAudio: true,
-    optional: true,
-    demoUrl: '/assets/demo/audio.mp3',
-  },
-  {
-    type: 'selfie',
-    titleKey: 'step_selfie_title',
-    hintKey: 'step_selfie_hint',
-    voiceGuide: 'Last step. Take a selfie while holding the gold jewellery clearly in the same frame.',
-    facingMode: 'user',
-    demoUrl: '/assets/demo/selfie.jpg',
-  },
-]
-
 type EvalState = 'idle' | 'evaluating' | 'approved' | 'rejected'
 
 interface StepEval {
@@ -93,14 +37,71 @@ function speak(text: string) {
   window.speechSynthesis.speak(u)
 }
 
-const STEP_LABELS = [
-  'Top View', '45° View', 'Side View', 'Hallmark', 'Video', 'Audio', 'Selfie'
-]
-
 export function CaptureFlow() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { addCapture, state } = useSessionStore()
+
+  const STEPS: Step[] = [
+    {
+      type: 'top',
+      titleKey: 'step_top_title',
+      hintKey: 'step_top_hint',
+      voiceGuide: t('voice_top'),
+      demoUrl: '/assets/demo/top.jpg',
+    },
+    {
+      type: '45deg',
+      titleKey: 'step_45_title',
+      hintKey: 'step_45_hint',
+      voiceGuide: t('voice_45deg'),
+      demoUrl: '/assets/demo/45deg.jpg',
+    },
+    {
+      type: 'side',
+      titleKey: 'step_side_title',
+      hintKey: 'step_side_hint',
+      voiceGuide: t('voice_side'),
+      demoUrl: '/assets/demo/side.jpg',
+    },
+    {
+      type: 'macro',
+      titleKey: 'step_macro_title',
+      hintKey: 'step_macro_hint',
+      voiceGuide: t('voice_macro'),
+      demoUrl: '/assets/demo/macro.jpg',
+    },
+    {
+      type: 'video',
+      titleKey: 'step_video_title',
+      hintKey: 'step_video_hint',
+      voiceGuide: t('voice_video'),
+      isVideo: true,
+      demoUrl: '/assets/demo/video.mp4',
+    },
+    {
+      type: 'audio',
+      titleKey: 'step_audio_title',
+      hintKey: 'step_audio_hint',
+      voiceGuide: t('voice_audio'),
+      isAudio: true,
+      optional: true,
+      demoUrl: '/assets/demo/audio.mp3',
+    },
+    {
+      type: 'selfie',
+      titleKey: 'step_selfie_title',
+      hintKey: 'step_selfie_hint',
+      voiceGuide: t('voice_selfie'),
+      facingMode: 'user',
+      demoUrl: '/assets/demo/selfie.jpg',
+    },
+  ]
+
+  const STEP_LABELS = [
+    t('step_label_top'), t('step_label_45'), t('step_label_side'),
+    t('step_label_hallmark'), t('step_label_video'), t('step_label_audio'), t('step_label_selfie'),
+  ]
 
   const [stepIdx, setStepIdx] = useState(0)
   const [captured, setCaptured] = useState<Set<number>>(new Set())
@@ -125,7 +126,7 @@ export function CaptureFlow() {
     setCaptured(prev => new Set([...prev, stepIdx]))
 
     if (step.isAudio) {
-      const msg = 'Audio recorded. Great job!'
+      const msg = t('speak_audio_done')
       setEvals(prev => ({
         ...prev,
         [stepIdx]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.9, feedback: msg, issues: [], detected: {} } },
@@ -134,7 +135,7 @@ export function CaptureFlow() {
       return
     }
 
-    speak('Got it. Analysing your image now, please wait.')
+    speak(t('speak_analysing'))
     setEvals(prev => ({ ...prev, [stepIdx]: { state: 'evaluating', dataUrl } }))
 
     try {
@@ -157,7 +158,7 @@ export function CaptureFlow() {
       speak(result.feedback)
     } catch (err) {
       console.error('[CaptureFlow] Final evaluation attempt failed:', err)
-      const fallback = 'Image accepted. You may continue.'
+      const fallback = t('speak_image_accepted')
       setEvals(prev => ({
         ...prev,
         [stepIdx]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.7, feedback: fallback, issues: [], detected: {} } },
@@ -167,7 +168,7 @@ export function CaptureFlow() {
   }, [step, stepIdx, addCapture])
 
   const handleRetake = () => {
-    speak('No problem. Let\'s try again. ' + step.voiceGuide)
+    speak(t('speak_retake') + ' ' + step.voiceGuide)
     setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle' } }))
     setCaptured(prev => { const s = new Set(prev); s.delete(stepIdx); return s })
     setCameraKey(k => k + 1)
@@ -176,7 +177,7 @@ export function CaptureFlow() {
   const handleEnterDemo = useCallback(async () => {
     if (!step.demoUrl) return
 
-    speak('Using example demo. Analysing now.')
+    speak(t('speak_demo'))
     setShowDemo(false)
 
     try {
@@ -198,10 +199,10 @@ export function CaptureFlow() {
 
   const next = () => {
     if (stepIdx < STEPS.length - 1) setStepIdx(i => i + 1)
-    else { speak('All done! Submitting your gold for assessment now.'); navigate('/weight') }
+    else { speak(t('speak_all_done')); navigate('/weight') }
   }
 
-  const skip = () => { if (step.optional) { speak('Skipping this step.'); next() } }
+  const skip = () => { if (step.optional) { speak(t('speak_skip')); next() } }
 
   const canProceed = evalState === 'approved' || step.optional
 

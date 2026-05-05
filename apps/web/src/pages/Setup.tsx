@@ -4,18 +4,18 @@ import { useTranslation } from 'react-i18next'
 import { ChevronRight, ArrowRight, Gem, Circle, Sparkles, RotateCcw, Link2, Package } from 'lucide-react'
 import { clsx } from 'clsx'
 
-const ITEM_TYPES = [
-  { id: 'necklace', icon: Gem,       label: 'Necklace' },
-  { id: 'ring',     icon: Circle,    label: 'Ring' },
-  { id: 'earrings', icon: Sparkles,  label: 'Earrings' },
-  { id: 'bangles',  icon: RotateCcw, label: 'Bangles' },
-  { id: 'chain',    icon: Link2,     label: 'Chain' },
-  { id: 'other',    icon: Package,   label: 'Other' },
-]
-
 export function Setup() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+
+  const ITEM_TYPES = [
+    { id: 'necklace', icon: Gem,       label: t('item_necklace') },
+    { id: 'ring',     icon: Circle,    label: t('item_ring') },
+    { id: 'earrings', icon: Sparkles,  label: t('item_earrings') },
+    { id: 'bangles',  icon: RotateCcw, label: t('item_bangles') },
+    { id: 'chain',    icon: Link2,     label: t('item_chain') },
+    { id: 'other',    icon: Package,   label: t('item_other') },
+  ]
   const [selected, setSelected] = useState<string | null>(null)
 
   return (

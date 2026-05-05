@@ -109,10 +109,10 @@ export function OTP() {
   }
 
   const STEP_LABELS: Record<Step, string> = {
-    name: 'Your Name',
-    phone: 'Mobile Number',
-    otp: 'OTP Verification',
-    verified: 'Verified',
+    name: t('otp_label_name'),
+    phone: t('otp_label_phone'),
+    otp: t('otp_label_otp'),
+    verified: t('otp_label_verified'),
   }
 
   const backAction = () => {
@@ -168,16 +168,16 @@ export function OTP() {
             }
           </div>
           <h1 className="font-display font-bold text-2xl text-stone-900 text-center mb-1.5">
-            {step === 'name' && "What should we call you?"}
-            {step === 'phone' && "Enter your number"}
-            {step === 'otp' && 'Verify OTP'}
-            {step === 'verified' && 'Verified!'}
+            {step === 'name' && t('otp_heading_name')}
+            {step === 'phone' && t('otp_heading_phone')}
+            {step === 'otp' && t('otp_heading_otp')}
+            {step === 'verified' && t('otp_heading_verified')}
           </h1>
           <p className="text-sm text-stone-500 text-center">
-            {step === 'name' && "We'll personalise your experience"}
-            {step === 'phone' && "You will receive an OTP (for hackathon judges: implemented and working)"}
-            {step === 'otp' && `Enter the 6-digit code sent to +91 ${phone}`}
-            {step === 'verified' && `+91 ${phone} confirmed`}
+            {step === 'name' && t('otp_sub_name')}
+            {step === 'phone' && t('otp_sub_phone')}
+            {step === 'otp' && t('otp_sub_otp', { phone })}
+            {step === 'verified' && t('otp_sub_verified', { phone })}
           </p>
         </div>
 
@@ -193,7 +193,7 @@ export function OTP() {
         {step === 'name' && (
           <div className="space-y-4">
             <div>
-              <label className="label mb-2 block">Your Name</label>
+              <label className="label mb-2 block">{t('otp_name_field_label')}</label>
               <input
                 id="name-input"
                 type="text"
@@ -220,7 +220,7 @@ export function OTP() {
         {step === 'phone' && (
           <div className="space-y-4">
             <div>
-              <label className="label mb-2 block">Mobile Number</label>
+              <label className="label mb-2 block">{t('otp_label_phone')}</label>
               <div className="flex gap-2">
                 <div className="flex items-center justify-center px-4 rounded-2xl bg-stone-100 border border-stone-200 text-stone-600 text-sm font-mono font-medium">
                   +91
@@ -247,7 +247,7 @@ export function OTP() {
               {sending ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  Sending OTP…
+                  {t('otp_sending')}
                 </span>
               ) : (
                 <>{t('otp_send')}<ArrowRight className="w-5 h-5" /></>
@@ -305,7 +305,7 @@ export function OTP() {
                 disabled={countdown > 0 || sending}
                 className="btn-secondary w-full text-sm"
               >
-                {sending ? 'Sending…' : countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+                {sending ? t('otp_sending') : countdown > 0 ? t('otp_resend_in', { count: countdown }) : t('otp_resend')}
               </button>
               <button
                 onClick={() => { setStep('phone'); setOtp(['', '', '', '', '', '']); setError('') }}

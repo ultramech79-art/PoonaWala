@@ -30,11 +30,12 @@ function AnimatedNumber({ target, prefix = '', suffix = '', duration = 1200 }: {
 
 // ── Confidence ring ────────────────────────────────────────────
 function ConfidenceRing({ score }: { score: number }) {
+  const { t } = useTranslation()
   const r = 42, circ = 2 * Math.PI * r
   const [pct, setPct] = useState(0)
   useEffect(() => { setTimeout(() => setPct(score), 300) }, [score])
   const color = score >= 0.75 ? '#10b981' : score >= 0.55 ? '#f59e0b' : '#f97316'
-  const label = score >= 0.75 ? 'High Confidence' : score >= 0.55 ? 'Medium' : 'Low'
+  const label = score >= 0.75 ? t('confidence_high') : score >= 0.55 ? t('confidence_medium') : t('confidence_low')
 
   return (
     <div className="flex flex-col items-center">
@@ -66,16 +67,17 @@ function ConfidenceRing({ score }: { score: number }) {
 
 // ── SHAP bar ───────────────────────────────────────────────────
 function SHAPBar({ feature, contribution }: { feature: string; contribution: number }) {
+  const { t } = useTranslation()
   const pct = Math.abs(contribution) * 200
   const pos = contribution > 0
   const labels: Record<string, string> = {
-    huid_verified: 'BIS Hallmark',
-    plated_solid_score: 'Solid/Plated',
-    weight_consistency: 'Weight match',
-    audio_solid_prob: 'Acoustic test',
-    hallmark_quality: 'Hallmark quality',
-    plated_probability: 'Plating risk',
-    vlm_confidence: 'Visual AI',
+    huid_verified: t('signal_huid'),
+    plated_solid_score: t('signal_plated_solid'),
+    weight_consistency: t('signal_weight'),
+    audio_solid_prob: t('signal_audio'),
+    hallmark_quality: t('signal_hallmark'),
+    plated_probability: t('signal_plated_prob'),
+    vlm_confidence: t('signal_vlm'),
   }
   return (
     <div className="flex items-center gap-3 py-1.5">
@@ -95,49 +97,48 @@ function SHAPBar({ feature, contribution }: { feature: string; contribution: num
   )
 }
 
-// ── Routing configs ────────────────────────────────────────────
-const ROUTING = {
-  INSTANT: {
-    label: 'Instant Pre-Approval',
-    icon: Zap,
-    colorClass: 'text-emerald-700',
-    bgClass: 'bg-emerald-50',
-    borderClass: 'border-emerald-200',
-    action: 'Proceed to Apply',
-    desc: 'Your jewelry meets all criteria for instant approval. An agent will visit within 2 hours.',
-  },
-  AGENT: {
-    label: 'Agent Visit Required',
-    icon: UserCheck,
-    colorClass: 'text-brand-700',
-    bgClass: 'bg-brand-50',
-    borderClass: 'border-brand-200',
-    action: 'Schedule Agent Visit',
-    desc: 'A physical XRF assay is required. Our agent will visit at your convenience.',
-  },
-  RECAPTURE: {
-    label: 'Better Photo Needed',
-    icon: Camera,
-    colorClass: 'text-amber-700',
-    bgClass: 'bg-amber-50',
-    borderClass: 'border-amber-200',
-    action: 'Retake Photos',
-    desc: 'Some captures were unclear. Better photos will improve our confidence.',
-  },
-  REJECT: {
-    label: 'Unable to Pre-Qualify',
-    icon: AlertTriangle,
-    colorClass: 'text-orange-700',
-    bgClass: 'bg-orange-50',
-    borderClass: 'border-orange-200',
-    action: 'Visit Nearest Branch',
-    desc: "We couldn't build enough confidence for pre-qualification. In-branch verification is recommended.",
-  },
-}
-
 export function Result() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+
+  const ROUTING = {
+    INSTANT: {
+      label: t('routing_instant_label'),
+      icon: Zap,
+      colorClass: 'text-emerald-700',
+      bgClass: 'bg-emerald-50',
+      borderClass: 'border-emerald-200',
+      action: t('routing_instant_action'),
+      desc: t('routing_instant_desc'),
+    },
+    AGENT: {
+      label: t('routing_agent_label'),
+      icon: UserCheck,
+      colorClass: 'text-brand-700',
+      bgClass: 'bg-brand-50',
+      borderClass: 'border-brand-200',
+      action: t('routing_agent_action'),
+      desc: t('routing_agent_desc'),
+    },
+    RECAPTURE: {
+      label: t('routing_recapture_label'),
+      icon: Camera,
+      colorClass: 'text-amber-700',
+      bgClass: 'bg-amber-50',
+      borderClass: 'border-amber-200',
+      action: t('routing_recapture_action'),
+      desc: t('routing_recapture_desc'),
+    },
+    REJECT: {
+      label: t('routing_reject_label'),
+      icon: AlertTriangle,
+      colorClass: 'text-orange-700',
+      bgClass: 'bg-orange-50',
+      borderClass: 'border-orange-200',
+      action: t('routing_reject_action'),
+      desc: t('routing_reject_desc'),
+    },
+  }
   const { state, reset } = useSessionStore()
   const [showXAI, setShowXAI] = useState(false)
 
@@ -156,7 +157,7 @@ export function Result() {
         <button id="result-home" onClick={() => { reset(); navigate('/') }} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
-        <span className="font-display font-semibold text-sm text-stone-700">Assessment Result</span>
+        <span className="font-display font-semibold text-sm text-stone-700">{t('result_heading')}</span>
         <button
           id="result-share"
           onClick={() => navigator.share?.({ title: 'Poonawalla Result', text: 'My gold loan pre-qualification' })}
@@ -205,7 +206,7 @@ export function Result() {
                 {result.weight.band_low_g.toFixed(1)}g – {result.weight.band_high_g.toFixed(1)}g
               </p>
               <p className="text-[10px] text-stone-400 mt-1">
-                {result.weight.method === 'hybrid' ? 'Scale + AI' : 'AI estimate'}
+                {result.weight.method === 'hybrid' ? t('result_weight_hybrid') : t('result_weight_ai')}
               </p>
             </div>
           </div>

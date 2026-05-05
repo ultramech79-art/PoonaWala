@@ -24,9 +24,9 @@ export function WeightEntry() {
   }
 
   const ACCURACY_ROWS = [
-    { label: 'With scale weight', band: '±8%', pct: '85%', color: 'bg-emerald-500' },
-    { label: 'Video estimate', band: '±22%', pct: '55%', color: 'bg-gold-400' },
-    { label: 'No weight data', band: '±35%', pct: '30%', color: 'bg-orange-400' },
+    { label: t('weight_accuracy_scale'), band: '±8%', pct: '85%', color: 'bg-emerald-500' },
+    { label: t('weight_accuracy_video'), band: '±22%', pct: '55%', color: 'bg-gold-400' },
+    { label: t('weight_accuracy_none'), band: '±35%', pct: '30%', color: 'bg-orange-400' },
   ]
 
   return (

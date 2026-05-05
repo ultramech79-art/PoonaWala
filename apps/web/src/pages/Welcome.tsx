@@ -4,12 +4,6 @@ import { Zap, Shield, TrendingUp, ChevronRight, Eye, TrendingDown } from 'lucide
 import { useMetalPrices } from '../hooks/useGoldPrice'
 
 
-const FEATURES = [
-  { icon: Zap, label: 'Instant Assessment' },
-  { icon: Shield, label: 'Secure & Private' },
-  { icon: TrendingUp, label: 'Trusted by NBFCs' },
-]
-
 function MarketTicker() {
   const { data, loading } = useMetalPrices()
 
@@ -44,6 +38,12 @@ function MarketTicker() {
 export function Welcome() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+
+  const FEATURES = [
+    { icon: Zap, label: t('feature_instant') },
+    { icon: Shield, label: t('feature_secure') },
+    { icon: TrendingUp, label: t('feature_trusted') },
+  ]
 
   return (
     <div className="page animate-fade-in">

@@ -8,22 +8,22 @@ import {
   CheckCircle, ChevronRight, ShieldCheck
 } from 'lucide-react'
 
-const HOW_IT_WORKS = [
-  { icon: Camera, title: 'Capture', desc: 'Take photos, video & audio' },
-  { icon: ScanLine, title: 'Hallmark Scan', desc: 'Scan or enter hallmark' },
-  { icon: Cpu, title: 'AI Analysis', desc: 'Our AI analyses your gold' },
-  { icon: Tag, title: 'Get Offer', desc: 'Receive your loan offer' },
-]
-
-const CONSENT_POINTS = [
-  'We will use your data only for gold loan assessment',
-  'Your data is encrypted and stored securely',
-  'We do not share your data without your consent',
-]
-
 export function Consent() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+
+  const HOW_IT_WORKS = [
+    { icon: Camera, title: t('consent_step1_title'), desc: t('consent_step1_desc') },
+    { icon: ScanLine, title: t('consent_step2_title'), desc: t('consent_step2_desc') },
+    { icon: Cpu, title: t('consent_step3_title'), desc: t('consent_step3_desc') },
+    { icon: Tag, title: t('consent_step4_title'), desc: t('consent_step4_desc') },
+  ]
+
+  const CONSENT_POINTS = [
+    t('consent_privacy1'),
+    t('consent_privacy2'),
+    t('consent_privacy3'),
+  ]
   const { setConsent, initSession, setSessionId } = useSessionStore()
   const [loading, setLoading] = useState(false)
   const [agreed, setAgreed] = useState(false)
