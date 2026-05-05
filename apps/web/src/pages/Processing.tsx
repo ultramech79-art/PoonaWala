@@ -81,54 +81,58 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
   const weightG = state.weightG ?? 7.9
   const stoneExclusionG = 0.4
 
-  // Realistic Indian jewelry purity distribution: 22K most common, 18K for rings
-  // If session has a HUID code, use 22K (most hallmarked jewelry); otherwise ±
-  const karatEstimate = isFail ? 16 : (state.scannedKarat || (state.huidCode ? 22 : (Math.random() < 0.6 ? 22 : 18)))
+  // Priority: 
+  // 1. User manual selection / AI scan (state.scannedKarat)
+  // 2. Hallmark presence (default to 22K if HUID exists)
+  // 3. Realistic random distribution (60% 22K, 40% 18K)
+  // 4. Failure fallback (16K/low purity)
+  const karatEstimate = isFail 
+    ? 16 
+    : (state.scannedKarat || (state.huidCode ? 22 : (Math.random() < 0.6 ? 22 : 18)))
+  
   const pricePerGram24K = getLiveGoldPer24KGram()
 
   const goldValue = computeGoldMarketValue(pricePerGram24K, weightG, karatEstimate, stoneExclusionG)
   const loanOffer = computeLoanOffer(goldValue)
 
   return {
-    schema_version: '1.0',
+    schema_version: '2.0.0',
     session_id: sessionId,
     timestamp_utc: new Date().toISOString(),
     purity: {
-      band_low_karat:      isFail ? 14 : karatEstimate - 2,
-      band_high_karat:     isFail ? 18 : karatEstimate,
-      point_estimate_karat: isFail ? 16 : karatEstimate,
-      huid_verified:       isFail ? false : !!state.huidCode,
+      band_low_karat: Math.max(9, karatEstimate - 1.5),
+      band_high_karat: Math.min(24, karatEstimate + 0.5),
+      point_estimate_karat: karatEstimate,
+      huid_verified: !!state.huidCode,
     },
     weight: {
       manual_entry_g: state.weightG,
-      estimated_g:    weightG,
-      band_low_g:     +(weightG * 0.92).toFixed(1),
-      band_high_g:    +(weightG * 1.10).toFixed(1),
-      method:         state.weightG ? 'hybrid' : 'depth_volume_x_density',
+      estimated_g: weightG,
+      band_low_g: +(weightG * 0.95).toFixed(1),
+      band_high_g: +(weightG * 1.05).toFixed(1),
+      method: 'CV_WEIGHT_FUSION',
     },
     value_inr: {
-      band_low:          isFail ? Math.round(goldValue.band_low * 0.55) : goldValue.band_low,
-      band_high:         isFail ? Math.round(goldValue.band_high * 0.65) : goldValue.band_high,
+      band_low: goldValue.band_low,
+      band_high: goldValue.band_high,
       ibja_reference_date: new Date().toISOString(),
       stone_weight_excluded_g: stoneExclusionG,
     },
-    loan_offer: isFail
-      ? { band_low_inr: Math.round(loanOffer.band_low_inr * 0.45), band_high_inr: Math.round(loanOffer.band_high_inr * 0.55), ltv_applied_pct: 75, tier: loanOffer.tier }
-      : loanOffer,
+    loan_offer: loanOffer,
     confidence: {
-      score:                    isFail ? 0.38 : 0.91,
-      coverage_guarantee_pct:   90,
-      calibration_method:       'split_conformal',
+      score: isFail ? 0.38 : 0.82 + (Math.random() * 0.1),
+      coverage_guarantee_pct: isFail ? 0 : 85,
+      calibration_method: 'CONFORMAL_PREDICTION',
     },
     fraud_signals: {
-      score:    isFail ? 0.71 : 0.04,
-      triggers: isFail ? ['plated_metal_detected', 'acoustic_inconsistent'] : [],
+      score: isFail ? 0.65 : 0.04,
+      triggers: isFail ? ['low_purity_detected', 'visual_pitting_observed'] : [],
     },
-    routing: isFail ? 'REJECT' : 'INSTANT',
+    routing: isFail ? 'REJECT' : 'AGENT',
     reasoning_text: {
-      lang: localStorage.getItem('goldeye_lang') || 'en',
-      text: isFail
-        ? `Confidence 38% — visual hallmark ambiguous, acoustic signature inconsistent with solid ${karatEstimate}K gold. In-branch XRF verification recommended.`
+      lang: state.lang,
+      text: isFail 
+        ? `Assessment failed due to low gold purity (${karatEstimate}K) or visual irregularities. Please try again with a hallmarked piece.`
         : `${state.huidCode ? `BIS HUID ${state.huidCode} verified. ` : 'Visual hallmark detected. '}${karatEstimate}K gold, ${weightG}g net weight. Market value computed at ₹${pricePerGram24K.toLocaleString('en-IN')}/g (24K IBJA). No fraud signals. ${state.captures.audio ? 'Acoustic resonance: solid gold.' : ''}`,
     },
     xai: {
@@ -139,7 +143,7 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
         : null,
     },
     audit: {
-      trace_id:           `trace_${Math.random().toString(36).slice(2, 18)}`,
+      trace_id: `trace_${Math.random().toString(36).slice(2, 18)}`,
       input_asset_hashes: ['sha256:mock'],
     },
   }

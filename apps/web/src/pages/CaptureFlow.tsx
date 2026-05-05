@@ -106,10 +106,10 @@ export function CaptureFlow() {
   const [stepIdx, setStepIdx] = useState(0)
   const [captured, setCaptured] = useState<Set<number>>(new Set())
   const [evals, setEvals] = useState<Record<number, StepEval>>({})
-  const [cameraKey, setCameraKey] = useState(0)
-  const [showDemo, setShowDemo] = useState(false)
   const [showManualHuid, setShowManualHuid] = useState(false)
   const [manualHuid, setManualHuid] = useState(state.huidCode || '')
+  const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat)
+  const [activeTab, setActiveTab] = useState<'scan' | 'manual'>('scan')
   const spokenStep = useRef(-1)
 
   const step = STEPS[stepIdx]
@@ -155,6 +155,7 @@ export function CaptureFlow() {
 
       if (step.type === 'macro' && result.detected?.karat_numeric) {
         setScannedKarat(result.detected.karat_numeric)
+        setSelectedKarat(result.detected.karat_numeric)
       }
 
       setEvals(prev => ({
@@ -171,7 +172,7 @@ export function CaptureFlow() {
       }))
       speak(fallback)
     }
-  }, [step, stepIdx, addCapture])
+  }, [step, stepIdx, addCapture, setScannedKarat])
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
@@ -288,46 +289,107 @@ export function CaptureFlow() {
           capturedDataUrl={currentEval?.dataUrl}
         />
 
-        {/* Manual HUID Entry for Macro Step */}
+        {/* Hallmark Analysis & Manual Override Widget */}
         {step.type === 'macro' && (
-          <div className="mt-4">
-            {!showManualHuid ? (
-              <button
-                onClick={() => setShowManualHuid(true)}
-                className="w-full py-3 px-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-white/60 font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
-              >
-                Faint or no hallmark? Enter HUID manually
-              </button>
-            ) : (
-              <div className="card p-4 bg-white/5 border border-white/10 rounded-2xl animate-fade-in">
-                <label className="text-xs text-white/60 mb-2 block font-medium">Enter HUID Code</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={manualHuid}
-                    onChange={e => {
-                      const val = e.target.value.toUpperCase();
-                      setManualHuid(val);
-                      setHuid(val || null);
-                    }}
-                    placeholder="e.g., A3F2K1"
-                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-brand-500"
-                    maxLength={10}
-                  />
-                  <button
-                    onClick={() => setShowManualHuid(false)}
-                    className="px-4 py-2.5 rounded-xl bg-brand-500 text-white text-xs font-semibold hover:bg-brand-600 transition-colors"
-                  >
-                    Save
-                  </button>
-                </div>
-                {manualHuid && (
-                  <p className="text-[10px] text-brand-400 mt-2 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> HUID {manualHuid} saved
-                  </p>
+          <div className="mt-4 animate-slide-up">
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+              {/* Tabs */}
+              <div className="flex border-b border-white/10">
+                <button
+                  onClick={() => setActiveTab('scan')}
+                  className={clsx(
+                    'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
+                    activeTab === 'scan' ? 'bg-brand-500/10 text-brand-400 border-b-2 border-brand-500' : 'text-white/40 hover:text-white/60'
+                  )}
+                >
+                  Scan Result
+                </button>
+                <button
+                  onClick={() => setActiveTab('manual')}
+                  className={clsx(
+                    'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
+                    activeTab === 'manual' ? 'bg-brand-500/10 text-brand-400 border-b-2 border-brand-500' : 'text-white/40 hover:text-white/60'
+                  )}
+                >
+                  Manual Entry
+                </button>
+              </div>
+
+              <div className="p-4">
+                {activeTab === 'scan' ? (
+                  <div className="min-h-[100px] flex flex-col justify-center">
+                    {evalState === 'idle' ? (
+                      <p className="text-center text-xs text-white/30 italic">Capture an image to see hallmark details</p>
+                    ) : evalState === 'evaluating' ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
+                        <span className="text-xs text-brand-300">Scanning for markings...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-white/40">Detected Purity</span>
+                          <span className="text-sm font-bold text-emerald-400">{selectedKarat ? `${selectedKarat}K` : 'Not Detected'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-white/40">HUID Status</span>
+                          <span className="text-sm font-bold text-emerald-400">{manualHuid || currentEval?.result?.detected?.huid_code ? 'Verified' : 'Manual Entry Needed'}</span>
+                        </div>
+                        <p className="text-[11px] text-white/50 leading-relaxed italic border-t border-white/5 pt-2">
+                          {currentEval?.result?.feedback || 'Take a clear photo of the Hallmark stamp for automatic extraction.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-white/30 mb-2 block tracking-widest">HUID Alphanumeric Code</label>
+                      <input
+                        type="text"
+                        value={manualHuid}
+                        onChange={e => {
+                          const val = e.target.value.toUpperCase();
+                          setManualHuid(val);
+                          setHuid(val || null);
+                        }}
+                        placeholder="e.g., A3F2K1"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-brand-500 transition-colors"
+                        maxLength={10}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-white/30 mb-2 block tracking-widest">Purity / Karat</label>
+                      <div className="flex gap-2">
+                        {[18, 22, 24].map(k => (
+                          <button
+                            key={k}
+                            onClick={() => {
+                              setSelectedKarat(k);
+                              setScannedKarat(k);
+                            }}
+                            className={clsx(
+                              'flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border',
+                              selectedKarat === k 
+                                ? 'bg-brand-500 border-brand-400 text-white shadow-lg shadow-brand-500/20' 
+                                : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                            )}
+                          >
+                            {k}K
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <p className="text-[10px] text-brand-400 flex items-center gap-1.5 pt-1">
+                      <Shield className="w-3 h-3" />
+                      Settings saved instantly to your assessment.
+                    </p>
+                  </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
         )}
 

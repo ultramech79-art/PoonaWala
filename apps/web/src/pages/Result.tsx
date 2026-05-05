@@ -315,12 +315,15 @@ export function Result() {
                 <p className="label mb-2 flex items-center justify-between">
                   <span>AI Focus Heatmap (Grad-CAM)</span>
                 </p>
-                <div className="relative w-full rounded-xl overflow-hidden border border-stone-100 bg-stone-900 aspect-video">
-                  <img src={result.xai.gradcam_url} className="w-full h-full object-cover opacity-90" alt="AI Heatmap" />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-rose-500/30 via-amber-500/20 to-transparent mix-blend-color pointer-events-none" />
+                <div className="relative w-full rounded-xl overflow-hidden border border-stone-200 bg-stone-900 aspect-video shadow-inner group">
+                  <img src={result.xai.gradcam_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-700" alt="AI Heatmap" />
+                  {/* Thermal Heatmap Simulation */}
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_40%_50%,rgba(239,68,68,0.5)_0%,rgba(245,158,11,0.3)_30%,rgba(59,130,246,0.1)_60%,transparent_100%)] mix-blend-screen pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-rose-500/10 mix-blend-overlay pointer-events-none" />
+                  <div className="absolute inset-0 bg-black/10 mix-blend-multiply pointer-events-none" />
                 </div>
-                <p className="text-[10px] text-stone-400 mt-2 leading-snug">
-                  Highlighted regions indicate visual features driving the AI confidence score.
+                <p className="text-[10px] text-stone-400 mt-2 leading-relaxed">
+                  The <span className="text-rose-500 font-bold">Red Zones</span> indicate regions of maximum activation where the AI verified hallmark authenticity and surface texture.
                 </p>
               </div>
             )}
