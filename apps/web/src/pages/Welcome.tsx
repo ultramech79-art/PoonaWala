@@ -145,7 +145,6 @@ export function Welcome() {
         </div>
       </div>
 
-<<<<<<< HEAD
       {/* Feature list - 3 columns grid with enhanced styling */}
       <div className="px-5 mb-8">
         <div className="grid grid-cols-3 gap-2.5">
