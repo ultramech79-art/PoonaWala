@@ -78,15 +78,13 @@ export function Home() {
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30 overflow-hidden flex flex-col font-sans">
       {/* Premium Header with Poonawala Branding */}
-      <div className="relative z-30 px-6 py-4 border-b border-amber-100/50 bg-gradient-to-r from-white/80 via-white to-white/80 backdrop-blur-md">
+      <div className="relative z-30 px-6 py-4 bg-gradient-to-r from-white/80 via-white to-white/80 backdrop-blur-md">
         <div className="max-w-md mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-amber-600 flex items-center justify-center shadow-sm">
-              <span className="text-white font-display font-black text-sm">P</span>
-            </div>
+          <div className="flex items-center gap-3">
+            <img src="/assets/poonawala-logo.png" alt="Poonawala" className="w-10 h-10" />
             <div>
-              <p className="text-xs font-display font-bold text-stone-900">Poonawalla</p>
-              <p className="text-[9px] text-stone-500">Fincorp Limited</p>
+              <p className="text-sm font-display font-bold text-stone-900">Poonawalla</p>
+              <p className="text-[11px] text-stone-500">Fincorp Limited</p>
             </div>
           </div>
         </div>
