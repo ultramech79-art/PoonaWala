@@ -36,14 +36,14 @@ export function Consent() {
     try {
       const { session_id } = await initSessionAPI(lang)
       setSessionId(session_id)
-      await recordConsentAPI(session_id).catch(() => {})
+      recordConsentAPI(session_id).catch(() => {})
     } catch {
       initSession()
     } finally {
       setLoading(false)
+      setConsent()
+      navigate('/otp')
     }
-    setConsent()
-    navigate('/otp')
   }
 
   const decline = () => navigate('/language')
