@@ -21,8 +21,8 @@ _SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
 _TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
 _G_PER_OZ = 31.1035
-_MIN_24K = 5_000.0
-_MAX_24K = 18_000.0
+_MIN_24K = 8_000.0
+_MAX_24K = 30_000.0
 _CACHE_TTL_S = 10 # 10 seconds for live market updates
 
 _cache: dict = {
@@ -132,14 +132,21 @@ async def _fetch_via_yahoo(client: httpx.AsyncClient) -> float:
     _store(p24, "yahoo", p22, p18)
     return p24
 
+def _parse_inr(s: str) -> float:
+    """Parse Indian rupee string to float: '₹14,918', '15,122.18', '1,51,780' → float"""
+    clean = re.sub(r'[₹Rs,\s]', '', s)
+    try:
+        return float(clean)
+    except ValueError:
+        return 0.0
+
 async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
     if not _SERPAPI_KEY:
         raise ValueError("No SerpAPI key")
 
-    # Target goodreturns.in gold rate page for structured India prices
     params = {
         "engine": "google",
-        "q": "gold rate today in india 22k 24k 18k per gram goodreturns",
+        "q": "gold rate today india 24k 22k 18k per gram",
         "api_key": _SERPAPI_KEY,
         "gl": "in",
         "hl": "en",
@@ -149,95 +156,88 @@ async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
     resp.raise_for_status()
     data = resp.json()
 
-    context_parts: list[str] = []
-
-    # Answer box (Google's direct answer panel)
+    snippets: list[str] = []
     if "answer_box" in data:
-        ab = data["answer_box"]
-        context_parts.append(str(ab))
-
-    # Organic snippets from top results
+        snippets.append(str(data["answer_box"]))
     for r in data.get("organic_results", [])[:5]:
-        snippet = r.get("snippet", "")
-        title = r.get("title", "")
-        if snippet:
-            context_parts.append(f"{title}: {snippet}")
+        t = r.get("title", "")
+        s = r.get("snippet", "")
+        if s:
+            snippets.append(f"{t}: {s}")
 
-    context = "\n".join(context_parts)
+    context = "\n".join(snippets)
     if not context:
         raise ValueError("No content from SerpAPI")
 
-    # Parse prices directly from context with regex before falling back to Groq
     p24, p22, p18 = 0.0, 0.0, 0.0
-    for label, var_name in [("24", "p24"), ("22", "p22"), ("18", "p18")]:
-        # Match patterns like "24K: ₹7,450" or "24 karat ... 7450" etc.
-        patterns = [
-            rf'{label}[Kk\s]*(?:karat|carat)?[^\d]{{0,20}}?[₹Rs\s]*([5-9][,\d]{{3,6}})',
-            rf'[₹Rs\s]*([5-9][,\d]{{3,6}})[^\d]{{0,20}}?{label}[Kk]',
-        ]
-        for pat in patterns:
-            m = re.search(pat, context)
+
+    # Indian gold prices are 5-digit per gram (e.g. 14918, 15122) or
+    # 6-digit per 10g in Indian comma format (e.g. 1,51,780 → 151780 → /10 = 15178).
+    # Patterns target "24 karat ... ₹14,918 per gram" and "1 gm. ₹15,122.18" style.
+    for karat, store_var in [("24", "p24"), ("22", "p22"), ("18", "p18")]:
+        # Direct per-gram mention near karat label
+        per_gram = re.search(
+            rf'{karat}\s*[Kk](?:arat|carat)?[^₹\d]{{0,40}}[₹₹]\s*([\d,]+(?:\.\d{{1,2}})?)\s*(?:per gram|/g)',
+            context, re.IGNORECASE
+        )
+        # "1 gm" table style: karat mentioned then ₹ amount
+        one_gm = re.search(
+            rf'{karat}\s*[Kk][^₹\d]{{0,60}}1\s*gm[^₹\d]{{0,10}}[₹₹]\s*([\d,]+(?:\.\d{{1,2}})?)',
+            context, re.IGNORECASE
+        )
+        # Reverse: "₹14,918 per gram for 24 karat"
+        reverse = re.search(
+            rf'[₹₹]\s*([\d,]+(?:\.\d{{1,2}})?)\s*per gram[^.{{0,60}}]{karat}\s*[Kk]',
+            context, re.IGNORECASE
+        )
+
+        raw_val = 0.0
+        for m in [per_gram, one_gm, reverse]:
             if m:
-                val = float(m.group(1).replace(",", ""))
-                if label == "24": p24 = val
-                elif label == "22": p22 = val
-                elif label == "18": p18 = val
+                raw_val = _parse_inr(m.group(1))
                 break
+
+        # Fallback: "18K Gold. ₹1,12,210" style (per 10g in Indian comma format)
+        if raw_val == 0.0:
+            fallback = re.search(
+                rf'{karat}\s*[Kk][^₹₹\d]{{0,30}}[₹₹]\s*([\d,]{{5,10}}(?:\.\d{{1,2}})?)',
+                context, re.IGNORECASE
+            )
+            if fallback:
+                raw_val = _parse_inr(fallback.group(1))
+
+        # If value looks like per-10g (> 50000), divide by 10
+        if raw_val > 50_000:
+            raw_val = round(raw_val / 10, 2)
+
+        if karat == "24": p24 = raw_val
+        elif karat == "22": p22 = raw_val
+        elif karat == "18": p18 = raw_val
+
+    logger.info(f"SerpAPI parsed: 24K={p24} 22K={p22} 18K={p18}")
 
     if _accept(p24):
         _store(p24, "serp", p22, p18)
         return p24
 
-    # Groq extraction fallback if regex didn't get 24K
-    if not _GROQ_GOLD_KEY:
-        raise ValueError(f"Regex parse failed and no Groq key. context: {context[:300]}")
-
-    payload = {
-        "model": "llama-3.1-70b-versatile",
-        "messages": [
-            {"role": "system", "content": (
-                "Extract today's gold rate in India per gram (INR) from the search snippets. "
-                "Return ONLY valid JSON: {\"24K\": <number>, \"22K\": <number>, \"18K\": <number>}. "
-                "Numbers must be plain integers (no commas, no currency symbol)."
-            )},
-            {"role": "user", "content": f"Snippets:\n{context[:1500]}\n\nExtract the prices."}
-        ],
-        "temperature": 0
-    }
-    gres = await client.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        json=payload,
-        headers={"Authorization": f"Bearer {_GROQ_GOLD_KEY}"},
-        timeout=15
-    )
-    gres.raise_for_status()
-    raw = gres.json()["choices"][0]["message"]["content"]
-    match = re.search(r'\{[^}]+\}', raw)
-    if not match:
-        raise ValueError(f"No JSON in Groq response: {raw}")
-    p = json.loads(match.group())
-    p24, p22, p18 = float(p.get("24K", 0)), float(p.get("22K", 0)), float(p.get("18K", 0))
-    if not _accept(p24):
-        raise ValueError(f"Price {p24} out of range")
-    _store(p24, "serp", p22, p18)
-    return p24
+    raise ValueError(f"SerpAPI: could not parse valid 24K price. Got {p24}. Context snippet: {context[:400]}")
 
 async def _refresh_async():
     async with httpx.AsyncClient() as client:
-        # 1. Yahoo Finance — live GC=F futures × USDINR (most accurate, real-time)
-        try:
-            await _fetch_via_yahoo(client)
-            return
-        except Exception as e:
-            logger.warning(f"Source yahoo failed: {e}")
-
-        # 2. SerpAPI — Google Search scrape (fallback, can return stale/wrong values)
+        # 1. SerpAPI — Google Search, actual Indian market price (IBJA/goodreturns)
         if _SERPAPI_KEY:
             try:
                 await _fetch_via_search_api(client)
                 return
             except Exception as e:
                 logger.warning(f"Source serp failed: {e}")
+
+        # 2. Yahoo Finance — international GC=F × USDINR (excludes Indian import duty)
+        try:
+            await _fetch_via_yahoo(client)
+            return
+        except Exception as e:
+            logger.warning(f"Source yahoo failed: {e}")
 
         # 3. Groq estimate — last resort
         try:
