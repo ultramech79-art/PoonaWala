@@ -119,14 +119,17 @@ async def _fetch_via_groq(client: httpx.AsyncClient) -> float:
     return p24
 
 async def _fetch_via_yahoo(client: httpx.AsyncClient) -> float:
-    # Gets exact live Gold futures and Forex rate to calculate INR/gram
     g, f = await asyncio.gather(
-        client.get(_GOLD_URL, headers=_YAHOO_HDRS), 
+        client.get(_GOLD_URL, headers=_YAHOO_HDRS),
         client.get(_FOREX_URL, headers=_YAHOO_HDRS)
     )
-    p24 = round((g.json()["chart"]["result"][0]["meta"]["regularMarketPrice"] * f.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]) / _G_PER_OZ, 2)
+    usd_per_oz = g.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    inr_per_usd = f.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    p24 = round((usd_per_oz * inr_per_usd) / _G_PER_OZ, 2)
     if not _accept(p24): raise ValueError(f"Price {p24} out of range")
-    _store(p24, "yahoo")
+    p22 = round(p24 * 22 / 24, 2)
+    p18 = round(p24 * 18 / 24, 2)
+    _store(p24, "yahoo", p22, p18)
     return p24
 
 async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
@@ -221,20 +224,20 @@ async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
 
 async def _refresh_async():
     async with httpx.AsyncClient() as client:
-        # 1. SerpAPI — Google Search for India gold rates (goodreturns.in)
+        # 1. Yahoo Finance — live GC=F futures × USDINR (most accurate, real-time)
+        try:
+            await _fetch_via_yahoo(client)
+            return
+        except Exception as e:
+            logger.warning(f"Source yahoo failed: {e}")
+
+        # 2. SerpAPI — Google Search scrape (fallback, can return stale/wrong values)
         if _SERPAPI_KEY:
             try:
                 await _fetch_via_search_api(client)
                 return
             except Exception as e:
                 logger.warning(f"Source serp failed: {e}")
-
-        # 2. Yahoo Finance — live GC=F futures × USDINR
-        try:
-            await _fetch_via_yahoo(client)
-            return
-        except Exception as e:
-            logger.warning(f"Source yahoo failed: {e}")
 
         # 3. Groq estimate — last resort
         try:
