@@ -262,11 +262,16 @@ export function Processing() {
   const circumference = 2 * Math.PI * 52
 
   return (
-    <div className="page items-center justify-center animate-fade-in">
-      {/* Subtle bg glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-brand-600/5 blur-3xl pointer-events-none" />
+    <div className="page items-center justify-center animate-fade-in relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
+      {/* Premium gradient overlays */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-brand-600/5 blur-3xl" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-gradient-to-br from-brand-400/15 via-amber-400/10 to-transparent blur-3xl" />
+        <div className="absolute top-20 left-0 w-64 h-64 rounded-full bg-gradient-to-r from-blue-300/5 to-transparent blur-3xl" />
+        <div className="absolute top-1/3 right-0 w-80 h-80 rounded-full bg-gradient-to-l from-amber-300/5 to-transparent blur-3xl" />
+      </div>
 
-      <div className="flex flex-col items-center px-8 text-center w-full">
+      <div className="flex flex-col items-center px-8 text-center w-full relative z-10">
         {/* Circular progress ring */}
         <div className="relative w-32 h-32 mb-8">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">

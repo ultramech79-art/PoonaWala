@@ -152,7 +152,14 @@ export function Result() {
   const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`
 
   return (
-    <div className="page overflow-y-auto no-scrollbar animate-fade-in">
+    <div className="page overflow-y-auto no-scrollbar animate-fade-in relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
+      {/* Premium gradient overlays */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-gradient-to-br from-brand-400/15 via-amber-400/10 to-transparent blur-3xl" />
+        <div className="absolute top-20 left-0 w-64 h-64 rounded-full bg-gradient-to-r from-blue-300/5 to-transparent blur-3xl" />
+        <div className="absolute top-1/3 right-0 w-80 h-80 rounded-full bg-gradient-to-l from-amber-300/5 to-transparent blur-3xl" />
+      </div>
+      <div className="relative z-10">
       {/* Header */}
       <div className="page-header">
         <button id="result-home" onClick={() => { reset(); navigate('/') }} className="btn-icon">
@@ -431,6 +438,7 @@ export function Result() {
           <span className="badge-blue">{t('footer_dpdp')}</span>
         </div>
         <p className="text-center text-xs text-stone-400 mt-3">{t('powered_by')}</p>
+      </div>
       </div>
     </div>
   )
