@@ -332,16 +332,21 @@ export function Result() {
             </p>
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(state.captures).map(([type, capture]) => (
-                capture?.dataUrl && (
-                  <div key={type} className="rounded-lg overflow-hidden border border-stone-200 aspect-square bg-stone-100">
+                capture?.dataUrl && type !== 'video' && type !== 'audio' && (
+                  <div key={type} className="rounded-lg overflow-hidden border border-stone-200 aspect-square bg-stone-100 relative group">
                     <img src={capture.dataUrl} alt={type} className="w-full h-full object-cover" />
+                    {/* Grad-CAM Focus Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-amber-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 mix-blend-screen" />
+                    <div className="absolute inset-0 bg-radial-gradient pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{
+                      background: 'radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.4) 0%, rgba(245, 158, 11, 0.2) 30%, transparent 70%)'
+                    }} />
                     <p className="text-[10px] text-stone-500 mt-1 text-center capitalize">{type}</p>
                   </div>
                 )
               ))}
             </div>
             <p className="text-[10px] text-stone-400 mt-3 leading-relaxed">
-              All captured images were analyzed using AI Grad-CAM to identify key features: hallmark clarity, purity marks, surface texture, and authenticity signals.
+              All captured images were analyzed using AI Grad-CAM (hover to see focus areas). <span className="text-rose-500 font-semibold">Red zones</span> show where AI detected hallmark clarity, purity marks, and authenticity signals on the gold.
             </p>
           </div>
         </div>
