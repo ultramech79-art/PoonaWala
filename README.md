@@ -11,7 +11,7 @@
 <br/>
 
 [![Built for](https://img.shields.io/badge/Built%20for-Poonawala%20Fincorp-C0392B?style=for-the-badge&labelColor=1a1a1a)](https://poonawala.onrender.com)
-[![Models](https://img.shields.io/badge/AI%20Models-100%25%20In--House-00C853?style=for-the-badge&labelColor=1a1a1a)](#custom-trained-models)
+
 [![Coverage](https://img.shields.io/badge/Conformal%20Coverage-90.2%25-0288D1?style=for-the-badge&labelColor=1a1a1a)](#custom-trained-models)
 [![Stack](https://img.shields.io/badge/Stack-FastAPI%20%2B%20React%2018%20%2B%20ONNX-AB47BC?style=for-the-badge&labelColor=1a1a1a)](#tech-stack)
 
