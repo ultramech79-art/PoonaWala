@@ -35,6 +35,58 @@ function MarketTicker() {
 }
 
 
+function NativeGoldChart() {
+  const { data, loading } = useMetalPrices()
+
+  if (loading || !data) return (
+    <div className="mx-5 mt-4 h-[180px] rounded-2xl bg-stone-200 animate-pulse" />
+  )
+
+  const gold = data.metals.find(m => m.id === 'xau_24k')
+  if (!gold) return null
+
+  const min = Math.min(...gold.sparkline)
+  const max = Math.max(...gold.sparkline)
+  const range = max - min || 1
+  
+  const pts = gold.sparkline.map((val, i) => {
+    const x = (i / (gold.sparkline.length - 1)) * 100
+    const y = 100 - ((val - min) / range) * 80 - 10
+    return `${x},${y}`
+  })
+  
+  const lineData = `M ${pts.join(' L ')}`
+  const pathData = `${lineData} L 100,100 L 0,100 Z`
+
+  return (
+    <div className="mx-5 mt-4 p-5 rounded-2xl border border-gold-200 bg-gold-50/50 shadow-sm relative overflow-hidden" style={{ height: '180px' }}>
+      <div className="relative z-10 flex justify-between items-start">
+        <div>
+          <p className="text-xs font-bold text-gold-600/80 uppercase tracking-widest">{gold.name}</p>
+          <p className="text-2xl font-display font-bold text-stone-900 mt-1">
+            ₹{gold.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            <span className="text-sm font-medium text-stone-500 ml-1">/ g</span>
+          </p>
+        </div>
+        <div className={`px-2 py-1 rounded-lg text-xs font-bold ${gold.changePercent24h >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+          {gold.changePercent24h >= 0 ? '+' : ''}{gold.changePercent24h.toFixed(2)}%
+        </div>
+      </div>
+      
+      <svg className="absolute bottom-0 left-0 w-full h-24 opacity-80" preserveAspectRatio="none" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#D4A017" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#D4A017" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={pathData} fill="url(#goldGrad)" />
+        <path d={lineData} fill="none" stroke="#D4A017" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  )
+}
+
 export function Welcome() {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -97,15 +149,7 @@ export function Welcome() {
       <MarketTicker />
 
       {/* Gold Chart */}
-      <div className="mx-5 mt-4 rounded-2xl overflow-hidden border border-white/10 shadow-lg bg-white/5" style={{ height: '180px' }}>
-        <iframe 
-          scrolling="no" 
-          allowTransparency={true} 
-          frameBorder="0" 
-          src="https://s.tradingview.com/embed-widget/mini-symbol-overview/?locale=en&symbol=FX_IDC%3AXAUINRG&dateRange=12M&colorTheme=dark&isTransparent=true&trendLineColor=%23D4A017&underLineColor=rgba(212%2C%20160%2C%2023%2C%200.3)&underLineBottomColor=rgba(212%2C%20160%2C%2023%2C%200)" 
-          style={{ width: '100%', height: '100%' }}
-        ></iframe>
-      </div>
+      <NativeGoldChart />
 
       {/* Spacer */}
       <div className="flex-1" />
