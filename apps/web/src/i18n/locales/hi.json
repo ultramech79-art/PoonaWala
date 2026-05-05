@@ -8,7 +8,7 @@
 
   "welcome_heading": "जानें आपका सोना कितने का है",
   "welcome_body": "घर से आभूषण की फोटो खींचें। तुरंत, सटीक लोन अनुमान पाएं — शाखा या एजेंट की जरूरत नहीं।",
-  "welcome_cta": "शुरू करें",
+  "welcome_cta": "मूल्यांकन शुरू करें",
   "welcome_trusted": "प्रमुख NBFC द्वारा विश्वसनीय",
   "welcome_stat1_val": "90 सेकंड",
   "welcome_stat1_label": "प्री-क्वालिफाई में",
@@ -43,7 +43,7 @@
   "otp_send": "OTP भेजें",
   "otp_resend": "{{seconds}} सेकंड में पुनः भेजें",
   "otp_verify": "सत्यापित करें",
-  "otp_skip": "डेमो के लिए छोड़ें",
+  "otp_skip": "डेमो मोड",
 
   "setup_heading": "अपना शॉट तैयार करें",
   "setup_body": "अपने आभूषण को सफेद सतह पर रखें और पास में ₹10 का सिक्का रखें।",
@@ -53,8 +53,8 @@
   "setup_ready": "मैं तैयार हूं",
 
   "capture_step": "चरण {{current}} में से {{total}}",
-  "capture_retake": "फिर से लें",
-  "capture_accept": "ठीक लग रहा है",
+  "capture_retake": "फोटो दोबारा लें",
+  "capture_accept": "आगे बढ़ें",
   "capture_skip": "छोड़ें (वैकल्पिक)",
 
   "step_top_title": "ऊपर से फोटो",
@@ -84,7 +84,7 @@
   "weight_label": "ग्राम में वजन",
   "weight_placeholder": "जैसे 8.5",
   "weight_tip": "स्केल नहीं है? हम अनुमान लगाएंगे — सटीकता कम हो सकती है।",
-  "weight_skip": "मेरे पास स्केल नहीं है",
+  "weight_skip": "AI अनुमान का उपयोग करें",
   "weight_continue": "जारी रखें",
 
   "processing_heading": "आपके आभूषण का विश्लेषण हो रहा है…",

@@ -8,7 +8,7 @@
 
   "welcome_heading": "Know what your gold is worth",
   "welcome_body": "Photograph your jewelry from home. Get an instant, calibrated loan estimate — no branch visit, no agent required.",
-  "welcome_cta": "Get Started",
+  "welcome_cta": "Begin Assessment",
   "welcome_trusted": "Trusted by leading NBFCs",
   "welcome_stat1_val": "90 sec",
   "welcome_stat1_label": "to pre-qualify",
@@ -43,7 +43,7 @@
   "otp_send": "Send OTP",
   "otp_resend": "Resend in {{seconds}}s",
   "otp_verify": "Verify",
-  "otp_skip": "Skip for demo",
+  "otp_skip": "Demo Mode",
 
   "setup_heading": "Set up your shot",
   "setup_body": "Place your jewelry on a plain light-colored surface with a ₹10 coin beside it.",
@@ -53,8 +53,8 @@
   "setup_ready": "I'm ready",
 
   "capture_step": "Step {{current}} of {{total}}",
-  "capture_retake": "Retake",
-  "capture_accept": "Looks Good",
+  "capture_retake": "Retake Photo",
+  "capture_accept": "Proceed",
   "capture_skip": "Skip (optional)",
 
   "step_top_title": "Top-down shot",
@@ -84,7 +84,7 @@
   "weight_label": "Weight in grams",
   "weight_placeholder": "e.g. 8.5",
   "weight_tip": "Don't have a scale? We'll use an estimate — accuracy may be lower.",
-  "weight_skip": "I don't have a scale",
+  "weight_skip": "Use AI Estimate",
   "weight_continue": "Continue",
 
   "processing_heading": "Analysing your jewelry…",
