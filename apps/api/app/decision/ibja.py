@@ -17,6 +17,8 @@ logger = logging.getLogger("goldeye.decision.ibja")
 
 _METAL_API_KEY = os.getenv("METAL_API_KEY", "")
 _GROQ_GOLD_KEY = os.getenv("GROQ_API_KEY", os.getenv("GROQ_API_KEY_2", ""))
+_SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
+_TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
 _G_PER_OZ = 31.1035
 _MIN_24K = 5_000.0
@@ -127,16 +129,77 @@ async def _fetch_via_yahoo(client: httpx.AsyncClient) -> float:
     _store(p24, "yahoo")
     return p24
 
+async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
+    if not _SERPAPI_KEY and not _TAVILY_API_KEY:
+        raise ValueError("No Search API key (SerpAPI/Tavily)")
+    if not _GROQ_GOLD_KEY:
+        raise ValueError("No GROQ key for extraction")
+
+    query = "live 24k gold rate in india per gram inr today exact price"
+    context = ""
+    
+    # 1. Fetch search results
+    if _SERPAPI_KEY:
+        resp = await client.get(f"https://serpapi.com/search.json?q={query.replace(' ', '+')}&api_key={_SERPAPI_KEY}")
+        resp.raise_for_status()
+        data = resp.json()
+        snippets = [res.get("snippet", "") for res in data.get("organic_results", [])[:3]]
+        context = " ".join(snippets)
+    elif _TAVILY_API_KEY:
+        resp = await client.post("https://api.tavily.com/search", json={
+            "api_key": _TAVILY_API_KEY,
+            "query": query,
+            "search_depth": "basic"
+        })
+        resp.raise_for_status()
+        data = resp.json()
+        snippets = [res.get("content", "") for res in data.get("results", [])[:3]]
+        context = " ".join(snippets)
+
+    # 2. Extract with Groq
+    payload = {
+        "model": "llama-3.1-70b-versatile",
+        "messages": [
+            {"role": "system", "content": "Extract the live 24K gold rate per gram in INR from the search snippets. Return ONLY valid JSON in this exact format: {\"24K\": 7400, \"22K\": 6800, \"18K\": 5800}. Do NOT return any text, just JSON."},
+            {"role": "user", "content": f"Search snippets:\n{context}\n\nExtract the price."}
+        ],
+        "temperature": 0
+    }
+    
+    resp = await client.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        json=payload,
+        headers={"Authorization": f"Bearer {_GROQ_GOLD_KEY}"},
+        timeout=15
+    )
+    resp.raise_for_status()
+    raw = resp.json()["choices"][0]["message"]["content"]
+    match = re.search(r'\{[^}]+\}', raw)
+    if not match: raise ValueError(f"No JSON in response: {raw}")
+    
+    p = json.loads(match.group())
+    p24, p22, p18 = float(p.get("24K", 0)), float(p.get("22K", 0)), float(p.get("18K", 0))
+    if not _accept(p24): raise ValueError(f"Price {p24} out of range")
+    _store(p24, "serp", p22, p18)
+    return p24
+
 async def _refresh_async():
     async with httpx.AsyncClient() as client:
-        # 1. Yahoo Finance (Real-time exact live market rate, no hallucination)
+        # 1. Yahoo Finance (Real-time exact live market rate)
         try:
             await _fetch_via_yahoo(client)
             return
         except Exception as e:
             logger.warning(f"Source yahoo failed: {e}")
             
-        # 2. Groq (Fallback estimate)
+        # 2. Search API (SerpAPI/Tavily + Groq Extraction)
+        try:
+            await _fetch_via_search_api(client)
+            return
+        except Exception as e:
+            logger.warning(f"Source search_api failed: {e}")
+            
+        # 3. Groq (Fallback estimate)
         try:
             await _fetch_via_groq(client)
             return
