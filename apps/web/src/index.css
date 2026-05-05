@@ -58,6 +58,12 @@
     height: 100dvh;
     overflow: hidden;
     position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .page > div:last-child {
+    flex-shrink: 0;
   }
 
   .page-dark {
@@ -67,6 +73,12 @@
     height: 100dvh;
     overflow: hidden;
     position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .page-dark > div:last-child {
+    flex-shrink: 0;
   }
 
   .page-header {
@@ -332,6 +344,10 @@
   .flex-1 {
     min-height: 0;
     min-width: 0;
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   /* Ensure all overflow-y-auto elements support touch scrolling */

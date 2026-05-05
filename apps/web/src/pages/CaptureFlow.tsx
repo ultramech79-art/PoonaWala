@@ -173,6 +173,29 @@ export function CaptureFlow() {
     setCameraKey(k => k + 1)
   }
 
+  const handleEnterDemo = useCallback(async () => {
+    if (!step.demoUrl) return
+
+    speak('Using example demo. Analysing now.')
+    setShowDemo(false)
+
+    try {
+      const response = await fetch(step.demoUrl)
+      const blob = await response.blob()
+      const reader = new FileReader()
+
+      reader.onload = async () => {
+        const dataUrl = reader.result as string
+        handleCapture(blob, dataUrl)
+      }
+
+      reader.readAsDataURL(blob)
+    } catch (err) {
+      console.error('[CaptureFlow] Failed to load demo:', err)
+      speak('Error loading demo image. Please try capturing instead.')
+    }
+  }, [step.demoUrl, handleCapture])
+
   const next = () => {
     if (stepIdx < STEPS.length - 1) setStepIdx(i => i + 1)
     else { speak('All done! Submitting your gold for assessment now.'); navigate('/weight') }
@@ -217,7 +240,7 @@ export function CaptureFlow() {
             className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] text-white/60 hover:bg-white/10 transition-colors"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
-            View Example Demo
+            Enter Example Demo
           </button>
         </div>
       )}
@@ -390,12 +413,20 @@ export function CaptureFlow() {
             <p className="mt-2 text-white/40 text-xs text-center px-6">
               This is how your photo should look. Ensure the gold is clear and well-lit.
             </p>
-            <button
-              onClick={() => setShowDemo(false)}
-              className="mt-8 px-8 py-3 rounded-full bg-brand-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 active:scale-95 transition-transform"
-            >
-              Got it, continue
-            </button>
+            <div className="mt-8 flex gap-3 w-full px-2">
+              <button
+                onClick={handleEnterDemo}
+                className="flex-1 px-6 py-3 rounded-full bg-brand-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 active:scale-95 transition-transform hover:bg-brand-600"
+              >
+                Enter Demo
+              </button>
+              <button
+                onClick={() => setShowDemo(false)}
+                className="flex-1 px-6 py-3 rounded-full bg-white/10 text-white font-semibold text-sm border border-white/20 active:scale-95 transition-transform hover:bg-white/20"
+              >
+                View Only
+              </button>
+            </div>
           </div>
         </div>
       )}
