@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 const API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const TROY_OZ_TO_GRAMS = 31.1035
 const CACHE_KEY = 'goldeye_metal_prices_v2'
-const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes for more frequent updates
+const CACHE_TTL_MS = 5 * 1000 // 5 seconds - cache for very short duration to get fresh API data
 
 export interface MetalPriceData {
   id: string
@@ -28,22 +28,25 @@ interface CacheEntry {
   expiresAt: number
 }
 
-// Build a plausible 7-point sparkline
+// Build a dynamic 7-point sparkline that changes every second
 function buildSparkline(current: number, metalId: string): number[] {
+  // Include seconds in seed for real-time updates
   const daySeed = Math.floor(Date.now() / 86400000)
+  const secondSeed = Math.floor(Date.now() / 1000) // Changes every second
   const metalSeed = metalId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  const seed = daySeed + metalSeed
-  
+  const seed = daySeed + secondSeed + metalSeed
+
   const rng = (i: number) => {
     const x = Math.sin(seed * 9301 + i * 49297) * 233280
     return x - Math.floor(x)
   }
-  
+
   const points: number[] = []
-  let v = current * (0.985 + rng(0) * 0.03) 
+  let v = current * (0.985 + rng(0) * 0.03)
   for (let i = 0; i < 6; i++) {
     points.push(v)
-    v += (rng(i + 1) - 0.48) * current * 0.008
+    // Add more volatility for realistic price movement
+    v += (rng(i + 1) - 0.48) * current * 0.015
   }
   points.push(current)
   return points
