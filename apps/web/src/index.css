@@ -30,7 +30,9 @@
 
   #root {
     width: 100%;
-    height: auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,12 +53,11 @@
     @apply flex flex-col bg-stone-50;
     padding-top: max(0px, var(--safe-top));
     padding-bottom: max(0px, var(--safe-bottom));
-    min-height: 100dvh;
+    flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     position: relative;
-    display: flex;
-    flex-direction: column;
+    width: 100%;
   }
 
   .page > div:last-child {
