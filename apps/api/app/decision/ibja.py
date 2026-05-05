@@ -185,19 +185,19 @@ async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
 
 async def _refresh_async():
     async with httpx.AsyncClient() as client:
-        # 1. Yahoo Finance (Real-time exact live market rate)
-        try:
-            await _fetch_via_yahoo(client)
-            return
-        except Exception as e:
-            logger.warning(f"Source yahoo failed: {e}")
-            
-        # 2. Search API (SerpAPI/Tavily + Groq Extraction)
+        # 1. Search API (SerpAPI/Tavily + Groq Extraction) - Primary per user request
         try:
             await _fetch_via_search_api(client)
             return
         except Exception as e:
             logger.warning(f"Source search_api failed: {e}")
+
+        # 2. Yahoo Finance (Real-time exact live market rate) - Fallback
+        try:
+            await _fetch_via_yahoo(client)
+            return
+        except Exception as e:
+            logger.warning(f"Source yahoo failed: {e}")
             
         # 3. Groq (Fallback estimate)
         try:
