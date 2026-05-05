@@ -278,6 +278,7 @@ export function CaptureFlow() {
           facingMode={step.facingMode || 'environment'}
           isVideo={step.isVideo}
           isAudio={step.isAudio}
+          capturedDataUrl={currentEval?.dataUrl}
         />
 
         {/* Feedback */}

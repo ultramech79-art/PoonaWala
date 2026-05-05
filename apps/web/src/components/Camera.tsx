@@ -76,9 +76,10 @@ interface CameraProps {
   facingMode?: 'environment' | 'user'
   isVideo?: boolean
   isAudio?: boolean
+  capturedDataUrl?: string
 }
 
-export function Camera({ type, onCapture, onError, facingMode = 'environment', isVideo, isAudio }: CameraProps) {
+export function Camera({ type, onCapture, onError, facingMode = 'environment', isVideo, isAudio, capturedDataUrl }: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mediaRef = useRef<MediaStream | null>(null)
@@ -316,6 +317,15 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
 
   // Stop camera on unmount
   useEffect(() => () => stopCamera(), [stopCamera])
+
+  // Sync external capturedDataUrl
+  useEffect(() => {
+    if (capturedDataUrl) {
+      setCapturedUrl(capturedDataUrl)
+      setStatus('done')
+      stopCamera()
+    }
+  }, [capturedDataUrl, stopCamera])
 
   const maxSec = isAudio ? 3 : 5
 
