@@ -116,11 +116,31 @@ async def _fetch_via_groq(client: httpx.AsyncClient) -> float:
     _store(p24, "groq", p22, p18)
     return p24
 
+async def _fetch_via_yahoo(client: httpx.AsyncClient) -> float:
+    # Gets exact live Gold futures and Forex rate to calculate INR/gram
+    g, f = await asyncio.gather(
+        client.get(_GOLD_URL, headers=_YAHOO_HDRS), 
+        client.get(_FOREX_URL, headers=_YAHOO_HDRS)
+    )
+    p24 = round((g.json()["chart"]["result"][0]["meta"]["regularMarketPrice"] * f.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]) / _G_PER_OZ, 2)
+    if not _accept(p24): raise ValueError(f"Price {p24} out of range")
+    _store(p24, "yahoo")
+    return p24
+
 async def _refresh_async():
     async with httpx.AsyncClient() as client:
+        # 1. Yahoo Finance (Real-time exact live market rate, no hallucination)
+        try:
+            await _fetch_via_yahoo(client)
+            return
+        except Exception as e:
+            logger.warning(f"Source yahoo failed: {e}")
+            
+        # 2. Groq (Fallback estimate)
         try:
             await _fetch_via_groq(client)
             return
         except Exception as e:
             logger.warning(f"Source groq failed: {e}")
+
     _cache["fetched_at"] = time.time() - _CACHE_TTL_S + 300
