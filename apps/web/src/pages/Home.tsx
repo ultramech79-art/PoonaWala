@@ -132,7 +132,7 @@ export function Home() {
             'px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest transition-all border',
             state.lang === 'en'
               ? 'bg-brand-600 text-white border-brand-600 shadow-md'
-              : 'bg-white/90 backdrop-blur-md text-stone-600 border-stone-100 hover:bg-white'
+              : 'bg-white/90 backdrop-blur-md text-stone-900 border-stone-100 hover:bg-white'
           )}
         >
           EN
@@ -143,7 +143,7 @@ export function Home() {
             'px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest transition-all border',
             state.lang === 'hi'
               ? 'bg-brand-600 text-white border-brand-600 shadow-md'
-              : 'bg-white/90 backdrop-blur-md text-stone-600 border-stone-100 hover:bg-white'
+              : 'bg-white/90 backdrop-blur-md text-stone-900 border-stone-100 hover:bg-white'
           )}
         >
           हिन्दी
