@@ -107,7 +107,7 @@
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2
            px-6 py-4 rounded-2xl font-display font-medium text-base
-           text-stone-700 bg-white border border-stone-200
+           text-brand-600 bg-white border border-stone-200
            transition-all duration-200 ease-out
            hover:bg-stone-50 hover:border-stone-300
            active:scale-[0.97] select-none;
