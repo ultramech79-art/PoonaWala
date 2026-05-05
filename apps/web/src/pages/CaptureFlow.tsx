@@ -532,8 +532,8 @@ export function CaptureFlow() {
                 <img src={step.demoUrl} className="w-full h-full object-cover" alt="Example demo" />
               )}
             </div>
-            <p className="mt-6 text-stone-900 font-semibold text-center">Reference: {STEP_LABELS[stepIdx]}</p>
-            <p className="mt-2 text-stone-500 text-xs text-center px-6">
+            <p className="mt-6 text-black font-semibold text-center">Reference: {STEP_LABELS[stepIdx]}</p>
+            <p className="mt-2 text-stone-700 text-xs text-center px-6">
               This is how your photo should look. Ensure the gold is clear and well-lit.
             </p>
             <div className="mt-8 flex gap-3 w-full px-2">
