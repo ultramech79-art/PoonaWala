@@ -5,7 +5,7 @@ import { useSessionStore } from '../store/session'
 import {
   Share2, RefreshCcw, ChevronRight, ChevronDown, ChevronUp,
   Info, Zap, UserCheck, Camera, AlertTriangle, CheckCircle,
-  TrendingUp, ArrowRight
+  TrendingUp, ArrowRight, Calculator
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -141,6 +141,7 @@ export function Result() {
   }
   const { state, reset } = useSessionStore()
   const [showXAI, setShowXAI] = useState(false)
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   const result = state.result
   if (!result) { navigate('/'); return null }
@@ -313,6 +314,57 @@ export function Result() {
               <p className="text-[10px] text-stone-400 font-mono break-all">
                 trace: {result.audit.trace_id}
               </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Detailed Breakdown accordion */}
+      <div className="mx-5 mb-4">
+        <button
+          id="result-breakdown-toggle"
+          onClick={() => setShowBreakdown(!showBreakdown)}
+          className="w-full card flex items-center justify-between p-4"
+        >
+          <div className="flex items-center gap-2">
+            <Calculator className="w-4 h-4 text-brand-500" />
+            <span className="text-sm font-medium text-stone-900">Detailed Calculation Breakdown</span>
+          </div>
+          {showBreakdown
+            ? <ChevronUp className="w-4 h-4 text-stone-400" />
+            : <ChevronDown className="w-4 h-4 text-stone-400" />
+          }
+        </button>
+
+        {showBreakdown && (
+          <div className="card mt-1 p-4 animate-slide-down space-y-3">
+            <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+              <span className="text-xs text-stone-500">Gross Weight</span>
+              <span className="text-sm font-medium">{result.weight.estimated_g.toFixed(2)} g</span>
+            </div>
+            <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+              <span className="text-xs text-stone-500">Estimated Stone Deduction</span>
+              <span className="text-sm font-medium text-red-500">- {(result.value_inr.stone_weight_excluded_g || 0).toFixed(2)} g</span>
+            </div>
+            <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+              <span className="text-xs text-stone-500">Net Gold Weight</span>
+              <span className="text-sm font-bold text-stone-900">{Math.max(result.weight.estimated_g - (result.value_inr.stone_weight_excluded_g || 0), result.weight.estimated_g * 0.94).toFixed(2)} g</span>
+            </div>
+            <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+              <span className="text-xs text-stone-500">Purity Assessed (AI)</span>
+              <span className="text-sm font-medium">{result.purity.point_estimate_karat}K ({(result.purity.point_estimate_karat / 24 * 100).toFixed(1)}%)</span>
+            </div>
+            <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+              <span className="text-xs text-stone-500">Market Value (IBJA)</span>
+              <span className="text-sm font-medium">~ {fmt(Math.round((result.value_inr.band_low + result.value_inr.band_high) / 2))}</span>
+            </div>
+            <div className="flex justify-between items-center pt-1">
+              <span className="text-xs text-stone-500">Max Loan Eligibility (75% LTV)</span>
+              <span className="text-sm font-bold text-brand-700">~ {fmt(Math.round((result.loan_offer.band_low_inr + result.loan_offer.band_high_inr) / 2))}</span>
+            </div>
+            <div className="mt-2 p-2 bg-stone-50 rounded-lg text-[10px] text-stone-400 leading-snug">
+              * Value = Live 24K Price × Net Weight × (Karat / 24) ± 7%<br/>
+              * LTV (Loan-To-Value) capped at 75% per RBI guidelines.
             </div>
           </div>
         )}
