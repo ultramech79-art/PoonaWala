@@ -178,7 +178,7 @@ export function CaptureFlow() {
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
-    setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle' } }))
+    setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle', dataUrl: undefined } }))
     setCaptured(prev => { const s = new Set(prev); s.delete(stepIdx); return s })
     setCameraKey(k => k + 1)
   }
