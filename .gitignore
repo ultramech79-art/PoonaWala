@@ -14,8 +14,9 @@ ml/models/*.pt
 .DS_Store
 dist/
 *.tsbuildinfo
-Claude.md
-prd.md
+# Markdown files (keep locally, not tracked in git)
+*.md
+!README.md
 
 # Local development files
 .claude/
