@@ -11,6 +11,7 @@ import { Result } from './pages/Result'
 import { Dashboard } from './pages/Dashboard'
 import { DashboardDetail } from './pages/DashboardDetail'
 import { FieldAgent } from './pages/FieldAgent'
+import { Confirmation } from './pages/Confirmation'
 import { useSessionStore } from './store/session'
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/session/:id" element={<DashboardDetail />} />
           <Route path="/agent" element={<FieldAgent />} />
+          <Route path="/confirmation" element={<Confirmation />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
