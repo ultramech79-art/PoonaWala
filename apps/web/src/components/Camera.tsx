@@ -249,6 +249,7 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
       side: '/assets/demo/side.jpg',
       '45deg': '/assets/demo/45deg.jpg',
       macro: '/assets/demo/macro.jpg',
+      selfie: '/assets/demo/selfie.jpg',
       video: '/assets/demo/video.mp4',
       audio: '/assets/demo/audio.mp3',
     }
