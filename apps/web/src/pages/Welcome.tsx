@@ -97,15 +97,13 @@ export function Welcome() {
       <MarketTicker />
 
       {/* Gold Chart */}
-      <div className="mx-5 mt-4 rounded-2xl overflow-hidden border border-stone-200 shadow-lg bg-stone-50" style={{ height: '200px' }}>
-        <iframe
-          src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_1&symbol=OANDA%3AXAUUSD&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=f5f5f4&studies=%5B%5D&theme=light&style=2&timezone=Etc%2FUTC&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%22header_widget%22%5D&locale=en&utm_source=localhost&utm_medium=widget&utm_campaign=chart&utm_term=OANDA%3AXAUUSD"
-          width="100%"
-          height="100%"
-          frameBorder="0"
-          allowTransparency={true}
-          scrolling="no"
-          style={{ pointerEvents: 'none' }}
+      <div className="mx-5 mt-4 rounded-2xl overflow-hidden border border-white/10 shadow-lg bg-white/5" style={{ height: '180px' }}>
+        <iframe 
+          scrolling="no" 
+          allowTransparency={true} 
+          frameBorder="0" 
+          src="https://s.tradingview.com/embed-widget/mini-symbol-overview/?locale=en&symbol=FX_IDC%3AXAUINRG&dateRange=12M&colorTheme=dark&isTransparent=true&trendLineColor=%23D4A017&underLineColor=rgba(212%2C%20160%2C%2023%2C%200.3)&underLineBottomColor=rgba(212%2C%20160%2C%2023%2C%200)" 
+          style={{ width: '100%', height: '100%' }}
         ></iframe>
       </div>
 
