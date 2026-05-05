@@ -155,6 +155,7 @@ export function Result() {
   // Recalculate value and loan with the latest live price on every render
   const livePrice24K = metalData?.metals.find(m => m.id === 'xau_24k')?.price ?? 0
   const livePrice22K = metalData?.metals.find(m => m.id === 'xau_22k')?.price ?? 0
+  const livePrice18K = metalData?.metals.find(m => m.id === 'xau_18k')?.price ?? 0
   const livePriceSrc = metalData?.source ?? 'cached'
   const hasLivePrice  = livePrice24K > 5000
 
@@ -285,6 +286,12 @@ export function Result() {
                     <div>
                       <p className="text-[10px] text-stone-400 leading-none mb-0.5">22K</p>
                       <p className="font-display font-black text-sm text-stone-900">₹{livePrice22K.toLocaleString('en-IN')}<span className="text-[10px] font-normal text-stone-400">/g</span></p>
+                    </div>
+                  )}
+                  {livePrice18K > 0 && (
+                    <div>
+                      <p className="text-[10px] text-stone-400 leading-none mb-0.5">18K</p>
+                      <p className="font-display font-black text-sm text-stone-900">₹{livePrice18K.toLocaleString('en-IN')}<span className="text-[10px] font-normal text-stone-400">/g</span></p>
                     </div>
                   )}
                   <span className={clsx(
@@ -491,10 +498,24 @@ export function Result() {
               <span className="text-sm font-medium">{result.purity.point_estimate_karat}K ({(result.purity.point_estimate_karat / 24 * 100).toFixed(1)}%)</span>
             </div>
             {hasLivePrice && (
-              <div className="flex justify-between items-center border-b border-stone-100 pb-2">
-                <span className="text-xs text-stone-500">Live 24K Rate (IBJA)</span>
-                <span className="text-sm font-medium text-emerald-700">₹{livePrice24K.toLocaleString('en-IN')}/g</span>
-              </div>
+              <>
+                <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+                  <span className="text-xs text-stone-500">Live 24K Rate (SerpAPI)</span>
+                  <span className="text-sm font-medium text-emerald-700">₹{livePrice24K.toLocaleString('en-IN')}/g</span>
+                </div>
+                {livePrice22K > 0 && (
+                  <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+                    <span className="text-xs text-stone-500">Live 22K Rate (SerpAPI)</span>
+                    <span className="text-sm font-medium text-emerald-700">₹{livePrice22K.toLocaleString('en-IN')}/g</span>
+                  </div>
+                )}
+                {livePrice18K > 0 && (
+                  <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+                    <span className="text-xs text-stone-500">Live 18K Rate (SerpAPI)</span>
+                    <span className="text-sm font-medium text-emerald-700">₹{livePrice18K.toLocaleString('en-IN')}/g</span>
+                  </div>
+                )}
+              </>
             )}
             <div className="flex justify-between items-center border-b border-stone-100 pb-2">
               <span className="text-xs text-stone-500">Market Value (IBJA)</span>

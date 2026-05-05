@@ -130,76 +130,113 @@ async def _fetch_via_yahoo(client: httpx.AsyncClient) -> float:
     return p24
 
 async def _fetch_via_search_api(client: httpx.AsyncClient) -> float:
-    if not _SERPAPI_KEY and not _TAVILY_API_KEY:
-        raise ValueError("No Search API key (SerpAPI/Tavily)")
+    if not _SERPAPI_KEY:
+        raise ValueError("No SerpAPI key")
+
+    # Target goodreturns.in gold rate page for structured India prices
+    params = {
+        "engine": "google",
+        "q": "gold rate today in india 22k 24k 18k per gram goodreturns",
+        "api_key": _SERPAPI_KEY,
+        "gl": "in",
+        "hl": "en",
+        "num": "5",
+    }
+    resp = await client.get("https://serpapi.com/search", params=params, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+
+    context_parts: list[str] = []
+
+    # Answer box (Google's direct answer panel)
+    if "answer_box" in data:
+        ab = data["answer_box"]
+        context_parts.append(str(ab))
+
+    # Organic snippets from top results
+    for r in data.get("organic_results", [])[:5]:
+        snippet = r.get("snippet", "")
+        title = r.get("title", "")
+        if snippet:
+            context_parts.append(f"{title}: {snippet}")
+
+    context = "\n".join(context_parts)
+    if not context:
+        raise ValueError("No content from SerpAPI")
+
+    # Parse prices directly from context with regex before falling back to Groq
+    p24, p22, p18 = 0.0, 0.0, 0.0
+    for label, var_name in [("24", "p24"), ("22", "p22"), ("18", "p18")]:
+        # Match patterns like "24K: ₹7,450" or "24 karat ... 7450" etc.
+        patterns = [
+            rf'{label}[Kk\s]*(?:karat|carat)?[^\d]{{0,20}}?[₹Rs\s]*([5-9][,\d]{{3,6}})',
+            rf'[₹Rs\s]*([5-9][,\d]{{3,6}})[^\d]{{0,20}}?{label}[Kk]',
+        ]
+        for pat in patterns:
+            m = re.search(pat, context)
+            if m:
+                val = float(m.group(1).replace(",", ""))
+                if label == "24": p24 = val
+                elif label == "22": p22 = val
+                elif label == "18": p18 = val
+                break
+
+    if _accept(p24):
+        _store(p24, "serp", p22, p18)
+        return p24
+
+    # Groq extraction fallback if regex didn't get 24K
     if not _GROQ_GOLD_KEY:
-        raise ValueError("No GROQ key for extraction")
+        raise ValueError(f"Regex parse failed and no Groq key. context: {context[:300]}")
 
-    query = "live 24k gold rate in india per gram inr today exact price"
-    context = ""
-    
-    # 1. Fetch search results
-    if _SERPAPI_KEY:
-        resp = await client.get(f"https://serpapi.com/search.json?q={query.replace(' ', '+')}&api_key={_SERPAPI_KEY}")
-        resp.raise_for_status()
-        data = resp.json()
-        snippets = [res.get("snippet", "") for res in data.get("organic_results", [])[:3]]
-        context = " ".join(snippets)
-    elif _TAVILY_API_KEY:
-        resp = await client.post("https://api.tavily.com/search", json={
-            "api_key": _TAVILY_API_KEY,
-            "query": query,
-            "search_depth": "basic"
-        })
-        resp.raise_for_status()
-        data = resp.json()
-        snippets = [res.get("content", "") for res in data.get("results", [])[:3]]
-        context = " ".join(snippets)
-
-    # 2. Extract with Groq
     payload = {
         "model": "llama-3.1-70b-versatile",
         "messages": [
-            {"role": "system", "content": "Extract the live 24K gold rate per gram in INR from the search snippets. Return ONLY valid JSON in this exact format: {\"24K\": 7400, \"22K\": 6800, \"18K\": 5800}. Do NOT return any text, just JSON."},
-            {"role": "user", "content": f"Search snippets:\n{context}\n\nExtract the price."}
+            {"role": "system", "content": (
+                "Extract today's gold rate in India per gram (INR) from the search snippets. "
+                "Return ONLY valid JSON: {\"24K\": <number>, \"22K\": <number>, \"18K\": <number>}. "
+                "Numbers must be plain integers (no commas, no currency symbol)."
+            )},
+            {"role": "user", "content": f"Snippets:\n{context[:1500]}\n\nExtract the prices."}
         ],
         "temperature": 0
     }
-    
-    resp = await client.post(
+    gres = await client.post(
         "https://api.groq.com/openai/v1/chat/completions",
         json=payload,
         headers={"Authorization": f"Bearer {_GROQ_GOLD_KEY}"},
         timeout=15
     )
-    resp.raise_for_status()
-    raw = resp.json()["choices"][0]["message"]["content"]
+    gres.raise_for_status()
+    raw = gres.json()["choices"][0]["message"]["content"]
     match = re.search(r'\{[^}]+\}', raw)
-    if not match: raise ValueError(f"No JSON in response: {raw}")
-    
+    if not match:
+        raise ValueError(f"No JSON in Groq response: {raw}")
     p = json.loads(match.group())
     p24, p22, p18 = float(p.get("24K", 0)), float(p.get("22K", 0)), float(p.get("18K", 0))
-    if not _accept(p24): raise ValueError(f"Price {p24} out of range")
+    if not _accept(p24):
+        raise ValueError(f"Price {p24} out of range")
     _store(p24, "serp", p22, p18)
     return p24
 
 async def _refresh_async():
     async with httpx.AsyncClient() as client:
-        # 1. Search API (SerpAPI/Tavily + Groq Extraction) - Primary per user request
-        try:
-            await _fetch_via_search_api(client)
-            return
-        except Exception as e:
-            logger.warning(f"Source search_api failed: {e}")
+        # 1. SerpAPI — Google Search for India gold rates (goodreturns.in)
+        if _SERPAPI_KEY:
+            try:
+                await _fetch_via_search_api(client)
+                return
+            except Exception as e:
+                logger.warning(f"Source serp failed: {e}")
 
-        # 2. Yahoo Finance (Real-time exact live market rate) - Fallback
+        # 2. Yahoo Finance — live GC=F futures × USDINR
         try:
             await _fetch_via_yahoo(client)
             return
         except Exception as e:
             logger.warning(f"Source yahoo failed: {e}")
-            
-        # 3. Groq (Fallback estimate)
+
+        # 3. Groq estimate — last resort
         try:
             await _fetch_via_groq(client)
             return
