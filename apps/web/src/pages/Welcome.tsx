@@ -49,13 +49,8 @@ export function Welcome() {
     <div className="page-dark animate-fade-in">
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 pt-6 pb-4">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gold-500 flex items-center justify-center">
-            <Eye className="w-5 h-5 text-ink-900" strokeWidth={2.5} />
-          </div>
-          <span className="font-display font-bold text-lg text-white tracking-tight">
-            Gold<span className="text-gradient-gold">Eye</span>
-          </span>
+        <div className="flex items-center gap-2.5 bg-white py-2 px-3 rounded-xl shadow-lg">
+          <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" className="h-6 object-contain" />
         </div>
         <button
           id="change-language"
@@ -100,6 +95,19 @@ export function Welcome() {
 
       {/* Live Market Ticker */}
       <MarketTicker />
+
+      {/* Gold Chart */}
+      <div className="mx-5 mt-4 rounded-2xl overflow-hidden border border-white/10 shadow-lg" style={{ height: '200px' }}>
+        <iframe 
+          src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_1&symbol=OANDA%3AXAUUSD&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=1c315e&studies=%5B%5D&theme=dark&style=2&timezone=Etc%2FUTC&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%22header_widget%22%5D&locale=en&utm_source=localhost&utm_medium=widget&utm_campaign=chart&utm_term=OANDA%3AXAUUSD" 
+          width="100%" 
+          height="100%" 
+          frameBorder="0" 
+          allowTransparency={true} 
+          scrolling="no"
+          style={{ pointerEvents: 'none' }}
+        ></iframe>
+      </div>
 
 
       {/* Spacer */}

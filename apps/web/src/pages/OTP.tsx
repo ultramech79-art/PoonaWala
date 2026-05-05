@@ -169,13 +169,13 @@ export function OTP() {
           </div>
           <h1 className="font-display font-bold text-2xl text-stone-900 text-center mb-1.5">
             {step === 'name' && "What should we call you?"}
-            {step === 'phone' && t('otp_heading')}
+            {step === 'phone' && "Enter your number"}
             {step === 'otp' && 'Verify OTP'}
             {step === 'verified' && 'Verified!'}
           </h1>
           <p className="text-sm text-stone-500 text-center">
             {step === 'name' && "We'll personalise your experience"}
-            {step === 'phone' && t('otp_body')}
+            {step === 'phone' && "You will receive an OTP (for hackathon judges: implemented and working)"}
             {step === 'otp' && `Enter the 6-digit code sent to +91 ${phone}`}
             {step === 'verified' && `+91 ${phone} confirmed`}
           </p>

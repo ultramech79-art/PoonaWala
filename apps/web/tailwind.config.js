@@ -8,16 +8,16 @@ export default {
     extend: {
       colors: {
         brand: {
-          50:  '#F0EEFF',
-          100: '#E0DDFF',
-          200: '#C5BFFF',
-          300: '#A395FF',
-          400: '#7D6BFB',
-          500: '#5B47FA',
-          600: '#4633E8',
-          700: '#3520C4',
-          800: '#2410A0',
-          900: '#140780',
+          50:  '#E6EBFA',
+          100: '#CDD6F5',
+          200: '#9AAEEA',
+          300: '#6886DF',
+          400: '#355ED5',
+          500: '#1C315E', // Poonawalla Navy
+          600: '#16274B',
+          700: '#101D38',
+          800: '#0B1425',
+          900: '#050A13',
         },
         gold: {
           50:  '#FFF9E6',
@@ -92,7 +92,7 @@ export default {
 
       backgroundImage: {
         'gold-gradient':     'linear-gradient(135deg, #D4A017 0%, #F5C030 50%, #D4A017 100%)',
-        'brand-gradient':    'linear-gradient(135deg, #5B47FA 0%, #7D6BFB 100%)',
+        'brand-gradient':    'linear-gradient(135deg, #1C315E 0%, #2C4685 100%)',
         'dark-gradient':     'linear-gradient(180deg, #0C0B18 0%, #07060F 100%)',
         'shimmer-gradient':  'linear-gradient(90deg, transparent 0%, rgba(212,160,23,0.12) 50%, transparent 100%)',
       },

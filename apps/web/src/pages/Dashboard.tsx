@@ -207,11 +207,8 @@ export function Dashboard() {
         <button className="btn-icon">
           <Menu className="w-5 h-5 text-stone-600" />
         </button>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-ink-900 flex items-center justify-center">
-            <Eye className="w-4 h-4 text-gold-400" strokeWidth={2} />
-          </div>
-          <span className="font-display font-bold text-base text-stone-900 tracking-tight">GoldEye</span>
+        <div className="flex items-center gap-2 bg-white py-1.5 px-3 rounded-lg shadow-sm border border-stone-200">
+          <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" className="h-5 object-contain" />
         </div>
         <button className="btn-icon relative">
           <Bell className="w-5 h-5 text-stone-600" />

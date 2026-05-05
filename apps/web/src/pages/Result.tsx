@@ -159,7 +159,7 @@ export function Result() {
         <span className="font-display font-semibold text-sm text-stone-700">Assessment Result</span>
         <button
           id="result-share"
-          onClick={() => navigator.share?.({ title: 'GoldEye Result', text: 'My gold loan pre-qualification' })}
+          onClick={() => navigator.share?.({ title: 'Poonawalla Result', text: 'My gold loan pre-qualification' })}
           className="btn-icon"
         >
           <Share2 className="w-4 h-4 text-stone-500" />

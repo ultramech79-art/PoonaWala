@@ -261,7 +261,7 @@ export function CaptureFlow() {
             <Loader2 className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-brand-300">Analysing image…</p>
-              <p className="text-xs text-brand-300/60 mt-0.5">GoldEye AI is checking quality</p>
+              <p className="text-xs text-brand-300/60 mt-0.5">Poonawalla AI is checking quality</p>
             </div>
           </div>
         )}
