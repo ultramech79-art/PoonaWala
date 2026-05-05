@@ -23,7 +23,8 @@ from app.routes.assess import router as assess_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.frame_eval import router as frame_eval_router
 from app.routes.otp import router as otp_router
-from app.decision.ibja import price_metadata, current_price_24k, _refresh_async
+from app.routes.prices import router as prices_router
+from app.decision.ibja import price_metadata, _refresh_async
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("goldeye")
@@ -92,6 +93,7 @@ app.include_router(assess_router, prefix="/api", tags=["Assessment"])
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(frame_eval_router, tags=["FrameEval"])
 app.include_router(otp_router, tags=["OTP"])
+app.include_router(prices_router, prefix="/api", tags=["Assessment"])
 
 
 @app.get("/health", tags=["Infra"])
@@ -101,7 +103,7 @@ async def health():
         "status": "ok",
         "service": "goldeye-api",
         "version": "0.1.0",
-        "ibja_price_per_g_24k": ibja["price_24k_per_g"],
+        "ibja_price_per_g_24k": ibja["prices"]["24K"],
         "ibja_source": ibja["source"],
         "ibja_age_s": ibja["age_s"],
     }
@@ -110,7 +112,6 @@ async def health():
 @app.get("/api/price", tags=["Assessment"])
 async def gold_price():
     """Current IBJA gold price used in assessments. Cached; refreshes hourly."""
-    current_price_24k()   # trigger refresh if cache is stale
     return price_metadata()
 
 

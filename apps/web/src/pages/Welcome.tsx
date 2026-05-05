@@ -12,7 +12,7 @@ function MarketTicker() {
     <div className="mx-5 h-11 rounded-xl bg-stone-200 animate-pulse" />
   )
 
-  const displayMetals = data.metals.filter(m => ['xau_24k', 'xag', 'xpt'].includes(m.id))
+  const displayMetals = data.metals.filter(m => ['xau_24k', 'xau_22k', 'xau_18k'].includes(m.id))
 
   return (
     <div className="mx-5 overflow-hidden rounded-2xl bg-gradient-to-r from-brand-50 via-brand-50/80 to-brand-50 border border-brand-200 py-3 shadow-sm relative">
