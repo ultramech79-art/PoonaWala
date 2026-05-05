@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSessionStore } from '../store/session'
@@ -76,11 +76,12 @@ function SHAPBar({ feature, contribution }: { feature: string; contribution: num
     huid_verified: t('signal_huid'),
     plated_solid_score: t('signal_plated_solid'),
     weight_consistency: t('signal_weight'),
-    audio_solid_prob: t('signal_audio'),
     hallmark_quality: t('signal_hallmark'),
     plated_probability: t('signal_plated_prob'),
     vlm_confidence: t('signal_vlm'),
   }
+  // hide audio/video signals from the result page
+  if (feature === 'audio_solid_prob' || feature === 'video_signal') return null
   return (
     <div className="flex items-center gap-3 py-1.5">
       <p className="text-xs text-stone-500 w-28 flex-shrink-0">{labels[feature] || feature}</p>
@@ -145,6 +146,19 @@ export function Result() {
   const [showXAI, setShowXAI] = useState(false)
   const [showBreakdown, setShowBreakdown] = useState(false)
   const { data: metalData } = useMetalPrices()
+
+  // Flash the IBJA badge for 1s each time prices refresh
+  const [pricePulse, setPricePulse] = useState(false)
+  const prevFetchedAt = useRef<number>(0)
+  useEffect(() => {
+    const ts = metalData?.fetchedAt ?? 0
+    if (ts && ts !== prevFetchedAt.current) {
+      prevFetchedAt.current = ts
+      setPricePulse(true)
+      const t = setTimeout(() => setPricePulse(false), 1000)
+      return () => clearTimeout(t)
+    }
+  }, [metalData?.fetchedAt])
 
   const result = state.result
   if (!result) { navigate('/'); return null }
@@ -312,8 +326,10 @@ export function Result() {
                     </div>
                   )}
                   <span className={clsx(
-                    'text-[9px] font-bold px-1.5 py-0.5 rounded-full',
-                    livePriceSrc === 'live' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'
+                    'text-[9px] font-bold px-1.5 py-0.5 rounded-full transition-all duration-300',
+                    pricePulse
+                      ? 'bg-emerald-500 text-white scale-110'
+                      : livePriceSrc === 'live' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'
                   )}>
                     {livePriceSrc === 'live' ? '● IBJA' : 'CACHED'}
                   </span>
@@ -401,7 +417,11 @@ export function Result() {
       )}
 
       {/* Photo Analysis Section */}
-      {!isFail && state.captures && Object.keys(state.captures).length > 0 && (
+      {!isFail && state.captures && (() => {
+        const photoCaptures = Object.entries(state.captures).filter(
+          ([type, capture]) => capture?.dataUrl && type !== 'video' && type !== 'audio'
+        )
+        return photoCaptures.length > 0 ? (
         <div className="mx-5 mb-4">
           <div className="card p-4">
             <p className="label mb-3 flex items-center gap-2">
@@ -409,26 +429,24 @@ export function Result() {
               Captured Photos Analysis
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {Object.entries(state.captures).map(([type, capture]) => (
-                capture?.dataUrl && type !== 'video' && type !== 'audio' && (
+              {photoCaptures.map(([type, capture]) => (
                   <div key={type} className="rounded-lg overflow-hidden border border-stone-200 aspect-square bg-stone-100 relative group">
-                    <img src={capture.dataUrl} alt={type} className="w-full h-full object-cover" />
-                    {/* Grad-CAM Focus Overlay */}
+                    <img src={capture!.dataUrl} alt={type} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-amber-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 mix-blend-screen" />
-                    <div className="absolute inset-0 bg-radial-gradient pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{
+                    <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{
                       background: 'radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.4) 0%, rgba(245, 158, 11, 0.2) 30%, transparent 70%)'
                     }} />
                     <p className="text-[10px] text-stone-500 mt-1 text-center capitalize">{type}</p>
                   </div>
-                )
               ))}
             </div>
             <p className="text-[10px] text-stone-400 mt-3 leading-relaxed">
-              All captured images were analyzed using AI Grad-CAM (hover to see focus areas). <span className="text-rose-500 font-semibold">Red zones</span> show where AI detected hallmark clarity, purity marks, and authenticity signals on the gold.
+              Analyzed using AI Grad-CAM (hover to see focus areas). <span className="text-rose-500 font-semibold">Red zones</span> show where AI detected hallmark clarity, purity marks, and authenticity signals.
             </p>
           </div>
         </div>
-      )}
+        ) : null
+      })()}
 
       {/* XAI accordion */}
       <div className="mx-5 mb-4">
