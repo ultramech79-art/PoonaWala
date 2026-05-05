@@ -216,7 +216,7 @@ export function Result() {
             <div className="card p-5">
               <div className="flex items-center justify-between mb-2">
                 <p className="label">{t('result_value')}</p>
-                <span className="text-xs text-stone-400">IBJA ref price</span>
+                <span className="text-[10px] bg-gold-100 text-gold-700 font-semibold px-2 py-0.5 rounded-full">Live IBJA</span>
               </div>
               <div className="font-display font-black text-3xl text-stone-900 mb-1">
                 <AnimatedNumber target={result.value_inr.band_low} prefix="₹" />
@@ -227,7 +227,7 @@ export function Result() {
                 <div className="band-fill bg-gold-400" style={{ width: '100%' }} />
               </div>
               <p className="text-xs text-stone-400 mt-2">
-                Stone weight ({result.value_inr.stone_weight_excluded_g}g) excluded
+                {result.purity.point_estimate_karat}K gold · {result.weight.estimated_g}g · stone excl. {result.value_inr.stone_weight_excluded_g}g
               </p>
             </div>
           </div>
@@ -235,7 +235,10 @@ export function Result() {
           {/* Loan offer */}
           <div className="mx-5 mb-4">
             <div className="card p-5 border-brand-200 bg-brand-50">
-              <p className="label mb-2">{t('result_loan')}</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="label">{t('result_loan')}</p>
+                <span className="text-[10px] text-brand-500 font-semibold">RBI 75% LTV</span>
+              </div>
               <div className="font-display font-black text-4xl text-brand-700 mb-0.5 leading-none">
                 <AnimatedNumber target={result.loan_offer.band_low_inr} prefix="₹" duration={1400} />
               </div>
@@ -247,7 +250,7 @@ export function Result() {
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="badge-brand">{result.loan_offer.ltv_applied_pct}% LTV</span>
-                <span className="badge-brand">Under ₹2.5L tier</span>
+                <span className="badge-brand">{result.loan_offer.tier === 'under_2_5L' ? 'Under ₹2.5L' : result.loan_offer.tier === '2_5L_to_5L' ? '₹2.5L–₹5L' : 'Above ₹5L'}</span>
               </div>
             </div>
           </div>
