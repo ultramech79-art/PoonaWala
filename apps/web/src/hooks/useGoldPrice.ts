@@ -139,22 +139,22 @@ export function useMetalPrices() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Always fetch fresh data on component mount
-    setLoading(true)
-    fetchMetalPrices()
-      .then(d => {
+    const fetchAndUpdate = async () => {
+      try {
+        const d = await fetchMetalPrices()
         writeCache(d)
         setData(d)
         setError(null)
-      })
-      .catch(err => {
+        if (loading) setLoading(false)
+      } catch (err) {
         console.error('[MetalPrices]', err)
-        setError(err.message)
+        setError((err as Error).message)
 
         // Try to use cached data as fallback
         const cached = readCache()
         if (cached) {
           setData(cached)
+          if (loading) setLoading(false)
           return
         }
 
@@ -170,9 +170,19 @@ export function useMetalPrices() {
           source: 'fallback'
         }
         setData(fallback)
-      })
-      .finally(() => setLoading(false))
-  }, [])
+        if (loading) setLoading(false)
+      }
+    }
+
+    // Fetch immediately on mount
+    fetchAndUpdate()
+
+    // Set up interval to fetch every 1 second for real-time updates
+    const interval = setInterval(fetchAndUpdate, 1000)
+
+    // Cleanup interval on unmount
+    return () => clearInterval(interval)
+  }, [loading])
 
   return { data, loading, error }
 }
