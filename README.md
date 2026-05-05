@@ -427,20 +427,20 @@ goldeye/
 ## Build Status
 
 | Phase | Description | Status |
-|---|---|---|
-| 0 | Camera path — getUserMedia, iOS Safari, PWA manifest | Done |
-| 1 | 7-step capture wizard, session store, DPDP consent | Done |
-| 2 | Core ML signals — local vision, OpenCV coin, FFT audio | Done |
-| 3 | LightGBM fusion, MAPIE calibration, 4-layer XAI | Done |
-| 4 | IBJA live price, RBI LTV rules, decision routing, demo QR | Done |
-| 5 | S3 color purity, S4 reflectance, S9 pHash fraud defense, S12 fraud graph | Done |
-| 6 | ConvNeXt-V2, Audio CNN ONNX, LightGBM + Optuna HPO training | Done |
-| 7 | Persistent fraud graph, 10k pHash index from Tanishq/CaratLane/Bansali | Done |
-| 8 | Rate limiting, idempotency, DPDP delete, Prometheus metrics | Done |
-| 9 | NBFC risk officer dashboard, field agent ground-truth, active learning | Done |
-| 10 | OTP via 2Factor.in, coin reference, IBJA-aware frame feedback | Done |
-| 11 | MediaPipe liveness, adversarial pen-test harness | Planned |
-| 12 | Production deploy, Evidently AI drift monitoring, NBFC pilot (5 branches) | Planned |
+|:---:|---|:---:|
+| 0 | Camera path — getUserMedia, iOS Safari compatibility, PWA manifest | ✅ |
+| 1 | 7-step capture wizard, session store, DPDP consent flow | ✅ |
+| 2 | Core ML signals — local vision model, OpenCV coin detection, FFT audio | ✅ |
+| 3 | LightGBM fusion, MAPIE conformal calibration, 4-layer XAI (SHAP, Grad-CAM, counterfactual) | ✅ |
+| 4 | IBJA live price feed, RBI LTV rules, decision routing engine, demo QR overlay | ✅ |
+| 5 | S3 color purity, S4 specular reflectance, S9 pHash fraud defense, S12 fraud graph | ✅ |
+| 6 | ConvNeXt-V2, Audio CNN ONNX, LightGBM with Optuna HPO — full training scaffolds | ✅ |
+| 7 | Persistent fraud graph (SQLAlchemy), 10k pHash index from Tanishq / CaratLane / Bansali | ✅ |
+| 8 | Rate limiting (slowapi), strict validation, idempotency keys, DPDP delete, Prometheus metrics | ✅ |
+| 9 | NBFC risk officer dashboard, field agent ground-truth flow, active learning hook | ✅ |
+| 10 | OTP via 2Factor.in, optional coin reference, IBJA price-aware frame feedback | ✅ |
+| 11 | MediaPipe liveness detection, adversarial pen-test harness | 🔲 |
+| 12 | Production deploy, Evidently AI drift monitoring, NBFC pilot with 5 branches | 🔲 |
 
 ---
 
