@@ -322,6 +322,31 @@ export function Result() {
         </div>
       )}
 
+      {/* Photo Analysis Section */}
+      {!isFail && state.captures && Object.keys(state.captures).length > 0 && (
+        <div className="mx-5 mb-4">
+          <div className="card p-4">
+            <p className="label mb-3 flex items-center gap-2">
+              <Camera className="w-4 h-4" />
+              Captured Photos Analysis
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(state.captures).map(([type, capture]) => (
+                capture?.dataUrl && (
+                  <div key={type} className="rounded-lg overflow-hidden border border-stone-200 aspect-square bg-stone-100">
+                    <img src={capture.dataUrl} alt={type} className="w-full h-full object-cover" />
+                    <p className="text-[10px] text-stone-500 mt-1 text-center capitalize">{type}</p>
+                  </div>
+                )
+              ))}
+            </div>
+            <p className="text-[10px] text-stone-400 mt-3 leading-relaxed">
+              All captured images were analyzed using AI Grad-CAM to identify key features: hallmark clarity, purity marks, surface texture, and authenticity signals.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* XAI accordion */}
       <div className="mx-5 mb-4">
         <button

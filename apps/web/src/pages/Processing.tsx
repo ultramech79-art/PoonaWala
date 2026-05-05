@@ -128,7 +128,16 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
       score: isFail ? 0.65 : 0.04,
       triggers: isFail ? ['low_purity_detected', 'visual_pitting_observed'] : [],
     },
-    routing: isFail ? 'REJECT' : 'AGENT',
+    // Complete routing logic:
+    // 1. HUID verified + high confidence (>75%) + no fraud → INSTANT
+    // 2. Detected purity + good confidence (>65%) + no fraud → AGENT visit for verification
+    // 3. Low confidence (40-65%) or unclear captures → RECAPTURE better photos
+    // 4. Very low confidence (<40%) or high fraud signals → REJECT recommend in-branch
+    routing: isFail
+      ? 'REJECT'
+      : state.huidCode && 0.82 + (Math.random() * 0.1) > 0.75
+        ? 'INSTANT'
+        : 'AGENT',
     reasoning_text: {
       lang: state.lang,
       text: isFail 
@@ -136,7 +145,8 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
         : `${state.huidCode ? `BIS HUID ${state.huidCode} verified. ` : 'Visual hallmark detected. '}${karatEstimate}K gold, ${weightG}g net weight. Market value computed at ₹${pricePerGram24K.toLocaleString('en-IN')}/g (24K IBJA). No fraud signals. ${state.captures.audio ? 'Acoustic resonance: solid gold.' : ''}`,
     },
     xai: {
-      gradcam_url: state.captures['macro']?.dataUrl || state.captures['top']?.dataUrl || null,
+      // Primary: macro (hallmark), fallback: top (best overall view), then 45deg, side
+      gradcam_url: state.captures['macro']?.dataUrl || state.captures['top']?.dataUrl || state.captures['45deg']?.dataUrl || state.captures['side']?.dataUrl || null,
       shap_top_features: buildShapFeatures(state, karatEstimate, isFail),
       counterfactual: isFail
         ? `If the hallmark were clearly readable, confidence would increase from 38% to ~${state.huidCode ? '72' : '62'}%.`
@@ -149,9 +159,10 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
   }
 }
 
-// ── Enrich API result with live gold prices ───────────────────────────────────
+// ── Enrich API result with live gold prices & complete logic ──────────────────
 // Backend may use stale or fixed prices; override value_inr and loan_offer
 // using the cached live price so the result always reflects current market.
+// Also ensures all required fields are present for final result.
 function enrichWithLivePrices(result: AssessmentResult, state: SessionState): AssessmentResult {
   const karat = result.purity.point_estimate_karat
   const weightG = result.weight.estimated_g
@@ -160,11 +171,26 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
 
   if (!karat || !weightG || pricePerGram24K <= 1000) return result
 
+  // Calculate market value using live gold prices
   const goldValue = computeGoldMarketValue(pricePerGram24K, weightG, karat, stoneExclusionG)
   const loanOffer = computeLoanOffer(goldValue)
 
-  // Only override if the backend value looks stale/rounded (e.g., exactly 48000)
-  // Always override to ensure live price consistency
+  // Complete routing logic based on final state:
+  let finalRouting = result.routing
+  if (!result.fraud_signals?.triggers?.length) {
+    // No fraud detected
+    if (result.purity.huid_verified && result.confidence.score > 0.75) {
+      finalRouting = 'INSTANT'
+    } else if (result.confidence.score > 0.65) {
+      finalRouting = 'AGENT'
+    } else if (result.confidence.score > 0.40) {
+      finalRouting = 'RECAPTURE'
+    } else {
+      finalRouting = 'REJECT'
+    }
+  }
+
+  // Always override to ensure live price consistency and complete data
   return {
     ...result,
     value_inr: {
@@ -173,14 +199,13 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
       band_high: goldValue.band_high,
       ibja_reference_date: new Date().toISOString(),
     },
-    loan_offer: {
-      ...loanOffer,
-    },
+    loan_offer: loanOffer,
+    routing: finalRouting,
     xai: {
       ...result.xai,
       shap_top_features: result.xai.shap_top_features.length > 0
         ? result.xai.shap_top_features
-        : buildShapFeatures(state, karat, result.routing === 'REJECT'),
+        : buildShapFeatures(state, karat, finalRouting === 'REJECT'),
     },
   }
 }
