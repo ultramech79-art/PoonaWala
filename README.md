@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=700&size=36&pause=1000&color=FFD700&background=00000000&center=true&vCenter=true&width=700&lines=GoldEye+%F0%9F%94%8D;AI+Gold+Loan+Pre-Qualification;Zero+Branch+Visit+Required;The+Future+of+Lending+is+Here" alt="GoldEye Typing SVG" />
+<img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=700&size=32&pause=1000&color=FFD700&background=00000000&center=true&vCenter=true&width=900&lines=GoldEye+%F0%9F%94%8D;AI+Gold+Loan+Pre-Qualification;Zero+Branch+Visit+Required;The+Future+of+Lending+is+Here" alt="GoldEye Typing SVG" />
 
 <br/>
 
-[![Live App](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20App-goldeye--poona.vercel.app-FFD700?style=for-the-badge&labelColor=1a1a1a)](https://poona-wala.vercel.app)
+[![Live App](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20App-poona--wala.vercel.app-FFD700?style=for-the-badge&labelColor=1a1a1a)](https://poona-wala.vercel.app)
 &nbsp;
 [![API](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F%20Backend%20API-poonawala.onrender.com-46E3B7?style=for-the-badge&labelColor=1a1a1a)](https://poonawala.onrender.com/health)
 
