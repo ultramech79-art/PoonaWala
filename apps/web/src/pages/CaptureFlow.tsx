@@ -210,7 +210,8 @@ export function CaptureFlow() {
 
   const skip = () => { if (step.optional) { speak(t('speak_skip')); next() } }
 
-  const canProceed = evalState === 'approved' || step.optional
+  const hasManualHuidOverride = step.type === 'macro' && !!manualHuid
+  const canProceed = evalState === 'approved' || step.optional || (evalState === 'rejected' && hasManualHuidOverride)
 
   return (
     <div className="page-dark animate-fade-in overflow-y-auto">
@@ -414,23 +415,30 @@ export function CaptureFlow() {
 
       {/* Bottom actions */}
       <div className="px-5 pb-6 pt-3 border-t border-white/10 space-y-2 sticky bottom-0 bg-ink-900">
-        {evalState === 'rejected' ? (
+        {evalState === 'rejected' && !hasManualHuidOverride ? (
           <button onClick={handleRetake} className="w-full btn-primary">
             <RotateCcw className="w-5 h-5" />
             Retake Photo
           </button>
         ) : (
-          <button
-            id={`capture-next-${step.type}`}
-            onClick={next}
-            disabled={!canProceed || evalState === 'evaluating'}
-            className={clsx('w-full', (canProceed && evalState !== 'evaluating') ? 'btn-primary' : 'btn-ghost-dark opacity-40 cursor-not-allowed')}
-          >
-            {evalState === 'evaluating' ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Analysing…</>
-            ) : stepIdx === STEPS.length - 1 ? 'Continue' : t('capture_accept')}
-            {evalState !== 'evaluating' && <ChevronRight className="w-5 h-5" />}
-          </button>
+          <>
+            <button
+              id={`capture-next-${step.type}`}
+              onClick={next}
+              disabled={!canProceed || evalState === 'evaluating'}
+              className={clsx('w-full', (canProceed && evalState !== 'evaluating') ? 'btn-primary' : 'btn-ghost-dark opacity-40 cursor-not-allowed')}
+            >
+              {evalState === 'evaluating' ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Analysing…</>
+              ) : stepIdx === STEPS.length - 1 ? 'Continue' : t('capture_accept')}
+              {evalState !== 'evaluating' && <ChevronRight className="w-5 h-5" />}
+            </button>
+            {evalState === 'rejected' && hasManualHuidOverride && (
+              <button onClick={handleRetake} className="btn-ghost-dark w-full text-sm mt-2">
+                <RotateCcw className="w-4 h-4 mr-2 inline" /> Retake Photo Instead
+              </button>
+            )}
+          </>
         )}
         {step.optional && evalState !== 'evaluating' && (
           <button id={`capture-skip-${step.type}`} onClick={skip} className="btn-ghost-dark w-full text-sm">
