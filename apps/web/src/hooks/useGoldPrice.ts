@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 const API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const TROY_OZ_TO_GRAMS = 31.1035
 const CACHE_KEY = 'goldeye_metal_prices_v2'
-const CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes
+const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes for more frequent updates
 
 export interface MetalPriceData {
   id: string

@@ -17,6 +17,13 @@
   "welcome_stat3_val": "90%",
   "welcome_stat3_label": "विश्वास की गारंटी",
 
+  "welcome_ai_powered": "AI द्वारा संचालित आकलन",
+  "welcome_hero_title": "तुरंत लोन पात्रता के लिए सोने का आकलन",
+  "welcome_hero_subtitle": "तेज, सुरक्षित और विश्वसनीय",
+  "lang_button": "भाषा",
+  "market_overview": "बाजार अवलोकन",
+  "market_overview_desc": "लाइव सोने की कीमतें और रुझान",
+
   "consent_heading": "आपकी गोपनीयता महत्वपूर्ण है",
   "consent_body": "हम आपके आभूषण की फोटो और एक छोटा वीडियो लेंगे। आपका डेटा भारत में रहेगा, एन्क्रिप्टेड होगा, और {{days}} दिनों बाद हटा दिया जाएगा।",
   "consent_data_list": [

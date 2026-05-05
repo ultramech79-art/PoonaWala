@@ -17,6 +17,13 @@
   "welcome_stat3_val": "90%",
   "welcome_stat3_label": "confidence guarantee",
 
+  "welcome_ai_powered": "AI-Powered Assessment",
+  "welcome_hero_title": "Gold Assessment for Instant Loan Eligibility",
+  "welcome_hero_subtitle": "Fast, Secure & Trusted",
+  "lang_button": "Language",
+  "market_overview": "Market Overview",
+  "market_overview_desc": "Live gold prices and trends",
+
   "consent_heading": "Your Privacy Matters",
   "consent_body": "We will capture photos and a short video of your jewelry to estimate its loan value. Your data stays in India, is encrypted, and will be deleted after {{days}} days.",
   "consent_data_list": [
