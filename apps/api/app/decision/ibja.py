@@ -21,7 +21,7 @@ _GROQ_GOLD_KEY = os.getenv("GROQ_API_KEY", os.getenv("GROQ_API_KEY_2", ""))
 _G_PER_OZ = 31.1035
 _MIN_24K = 5_000.0
 _MAX_24K = 18_000.0
-_CACHE_TTL_S = 3600
+_CACHE_TTL_S = 10 # 10 seconds for live market updates
 
 _cache: dict = {
     "24K": 0.0,

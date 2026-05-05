@@ -3,7 +3,7 @@ import { apiBase } from '../lib/api'
 
 const TROY_OZ_TO_GRAMS = 31.1035
 const CACHE_KEY = 'goldeye_metal_prices_v2'
-const CACHE_TTL_MS = 30 * 60 * 1000 // 30 mins
+const CACHE_TTL_MS = 10 * 1000 // 10 seconds for live updates
 
 export interface MetalPriceData {
   id: string
@@ -110,7 +110,8 @@ export function useMetalPrices() {
     }
 
     fetchAll()
-    const interval = setInterval(fetchAll, 60000)
+    // Poll every 10 seconds for live updates
+    const interval = setInterval(fetchAll, 10000)
     return () => { mounted = false; clearInterval(interval) }
   }, [])
 
