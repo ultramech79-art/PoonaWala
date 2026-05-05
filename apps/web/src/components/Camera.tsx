@@ -324,6 +324,9 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
       setCapturedUrl(capturedDataUrl)
       setStatus('done')
       stopCamera()
+    } else {
+      setCapturedUrl(null)
+      setStatus('idle')
     }
   }, [capturedDataUrl, stopCamera])
 
