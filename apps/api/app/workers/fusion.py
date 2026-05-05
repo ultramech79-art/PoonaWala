@@ -40,8 +40,9 @@ FEATURE_COLUMNS = [
     "graph_anomaly_score",
 ]
 
-# Fallback price used only when IBJA fetch fails in assess.py (live price overrides this)
-GOLD_24K_PER_G = 7200.0
+# Fallback price used only when IBJA fetch fails in assess.py (live price overrides this).
+# ₹9,000/g ≈ XAU $3,300/oz at USD/INR 85 — realistic estimate for 2025-26.
+GOLD_24K_PER_G = 9_000.0
 
 _lgbm_model = None
 _mapie_model = None

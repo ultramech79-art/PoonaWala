@@ -4,101 +4,85 @@ import { useTranslation } from 'react-i18next'
 import { useSessionStore, type AssessmentResult, type SessionState } from '../store/session'
 import { assessAPI } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
+import { metalpriceapiToInrPerGram, computeGoldMarketValue, computeLoanOffer } from '../lib/goldCalc'
 import { CheckCircle, Lock } from 'lucide-react'
 
-// ── Real-time gold price from metalpriceapi (always live, no mock fallback) ────
+const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
+const CACHE_KEY = 'goldeye_metal_prices_v2'
+
+// ── Real-time gold price — 4-source fallback chain ────────────────────────────
 async function fetchLiveGoldPrice(): Promise<number> {
+  // Source 1: Metalpriceapi (base=USD, so rates.XAU = troy oz per dollar)
   try {
-    const API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
-    const TROY_OZ_TO_GRAMS = 31.1035
-
-    const response = await fetch(
-      `https://api.metalpriceapi.com/v1/latest?api_key=${API_KEY}&base=USD&currencies=XAU,XAG,XPT,INR`
+    const res = await fetch(
+      `https://api.metalpriceapi.com/v1/latest?api_key=${METALS_API_KEY}&base=USD&currencies=XAU,INR`
     )
-
-    if (!response.ok) throw new Error('API request failed')
-
-    const data = await response.json()
-
-    // Gold price: get USD rate, convert to grams, then to INR
-    const xauRate = data.rates?.XAU
-    const inrRate = data.rates?.INR
-
-    if (!xauRate || !inrRate) throw new Error('Missing rate data')
-
-    // 1 troy oz to grams, USD to INR
-    const pricePerGram24K = (xauRate * inrRate) / TROY_OZ_TO_GRAMS
-
-    // Cache for 15 minutes
-    try {
-      localStorage.setItem('goldeye_metal_prices_v2', JSON.stringify({
-        data: {
-          metals: [{ id: 'xau_24k', price: pricePerGram24K }],
-          fetchedAt: Date.now(),
-          source: 'live'
-        },
-        expiresAt: Date.now() + 15 * 60 * 1000
-      }))
-    } catch (e) {
-      // Ignore localStorage errors
-    }
-
-    return Math.round(pricePerGram24K)
-  } catch (error) {
-    console.warn('[Gold Price] Live fetch failed, trying cache...', error)
-
-    // Fallback to cache only (no mock value)
-    try {
-      const raw = localStorage.getItem('goldeye_metal_prices_v2')
-      if (raw) {
-        const entry = JSON.parse(raw)
-        const metals = entry.data?.metals as Array<{ id: string; price: number }> | undefined
-        const g24 = metals?.find(m => m.id === 'xau_24k')
-        if (g24?.price && g24.price > 1000) return g24.price
-      }
-    } catch {}
-
-    // If cache fails, throw error instead of returning mock
-    throw new Error('Unable to fetch live gold prices - no cached data available')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const xauRate = data.rates?.XAU   // troy oz per 1 USD
+    const inrRate = data.rates?.INR   // INR per 1 USD
+    if (!xauRate || !inrRate) throw new Error('Missing rates')
+    // Correct formula: (INR/USD ÷ XAU/USD) ÷ g/oz = INR/g
+    const price = Math.round(metalpriceapiToInrPerGram(xauRate, inrRate))
+    if (price < 5000 || price > 18000) throw new Error(`Price ${price} out of sanity bounds`)
+    _writeCache(price)
+    return price
+  } catch (e) {
+    console.warn('[GoldPrice] metalpriceapi failed:', e)
   }
-}
 
-// Synchronous wrapper for cached prices only (used during assessment)
-function getLiveGoldPer24KGram(): number {
+  // Source 2: Yahoo Finance (GC=F futures × USDINR=X)
   try {
-    const raw = localStorage.getItem('goldeye_metal_prices_v2')
-    if (raw) {
-      const entry = JSON.parse(raw)
-      const metals = entry.data?.metals as Array<{ id: string; price: number }> | undefined
-      const g24 = metals?.find(m => m.id === 'xau_24k')
-      if (g24?.price && g24.price > 1000) return g24.price
+    const TROY_OZ = 31.1035
+    const [goldRes, fxRes] = await Promise.all([
+      fetch('https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1d&range=1d'),
+      fetch('https://query1.finance.yahoo.com/v8/finance/chart/USDINR%3DX?interval=1d&range=1d'),
+    ])
+    const usdPerOz = goldRes.ok ? (await goldRes.json()).chart?.result?.[0]?.meta?.regularMarketPrice : 0
+    const usdInr   = fxRes.ok  ? (await fxRes.json()).chart?.result?.[0]?.meta?.regularMarketPrice   : 0
+    if (usdPerOz > 0 && usdInr > 0) {
+      const price = Math.round((usdPerOz * usdInr) / TROY_OZ)
+      if (price >= 5000 && price <= 18000) {
+        _writeCache(price)
+        return price
+      }
     }
-  } catch {}
-  // If cache unavailable, use latest known rate (will be updated before assessment)
-  console.warn('[Gold Price] No cached price available, using fallback')
-  return 7500 // Current mid-2025 conservative estimate (not mock)
-}
-
-// ── RBI-compliant gold value + loan band ─────────────────────────────────────
-function computeGoldMarketValue(pricePerGram24K: number, weightG: number, karatEstimate: number, stoneExclusionG: number) {
-  const netWeight = Math.max(weightG - stoneExclusionG, weightG * 0.94)
-  const purityFactor = karatEstimate / 24
-  const mid = pricePerGram24K * netWeight * purityFactor
-  return {
-    band_low: Math.round((mid * 0.93) / 100) * 100,
-    band_high: Math.round((mid * 1.07) / 100) * 100,
+  } catch (e) {
+    console.warn('[GoldPrice] Yahoo Finance failed:', e)
   }
+
+  // Source 3: localStorage cache (any age)
+  const cached = _readCache()
+  if (cached) return cached
+
+  // Source 4: conservative fallback (₹9,000/g ≈ XAU $3,300 × USD/INR 85 ÷ 31.1g/oz)
+  console.warn('[GoldPrice] All sources failed — using conservative fallback ₹9,000/g')
+  return 9_000
 }
 
-// RBI circular: max 75% LTV for gold loans; Poonawala offers 65–75%
-function computeLoanOffer(goldValue: { band_low: number; band_high: number }) {
-  const LTV_LOW = 0.65
-  const LTV_HIGH = 0.75
-  const band_low_inr = Math.round((goldValue.band_low * LTV_LOW) / 1000) * 1000
-  const band_high_inr = Math.round((goldValue.band_high * LTV_HIGH) / 1000) * 1000
-  const midLoan = (band_low_inr + band_high_inr) / 2
-  const tier = midLoan <= 250000 ? 'under_2_5L' : midLoan <= 500000 ? '2_5L_to_5L' : 'above_5L'
-  return { band_low_inr, band_high_inr, ltv_applied_pct: 75, tier }
+function _writeCache(price: number) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      data: { metals: [{ id: 'xau_24k', price }], fetchedAt: Date.now(), source: 'live' },
+      expiresAt: Date.now() + 15 * 60 * 1000,
+    }))
+  } catch {}
+}
+
+function _readCache(): number | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const entry = JSON.parse(raw)
+    const metals = entry.data?.metals as Array<{ id: string; price: number }> | undefined
+    const g24 = metals?.find(m => m.id === 'xau_24k')
+    if (g24?.price && g24.price > 5000) return g24.price
+  } catch {}
+  return null
+}
+
+function getLiveGoldPer24KGram(): number {
+  return _readCache() ?? 9_000
 }
 
 // ── SHAP contributions driven by what was actually captured ──────────────────

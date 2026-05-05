@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSessionStore } from '../store/session'
+import { useMetalPrices } from '../hooks/useGoldPrice'
+import { computeGoldMarketValue, computeLoanOffer } from '../lib/goldCalc'
 import {
   Share2, RefreshCcw, ChevronRight, ChevronDown, ChevronUp,
   Info, Zap, UserCheck, Camera, AlertTriangle, CheckCircle,
-  TrendingUp, ArrowRight, Calculator
+  TrendingUp, ArrowRight, Calculator, Activity
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -142,14 +144,33 @@ export function Result() {
   const { state, reset } = useSessionStore()
   const [showXAI, setShowXAI] = useState(false)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const { data: metalData } = useMetalPrices()
 
   const result = state.result
   if (!result) { navigate('/'); return null }
 
-  const routing = ROUTING[result.routing]
-  const RoutingIcon = routing.icon
   const isFail = result.routing === 'REJECT' || result.routing === 'RECAPTURE'
   const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`
+
+  // Recalculate value and loan with the latest live price on every render
+  const livePrice24K = metalData?.metals.find(m => m.id === 'xau_24k')?.price ?? 0
+  const livePrice22K = metalData?.metals.find(m => m.id === 'xau_22k')?.price ?? 0
+  const livePriceSrc = metalData?.source ?? 'cached'
+  const hasLivePrice  = livePrice24K > 5000
+
+  const displayValue = hasLivePrice
+    ? computeGoldMarketValue(
+        livePrice24K,
+        result.weight.estimated_g,
+        result.purity.point_estimate_karat,
+        result.value_inr.stone_weight_excluded_g ?? 0.4,
+      )
+    : { band_low: result.value_inr.band_low, band_high: result.value_inr.band_high }
+
+  const displayLoan = computeLoanOffer(displayValue)
+
+  const routing = ROUTING[result.routing]
+  const RoutingIcon = routing.icon
 
   return (
     <div className="page overflow-y-auto no-scrollbar animate-fade-in relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
@@ -247,46 +268,79 @@ export function Result() {
             </div>
           </div>
 
-          {/* Gold value band */}
+          {/* Live gold rate ticker */}
+          {hasLivePrice && (
+            <div className="mx-5 mb-3">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                  <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-wider">Live Gold Rate</span>
+                </div>
+                <div className="flex items-center gap-3 text-right">
+                  <div>
+                    <p className="text-[10px] text-stone-400 leading-none mb-0.5">24K</p>
+                    <p className="font-display font-black text-sm text-stone-900">₹{livePrice24K.toLocaleString('en-IN')}<span className="text-[10px] font-normal text-stone-400">/g</span></p>
+                  </div>
+                  {livePrice22K > 0 && (
+                    <div>
+                      <p className="text-[10px] text-stone-400 leading-none mb-0.5">22K</p>
+                      <p className="font-display font-black text-sm text-stone-900">₹{livePrice22K.toLocaleString('en-IN')}<span className="text-[10px] font-normal text-stone-400">/g</span></p>
+                    </div>
+                  )}
+                  <span className={clsx(
+                    'text-[9px] font-bold px-1.5 py-0.5 rounded-full',
+                    livePriceSrc === 'live' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'
+                  )}>
+                    {livePriceSrc === 'live' ? '● LIVE' : 'CACHED'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Gold value band — recalculated with live price */}
           <div className="mx-5 mb-4">
             <div className="card p-5">
               <div className="flex items-center justify-between mb-2">
                 <p className="label">{t('result_value')}</p>
-                <span className="text-[10px] bg-gold-100 text-gold-700 font-semibold px-2 py-0.5 rounded-full">Live IBJA</span>
+                <span className="text-[10px] bg-gold-100 text-gold-700 font-semibold px-2 py-0.5 rounded-full">
+                  {hasLivePrice ? 'Live IBJA' : 'IBJA'}
+                </span>
               </div>
               <div className="font-display font-black text-3xl text-stone-900 mb-1">
-                <AnimatedNumber target={result.value_inr.band_low} prefix="₹" />
+                <AnimatedNumber target={displayValue.band_low} prefix="₹" />
                 <span className="text-stone-300 text-xl mx-2">–</span>
-                <AnimatedNumber target={result.value_inr.band_high} prefix="₹" />
+                <AnimatedNumber target={displayValue.band_high} prefix="₹" />
               </div>
               <div className="band-track mt-3">
                 <div className="band-fill bg-gold-400" style={{ width: '100%' }} />
               </div>
               <p className="text-xs text-stone-400 mt-2">
                 {result.purity.point_estimate_karat}K gold · {result.weight.estimated_g}g · stone excl. {result.value_inr.stone_weight_excluded_g}g
+                {hasLivePrice && <span className="ml-1 text-emerald-600">· @₹{livePrice24K.toLocaleString('en-IN')}/g</span>}
               </p>
             </div>
           </div>
 
-          {/* Loan offer */}
+          {/* Loan offer — recalculated with live price */}
           <div className="mx-5 mb-4">
             <div className="card p-5 border-brand-600/20 bg-brand-50">
               <div className="flex items-center justify-between mb-2">
                 <p className="label">{t('result_loan')}</p>
-                <span className="text-[10px] text-brand-600 font-semibold uppercase tracking-wider">RBI 75% LTV</span>
+                <span className="text-[10px] text-brand-600 font-semibold uppercase tracking-wider">RBI {displayLoan.ltv_applied_pct}% LTV</span>
               </div>
               <div className="font-display font-black text-4xl text-brand-600 mb-0.5 leading-none">
-                <AnimatedNumber target={result.loan_offer.band_low_inr} prefix="₹" duration={1400} />
+                <AnimatedNumber target={displayLoan.band_low_inr} prefix="₹" duration={1400} />
               </div>
               <div className="flex items-baseline gap-2 mb-3">
                 <span className="text-stone-400 text-lg">–</span>
                 <span className="font-display font-bold text-2xl text-stone-700">
-                  <AnimatedNumber target={result.loan_offer.band_high_inr} prefix="₹" duration={1400} />
+                  <AnimatedNumber target={displayLoan.band_high_inr} prefix="₹" duration={1400} />
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="badge-brand">{result.loan_offer.ltv_applied_pct}% LTV</span>
-                <span className="badge-brand">{result.loan_offer.tier === 'under_2_5L' ? 'Under ₹2.5L' : result.loan_offer.tier === '2_5L_to_5L' ? '₹2.5L–₹5L' : 'Above ₹5L'}</span>
+                <span className="badge-brand">{displayLoan.ltv_applied_pct}% LTV</span>
+                <span className="badge-brand">{displayLoan.tier === 'under_2_5L' ? 'Under ₹2.5L' : displayLoan.tier === '2_5L_to_5L' ? '₹2.5L–₹5L' : 'Above ₹5L'}</span>
               </div>
             </div>
           </div>
@@ -436,17 +490,23 @@ export function Result() {
               <span className="text-xs text-stone-500">Purity Assessed (AI)</span>
               <span className="text-sm font-medium">{result.purity.point_estimate_karat}K ({(result.purity.point_estimate_karat / 24 * 100).toFixed(1)}%)</span>
             </div>
+            {hasLivePrice && (
+              <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+                <span className="text-xs text-stone-500">Live 24K Rate (IBJA)</span>
+                <span className="text-sm font-medium text-emerald-700">₹{livePrice24K.toLocaleString('en-IN')}/g</span>
+              </div>
+            )}
             <div className="flex justify-between items-center border-b border-stone-100 pb-2">
               <span className="text-xs text-stone-500">Market Value (IBJA)</span>
-              <span className="text-sm font-medium">~ {fmt(Math.round((result.value_inr.band_low + result.value_inr.band_high) / 2))}</span>
+              <span className="text-sm font-medium">~ {fmt(Math.round((displayValue.band_low + displayValue.band_high) / 2))}</span>
             </div>
             <div className="flex justify-between items-center pt-1">
-              <span className="text-xs text-stone-500">Max Loan Eligibility (75% LTV)</span>
-              <span className="text-sm font-bold text-brand-600">~ {fmt(Math.round((result.loan_offer.band_low_inr + result.loan_offer.band_high_inr) / 2))}</span>
+              <span className="text-xs text-stone-500">Max Loan Eligibility ({displayLoan.ltv_applied_pct}% LTV)</span>
+              <span className="text-sm font-bold text-brand-600">~ {fmt(Math.round((displayLoan.band_low_inr + displayLoan.band_high_inr) / 2))}</span>
             </div>
             <div className="mt-2 p-2 bg-stone-50 rounded-lg text-[10px] text-stone-400 leading-snug">
               * Value = Live 24K Price × Net Weight × (Karat / 24) ± 7%<br/>
-              * LTV (Loan-To-Value) capped at 75% per RBI guidelines.
+              * LTV capped at 75% per RBI/2023-24/107. Tiered: 75% / 72% / 70%.
             </div>
           </div>
         )}
