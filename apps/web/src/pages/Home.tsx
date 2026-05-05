@@ -129,7 +129,7 @@ export function Home() {
         <button
           onClick={() => handleLanguageChange('en')}
           className={clsx(
-            'px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest transition-all border',
+            'px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest transition-all border whitespace-nowrap',
             state.lang === 'en'
               ? 'bg-brand-600 text-white border-brand-600 shadow-md'
               : 'bg-white/90 backdrop-blur-md text-stone-900 border-stone-100 hover:bg-white'
@@ -140,7 +140,7 @@ export function Home() {
         <button
           onClick={() => handleLanguageChange('hi')}
           className={clsx(
-            'px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest transition-all border',
+            'px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest transition-all border whitespace-nowrap',
             state.lang === 'hi'
               ? 'bg-brand-600 text-white border-brand-600 shadow-md'
               : 'bg-white/90 backdrop-blur-md text-stone-900 border-stone-100 hover:bg-white'
