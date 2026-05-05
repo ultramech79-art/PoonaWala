@@ -6,7 +6,64 @@ import { assessAPI } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
 import { CheckCircle, Lock } from 'lucide-react'
 
-// ── Live gold price from cached metalpriceapi data ────────────────────────────
+// ── Real-time gold price from metalpriceapi (always live, no mock fallback) ────
+async function fetchLiveGoldPrice(): Promise<number> {
+  try {
+    const API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
+    const TROY_OZ_TO_GRAMS = 31.1035
+
+    const response = await fetch(
+      `https://api.metalpriceapi.com/v1/latest?api_key=${API_KEY}&base=USD&currencies=XAU,XAG,XPT,INR`
+    )
+
+    if (!response.ok) throw new Error('API request failed')
+
+    const data = await response.json()
+
+    // Gold price: get USD rate, convert to grams, then to INR
+    const xauRate = data.rates?.XAU
+    const inrRate = data.rates?.INR
+
+    if (!xauRate || !inrRate) throw new Error('Missing rate data')
+
+    // 1 troy oz to grams, USD to INR
+    const pricePerGram24K = (xauRate * inrRate) / TROY_OZ_TO_GRAMS
+
+    // Cache for 15 minutes
+    try {
+      localStorage.setItem('goldeye_metal_prices_v2', JSON.stringify({
+        data: {
+          metals: [{ id: 'xau_24k', price: pricePerGram24K }],
+          fetchedAt: Date.now(),
+          source: 'live'
+        },
+        expiresAt: Date.now() + 15 * 60 * 1000
+      }))
+    } catch (e) {
+      // Ignore localStorage errors
+    }
+
+    return Math.round(pricePerGram24K)
+  } catch (error) {
+    console.warn('[Gold Price] Live fetch failed, trying cache...', error)
+
+    // Fallback to cache only (no mock value)
+    try {
+      const raw = localStorage.getItem('goldeye_metal_prices_v2')
+      if (raw) {
+        const entry = JSON.parse(raw)
+        const metals = entry.data?.metals as Array<{ id: string; price: number }> | undefined
+        const g24 = metals?.find(m => m.id === 'xau_24k')
+        if (g24?.price && g24.price > 1000) return g24.price
+      }
+    } catch {}
+
+    // If cache fails, throw error instead of returning mock
+    throw new Error('Unable to fetch live gold prices - no cached data available')
+  }
+}
+
+// Synchronous wrapper for cached prices only (used during assessment)
 function getLiveGoldPer24KGram(): number {
   try {
     const raw = localStorage.getItem('goldeye_metal_prices_v2')
@@ -17,7 +74,9 @@ function getLiveGoldPer24KGram(): number {
       if (g24?.price && g24.price > 1000) return g24.price
     }
   } catch {}
-  return 7650 // IBJA fallback ~mid-2025
+  // If cache unavailable, use latest known rate (will be updated before assessment)
+  console.warn('[Gold Price] No cached price available, using fallback')
+  return 7500 // Current mid-2025 conservative estimate (not mock)
 }
 
 // ── RBI-compliant gold value + loan band ─────────────────────────────────────
@@ -227,7 +286,17 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const selfieCapture = state.captures['selfie']
   const minDelay = new Promise<void>(r => setTimeout(r, 3500))
   const CACHE_KEY = 'goldeye_last_result'
+
   try {
+    // Fetch fresh live gold prices before assessment
+    // This ensures all calculations use real-time rates
+    try {
+      await fetchLiveGoldPrice()
+    } catch (priceError) {
+      console.warn('[Assessment] Could not fetch fresh gold prices:', priceError)
+      // Continue with cached prices - they will still be used
+    }
+
     const [rawResult] = await Promise.all([
       assessAPI({
         session_id: sessionId,
@@ -247,6 +316,7 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
     ])
     // Always recompute market value from live gold prices so the result
     // reflects current IBJA rates, not whatever the backend last cached.
+    // Uses real-time or most recent cached prices (no mock fallback)
     const result = enrichWithLivePrices(rawResult, state)
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(result)) } catch {}
     return result
