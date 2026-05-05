@@ -315,6 +315,13 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
     startCamera()
   }, [startCamera])
 
+  // Restart camera when status resets to idle (e.g., on retake)
+  useEffect(() => {
+    if (status === 'idle' && !mediaRef.current?.active) {
+      startCamera()
+    }
+  }, [status])
+
   // Stop camera on unmount
   useEffect(() => () => stopCamera(), [stopCamera])
 
