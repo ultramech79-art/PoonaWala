@@ -49,10 +49,10 @@ Select **English** (or Hindi) and tap **Get Started**.
 ### Step 2 — Enter Your Mobile Number & Get OTP
 
 - Enter **your real Indian mobile number** (e.g. `9876543210`)
-- Tap **Send OTP** — you will receive a 6-digit SMS via 2Factor.in
+- Tap **Send OTP** — you will receive a 6-digit SMS.
 - Enter the OTP to proceed
 
-> **No phone?** The backend accepts OTP `000000` in dev mode if `TWOFACTOR_API_KEY` is not set. The live deployment has SMS enabled — use your real number.
+> **No phone?** Skip for demo
 
 ---
 
@@ -60,7 +60,7 @@ Select **English** (or Hindi) and tap **Get Started**.
 
 - Accept the DPDP data consent (one tap)
 - Select your gold type: **Ring**, **Bangle**, or **Chain**
-- Choose karat if known (or let AI detect it)
+  
 
 ---
 
@@ -75,14 +75,14 @@ The app asks for **7 photos** from different angles. For the hackathon demo you 
 | **Hallmark** | BIS/HUID stamp close-up | Zoom in on the `916` or `999` mark |
 | **Side** | Thickness profile | Shows solid vs hollow |
 | **Top** | Looking straight down | Flat surface reflection |
-| **Scale** | Jewelry next to a ₹10 coin | Coin must be fully visible |
+| **Scale** | Jewelry next to a ₹10 coin | Coin must be fully visible | it's optional
 | **Selfie** | Your face + jewelry held up | Face + gold in same frame |
 
 > **Pro tip for evaluators:** Use a 22K gold ring or bangle. Hold it under a lamp, not sunlight. The BIS hallmark step is the most impressive — if the `916` stamp is visible, the AI will detect and verify it automatically.
 
 ---
 
-### Step 5 — Ring Tap (Audio Test)
+### Step 5 — Ring Tap (Audio Test) -- optional 
 
 When prompted, **tap your gold jewelry with a fingernail** near the mic.  
 The app records 2 seconds of audio and runs the acoustic ring test (S11 signal worker).
@@ -94,7 +94,7 @@ The app records 2 seconds of audio and runs the acoustic ring test (S11 signal w
 ### Step 6 — Enter Weight
 
 Enter the jewelry weight in grams. If you have a jeweler's scale, use the exact weight.  
-**Don't have a scale?** Enter an estimate — the AI also cross-estimates weight from the coin reference photo.
+**Don't have a scale?** Enter an estimate — the AI also cross-estimates weight from the coin reference photo(not that accurate though due to limited availability of LIDAR cameras)
 
 ---
 
