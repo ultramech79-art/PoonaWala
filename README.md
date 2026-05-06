@@ -29,6 +29,10 @@
 
 <br/>
 
+### 📹 **[Watch the video demo](https://youtu.be/4jTEVNaQE7s)** — See GoldEye in action (2 min)
+
+<br/>
+
 ### ⬇️ Evaluating this project? Start here.
 
 [![HACKATHON DEMO — CLICK TO JUMP](https://img.shields.io/badge/%F0%9F%8F%86%20HACKATHON%20DEMO-Click%20to%20try%20the%20live%20app%20now-FF6B00?style=for-the-badge&labelColor=1a1a1a&logoColor=white)](#-hackathon-demo--try-it-in-3-minutes)
