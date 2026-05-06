@@ -21,7 +21,108 @@
 > Banks still require branch visits, XRF machines, and 3-day turnarounds.
 > **GoldEye changes all of that — in under 60 seconds, from any smartphone.**
 
+<br/>
+
+### ⬇️ Evaluating this project? Start here.
+
+[![HACKATHON DEMO — CLICK TO JUMP](https://img.shields.io/badge/%F0%9F%8F%86%20HACKATHON%20DEMO-Click%20to%20try%20the%20live%20app%20now-FF6B00?style=for-the-badge&labelColor=1a1a1a&logoColor=white)](#-hackathon-demo--try-it-in-3-minutes)
+
 </div>
+
+---
+
+## 🏆 Hackathon Demo — Try It in 3 Minutes
+
+> **Live app:** **[poona-wala.vercel.app](https://poona-wala.vercel.app)**  
+> **Backend:** **[poonawala.onrender.com](https://poonawala.onrender.com/health)**  
+> First load may take ~15s if the Render backend is cold-starting — just wait for the health check to turn green.
+
+---
+
+### Step 1 — Open the App
+
+Go to **[poona-wala.vercel.app](https://poona-wala.vercel.app)** on your phone or laptop.  
+Select **English** (or Hindi) and tap **Get Started**.
+
+---
+
+### Step 2 — Enter Your Mobile Number & Get OTP
+
+- Enter **your real Indian mobile number** (e.g. `9876543210`)
+- Tap **Send OTP** — you will receive a 6-digit SMS via 2Factor.in
+- Enter the OTP to proceed
+
+> **No phone?** The backend accepts OTP `000000` in dev mode if `TWOFACTOR_API_KEY` is not set. The live deployment has SMS enabled — use your real number.
+
+---
+
+### Step 3 — Complete Consent & Setup
+
+- Accept the DPDP data consent (one tap)
+- Select your gold type: **Ring**, **Bangle**, or **Chain**
+- Choose karat if known (or let AI detect it)
+
+---
+
+### Step 4 — Capture Photos (Use These Demo Images)
+
+The app asks for **7 photos** from different angles. For the hackathon demo you can use **any gold jewelry** around you, or use these approaches:
+
+| Capture Step | What to Show | Tip |
+|---|---|---|
+| **Front** | Front face of the jewelry | Good lighting, close up |
+| **Back** | Reverse/clasp side | Look for hallmark stamp |
+| **Hallmark** | BIS/HUID stamp close-up | Zoom in on the `916` or `999` mark |
+| **Side** | Thickness profile | Shows solid vs hollow |
+| **Top** | Looking straight down | Flat surface reflection |
+| **Scale** | Jewelry next to a ₹10 coin | Coin must be fully visible |
+| **Selfie** | Your face + jewelry held up | Face + gold in same frame |
+
+> **Pro tip for evaluators:** Use a 22K gold ring or bangle. Hold it under a lamp, not sunlight. The BIS hallmark step is the most impressive — if the `916` stamp is visible, the AI will detect and verify it automatically.
+
+---
+
+### Step 5 — Ring Tap (Audio Test)
+
+When prompted, **tap your gold jewelry with a fingernail** near the mic.  
+The app records 2 seconds of audio and runs the acoustic ring test (S11 signal worker).
+
+> No jewelry? Tap any metal object — the confidence score will reflect accordingly.
+
+---
+
+### Step 6 — Enter Weight
+
+Enter the jewelry weight in grams. If you have a jeweler's scale, use the exact weight.  
+**Don't have a scale?** Enter an estimate — the AI also cross-estimates weight from the coin reference photo.
+
+---
+
+### Step 7 — See Results
+
+The result page shows:
+
+| Field | What You'll See |
+|---|---|
+| **Purity** | Karat estimate (e.g. `22K`) with band `20K–23K` |
+| **Weight** | Estimated grams ± range |
+| **IBJA Live Rate** | `22K · 916  ₹13,524/g` — pulled from ibjarates.com every 10s |
+| **Gold Value** | `₹1,35,240 – ₹1,56,000` (live, updates every 10s) |
+| **Loan Offer** | `₹98,500 – ₹1,12,000` at RBI 75% LTV cap |
+| **AI Decision** | INSTANT / AGENT / RECAPTURE / REJECT |
+| **Explainability** | SHAP feature attribution + Grad-CAM heatmap |
+
+> The gold value and loan offer **re-calculate live every 10 seconds** as IBJA rates change. Watch the `● IBJA` badge flash green on each update.
+
+---
+
+### What the Judges Should Specifically Look For
+
+1. **BIS Hallmark Detection** — point the camera at a `916` or `999` stamp. The app shows "BIS Verified" badge if detected.
+2. **Live IBJA Pricing** — stay on the result page for 10s. The value band updates automatically with real market rates from ibjarates.com.
+3. **Conformal Prediction Bands** — every estimate has a statistically calibrated uncertainty band (90.2% empirical coverage).
+4. **4-Layer XAI** — expand "Why this estimate" and "Detailed Breakdown" to see SHAP attribution, Grad-CAM heatmap, and RBI LTV calculation.
+5. **OTP + DPDP Consent** — the full compliance trail: OTP identity verification → DPDP consent → immutable audit log.
 
 ---
 
