@@ -27,7 +27,7 @@ export function Confirmation() {
       {/* Action */}
       <div className="w-full max-w-sm">
         <button
-          onClick={() => navigate('/welcome')}
+          onClick={() => navigate('/')}
           className="btn-primary w-full shadow-brand"
         >
           <Home className="w-5 h-5 mr-1" />
