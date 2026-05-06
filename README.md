@@ -4,6 +4,12 @@
 
 <br/>
 
+### 🎥 Watch the Demo
+
+[![YouTube Demo](https://img.shields.io/badge/%F0%9F%8E%AC%20WATCH%20DEMO-YouTube-FF0000?style=for-the-badge&labelColor=1a1a1a&logo=youtube)](https://youtu.be/4jTEVNaQE7s)
+
+<br/>
+
 [![Live App](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20App-poona--wala.vercel.app-FFD700?style=for-the-badge&labelColor=1a1a1a)](https://poona-wala.vercel.app)
 &nbsp;
 [![API](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F%20Backend%20API-poonawala.onrender.com-46E3B7?style=for-the-badge&labelColor=1a1a1a)](https://poonawala.onrender.com/health)
