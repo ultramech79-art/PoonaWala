@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -160,3 +161,20 @@ async def model_health():
         "audio_cnn": audio_mod._ONNX_SESSION is not None,
         "catalog_phashes_count": catalog_count,
     }
+
+
+# ── Serve React PWA (must be last — catches all non-API routes) ───────────────
+_WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "..", "..", "apps", "web", "dist")
+_WEB_DIST = os.path.normpath(_WEB_DIST)
+
+if os.path.isdir(_WEB_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_WEB_DIST, "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Serve specific files (sw.js, manifest, etc.) directly
+        candidate = os.path.join(_WEB_DIST, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        # All other routes → index.html (React Router handles it)
+        return FileResponse(os.path.join(_WEB_DIST, "index.html"))
