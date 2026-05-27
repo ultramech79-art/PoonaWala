@@ -219,7 +219,10 @@ def _build_tts():
             from pipecat.services.cartesia import CartesiaTTSService
             return CartesiaTTSService(
                 api_key=CARTESIA_API_KEY,
-                voice_id="79a125e8-cd45-4c13-8a67-188112f4dd22",  # British Lady
+                # Kiara — English, Indian-accented female, clear enunciation
+                voice_id="f8f5f1b2-f02d-4d8e-a40d-fd850a487b3d",
+                model="sonic-2",
+                language="en",
             )
         except ImportError:
             pass
@@ -227,7 +230,7 @@ def _build_tts():
     # edge-tts is free and requires no API key
     try:
         from pipecat.services.edge_tts import EdgeTTSService
-        return EdgeTTSService(voice="en-IN-NeerjaNeural")
+        return EdgeTTSService(voice="en-IN-NeerjaNeural")  # Indian English female fallback
     except ImportError:
         pass
 
