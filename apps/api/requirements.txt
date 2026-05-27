@@ -33,3 +33,6 @@ greenlet==3.0.0
 mediapipe==0.10.5
 google-generativeai==0.3.0
 aiohttp==3.8.5
+# Pipecat guided session pipeline
+pipecat-ai[daily,groq,silero]>=0.0.47
+edge-tts>=6.1.9

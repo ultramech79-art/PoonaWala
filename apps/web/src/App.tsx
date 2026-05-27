@@ -6,6 +6,8 @@ import { Consent } from './pages/Consent'
 import { OTP } from './pages/OTP'
 import { Setup } from './pages/Setup'
 import { CaptureFlow } from './pages/CaptureFlow'
+import { GuidedCapture } from './pages/GuidedCapture'
+import { CertificateScan } from './pages/CertificateScan'
 import { WeightEntry } from './pages/WeightEntry'
 import { Processing } from './pages/Processing'
 import { Result } from './pages/Result'
@@ -29,6 +31,8 @@ function App() {
           <Route path="/otp" element={<OTP />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/capture" element={<CaptureFlow />} />
+          <Route path="/guided-capture" element={<GuidedCapture />} />
+          <Route path="/certificate-scan" element={<CertificateScan />} />
           <Route path="/weight" element={<WeightEntry />} />
           <Route path="/processing" element={<Processing />} />
           <Route path="/result" element={<Result />} />
