@@ -592,7 +592,7 @@ export function Result() {
       <div className="mx-5 mb-4 space-y-3">
         <button
           id="result-primary-action"
-          onClick={() => navigate(result.routing === 'AGENT' || result.routing === 'INSTANT' ? '/confirmation' : '/')}
+          onClick={() => navigate(result.routing === 'AGENT' || result.routing === 'INSTANT' ? '/final-eval' : '/')}
           className="btn-primary w-full"
         >
           {routing.action}

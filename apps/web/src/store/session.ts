@@ -1,6 +1,52 @@
 import { useState, useCallback } from 'react'
+import type { LTVComponent } from '../lib/ltvEngine'
+import type { ROIComponent } from '../lib/roiEngine'
+import type { RepaymentType, AmortizationRow } from '../lib/emiEngine'
 
 export type CaptureType = 'top' | '45deg' | 'side' | 'macro' | 'video' | 'audio' | 'selfie'
+
+// ── Evaluation data (FinalEvaluation page output) ─────────────────────────────
+export interface EvalData {
+  state: string
+  city: string
+  locationTier: string
+  tierLabel: string
+  stampDutyInr: number
+  serviceable: boolean
+  cityGoldValueInr: number        // gold value at real city-specific price
+  cityPricePerG: number           // fetched from allindiabullion.com
+  priceSource: string             // 'allindiabullion.com' | 'ibja_national'
+  cibilScore: number | null
+  cibilTierKey: string
+  cibilTierLabel: string
+  pan: string
+  ltvFinalPct: number
+  maxLoanInr: number
+  ltvComponents: LTVComponent[]
+  ticketTierLabel: string
+  processingFeePct: number
+  eligible: boolean
+  rejectReason: string | null
+}
+
+// ── Loan application data (GoldLoanApplication page output) ───────────────────
+export interface LoanAppData {
+  requestedLoanInr: number
+  tenureMonths: number
+  repaymentType: RepaymentType
+  roiPaPct: number
+  roiComponents: ROIComponent[]
+  monthlyPayment: number
+  bulletPayment: number
+  totalInterest: number
+  totalPayment: number
+  processingFeeInr: number
+  gstOnFeeInr: number
+  stampDutyInr: number
+  safeCustodyInr: number
+  disbursementInr: number
+  schedule: AmortizationRow[]
+}
 
 export interface CapturedAsset {
   type: CaptureType
@@ -21,6 +67,8 @@ export interface SessionState {
   huidCode: string | null
   scannedKarat: number | null
   result: AssessmentResult | null
+  evalData: EvalData | null
+  loanAppData: LoanAppData | null
 }
 
 export interface PurityBand {
@@ -95,6 +143,8 @@ let _state: SessionState = {
   huidCode: null,
   scannedKarat: null,
   result: null,
+  evalData: null,
+  loanAppData: null,
 }
 
 type Listener = () => void
@@ -134,6 +184,8 @@ export function useSessionStore() {
     setHuid: (code: string | null) => setState({ huidCode: code }),
     setScannedKarat: (karat: number | null) => setState({ scannedKarat: karat }),
     setResult: (result: AssessmentResult) => setState({ result }),
+    setEvalData: (evalData: EvalData) => setState({ evalData }),
+    setLoanAppData: (loanAppData: LoanAppData) => setState({ loanAppData }),
     setSessionId: (id: string) => setState({ sessionId: id }),
     initSession: () => {
       const id = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -149,6 +201,8 @@ export function useSessionStore() {
       huidCode: null,
       scannedKarat: null,
       result: null,
+      evalData: null,
+      loanAppData: null,
     }),
   }
 }

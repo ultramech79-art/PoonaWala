@@ -1,0 +1,121 @@
+{
+  "version": "2024-02",
+  "last_updated": "2024-01-20",
+  "source_url": "https://www.poonawallafincorp.com/gold-loan",
+  "human_verified": true,
+  "rbi_rules": {
+    "max_ltv_pct": 75,
+    "min_purity_karat": 18,
+    "max_weight_per_applicant_kg": 1,
+    "pan_mandatory_above_inr": 50000,
+    "pmla_enhanced_dd_above_inr": 200000,
+    "max_bullet_repayment_months": 12,
+    "circular_reference": "RBI/2023-24/107"
+  },
+  "base_rates": {
+    "repo_rate_pct": 6.50,
+    "base_spread_pct": 7.00,
+    "formula_note": "Final ROI = repo_rate_pct + base_spread_pct + cibil.spread_adj + location.roi_delta + tenure.roi_adj"
+  },
+  "collateral_model": {
+    "note": "LTV is determined entirely by gold quality (purity, hallmark, AI confidence, type, ticket size). CIBIL does NOT affect LTV. Location does NOT affect LTV. Gold price is fetched from goodreturns.in per-city, no tier-based adjustment.",
+    "ltv_factors": ["rbi_ceiling", "ticket_tier", "hallmark", "purity", "ai_confidence", "gold_type"],
+    "roi_factors": ["repo_rate", "base_spread", "cibil_adj", "tenure_adj"]
+  },
+  "loan_limits": {
+    "min_inr": 10000,
+    "max_inr": 5000000
+  },
+  "ticket_tiers": [
+    { "label": "Small Ticket",  "description": "Under ₹2.5L", "max_inr": 250000,  "max_ltv_pct": 75 },
+    { "label": "Medium Ticket", "description": "₹2.5L – ₹5L", "max_inr": 500000,  "max_ltv_pct": 72 },
+    { "label": "Large Ticket",  "description": "Above ₹5L",   "max_inr": 99999999, "max_ltv_pct": 70 }
+  ],
+  "ltv_adjusters": {
+    "no_bis_hallmark_delta_pct": -5,
+    "purity_18k_to_20k_delta_pct": -3,
+    "ai_confidence_below_55_delta_pct": -10,
+    "ai_confidence_55_to_70_delta_pct": -5,
+    "coin_or_bar_bonus_pct": 2,
+    "ltv_floor_pct": 50,
+    "ltv_ceiling_pct": 75
+  },
+  "location_adjusters": {
+    "metro":  { "roi_delta_pct": 0.00 },
+    "tier1":  { "roi_delta_pct": 0.25 },
+    "tier2":  { "roi_delta_pct": 0.50 },
+    "tier3":  { "roi_delta_pct": 1.00 },
+    "rural":  { "roi_delta_pct": 1.50 }
+  },
+  "cibil_tiers": {
+    "PRIME": {
+      "label": "Excellent", "min_score": 750, "max_score": 900, "color": "emerald",
+      "spread_adj_pct": -0.50, "processing_fee_pct": 0.00,
+      "description": "Best rates"
+    },
+    "NEAR_PRIME": {
+      "label": "Good", "min_score": 700, "max_score": 749, "color": "blue",
+      "spread_adj_pct": 0.00,  "processing_fee_pct": 0.50,
+      "description": "Standard rates"
+    },
+    "STANDARD": {
+      "label": "Fair", "min_score": 650, "max_score": 699, "color": "amber",
+      "spread_adj_pct": 1.00,  "processing_fee_pct": 0.75,
+      "description": "Slightly higher rates"
+    },
+    "SUBPRIME": {
+      "label": "Poor", "min_score": 600, "max_score": 649, "color": "orange",
+      "spread_adj_pct": 2.00,  "processing_fee_pct": 1.00,
+      "description": "Higher rates"
+    },
+    "DEEP_SUBPRIME": {
+      "label": "Very Poor", "min_score": 300, "max_score": 599, "color": "red",
+      "spread_adj_pct": 3.00,  "processing_fee_pct": 1.50,
+      "description": "Branch visit required"
+    },
+    "NTC": {
+      "label": "New to Credit", "min_score": 0, "max_score": 0, "color": "purple",
+      "spread_adj_pct": 0.50,  "processing_fee_pct": 0.50,
+      "description": "Secured by gold — welcome"
+    }
+  },
+  "charges": {
+    "gst_on_processing_fee_pct": 18,
+    "safe_custody_inr_per_g_per_month": 5,
+    "foreclosure_within_30_days_pct": 2.0,
+    "foreclosure_after_30_days_pct": 1.0,
+    "part_release_charge_inr": 200,
+    "notice_charge_inr": 500,
+    "bounce_charge_inr": 500,
+    "overdue_additional_rate_pct": 2.0,
+    "auction_charge_pct": 1.0,
+    "source_note": "Poonawalla Fincorp gold loan page — charges verified Jan 2024"
+  },
+  "tenure_options": {
+    "poonawalla_max_months": 12,
+    "available_months": [3, 6, 9, 12, 18, 24],
+    "nbfc_variant_months": [18, 24],
+    "roi_adjustments": {
+      "3":  -0.50,
+      "6":  -0.25,
+      "9":   0.00,
+      "12":  0.25,
+      "18":  0.50,
+      "24":  0.75
+    },
+    "available_repayment_types": {
+      "3":  ["interest_only", "bullet", "emi"],
+      "6":  ["interest_only", "bullet", "emi"],
+      "9":  ["interest_only", "emi"],
+      "12": ["interest_only", "emi"],
+      "18": ["interest_only", "emi"],
+      "24": ["interest_only", "emi"]
+    },
+    "repayment_labels": {
+      "emi":           "Monthly EMI",
+      "interest_only": "Interest + Bullet",
+      "bullet":        "Bullet Payment"
+    }
+  },
+  "gold_value_band_width_pct": 7
+}

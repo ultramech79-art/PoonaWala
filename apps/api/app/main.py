@@ -24,6 +24,8 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.frame_eval import router as frame_eval_router
 from app.routes.otp import router as otp_router
 from app.routes.prices import router as prices_router
+from app.routes.poonawalla_deals import router as deals_router
+from app.routes.gold_price_regional import router as regional_price_router
 from app.decision.ibja import price_metadata, _refresh_async
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -94,6 +96,8 @@ app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"]
 app.include_router(frame_eval_router, tags=["FrameEval"])
 app.include_router(otp_router, tags=["OTP"])
 app.include_router(prices_router, prefix="/api", tags=["Assessment"])
+app.include_router(deals_router, prefix="/api", tags=["Deals"])
+app.include_router(regional_price_router, prefix="/api", tags=["Prices"])
 
 
 @app.get("/health", tags=["Infra"])

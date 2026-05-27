@@ -9,6 +9,8 @@ import { CaptureFlow } from './pages/CaptureFlow'
 import { WeightEntry } from './pages/WeightEntry'
 import { Processing } from './pages/Processing'
 import { Result } from './pages/Result'
+import { FinalEvaluation } from './pages/FinalEvaluation'
+import { GoldLoanApplication } from './pages/GoldLoanApplication'
 import { Dashboard } from './pages/Dashboard'
 import { DashboardDetail } from './pages/DashboardDetail'
 import { FieldAgent } from './pages/FieldAgent'
@@ -30,6 +32,8 @@ function App() {
           <Route path="/weight" element={<WeightEntry />} />
           <Route path="/processing" element={<Processing />} />
           <Route path="/result" element={<Result />} />
+          <Route path="/final-eval" element={<FinalEvaluation />} />
+          <Route path="/gold-loan-app" element={<GoldLoanApplication />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/session/:id" element={<DashboardDetail />} />
           <Route path="/agent" element={<FieldAgent />} />
