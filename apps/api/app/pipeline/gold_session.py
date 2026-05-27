@@ -1,17 +1,18 @@
 """
-Pipecat pipeline for a continuous guided gold assessment session.
+Pipecat 1.2.1 pipeline for a continuous guided gold assessment session.
 
 Flow:
   Daily WebRTC transport (browser camera + mic)
     → SileroVAD (voice activity detection)
     → GroqSTT (Whisper transcription)
     → GoldFrameAnalyzer (frame quality grading + angle tracking)
+    → LLMUserAggregator (adds transcription to context)
     → GroqLLM (guidance generation — llama-3.3-70b-versatile)
-    → TTS (Cartesia or edge-tts fallback)
+    → CartesiaTTS (Kiara — Indian-accented English)
     → Daily transport out (AI voice back to browser)
 
 When all 5 angles are captured:
-  GoldFrameAnalyzer fires on_complete callback → triggers /api/assess
+  GoldFrameAnalyzer fires on_complete callback → sets all_done flag for polling
 """
 import os
 import asyncio
@@ -20,27 +21,29 @@ from typing import Optional
 
 logger = logging.getLogger("goldeye.pipeline")
 
-DAILY_API_KEY   = os.getenv("DAILY_API_KEY", "")
-GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "")
+DAILY_API_KEY    = os.getenv("DAILY_API_KEY", "")
+GROQ_API_KEY     = os.getenv("GROQ_API_KEY", "")
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY", "")
-DAILY_API_URL   = "https://api.daily.co/v1"
+DAILY_API_URL    = "https://api.daily.co/v1"
 
 
 # ── Daily room management ────────────────────────────────────────────────────
 
 async def create_daily_room(session_id: str) -> dict:
-    """Create a short-lived Daily room and return {url, token}."""
+    """Create a short-lived Daily room and return {room_url, bot_token, user_token}."""
     import httpx
+    import time
+
     if not DAILY_API_KEY:
         raise RuntimeError("DAILY_API_KEY not set — cannot create Daily room")
 
+    exp = int(time.time()) + 3600
     headers = {
         "Authorization": f"Bearer {DAILY_API_KEY}",
         "Content-Type": "application/json",
     }
 
     async with httpx.AsyncClient(timeout=10) as client:
-        # Create room
         r = await client.post(
             f"{DAILY_API_URL}/rooms",
             headers=headers,
@@ -48,57 +51,36 @@ async def create_daily_room(session_id: str) -> dict:
                 "name": f"goldeye-{session_id[:8]}",
                 "privacy": "private",
                 "properties": {
-                    "exp": int(asyncio.get_event_loop().time()) + 3600,
+                    "exp": exp,
                     "enable_chat": False,
                     "enable_screenshare": False,
-                    "start_video_off": False,
-                    "start_audio_off": False,
                     "max_participants": 2,
                 },
             },
         )
         r.raise_for_status()
-        room = r.json()
-        room_url = room["url"]
-        room_name = room["name"]
+        room_name = r.json()["name"]
+        room_url  = r.json()["url"]
 
-        # Create meeting token for the bot
+        # Bot token (owner)
         t = await client.post(
             f"{DAILY_API_URL}/meeting-tokens",
             headers=headers,
-            json={
-                "properties": {
-                    "room_name": room_name,
-                    "is_owner": True,
-                    "user_name": "GoldEye Agent",
-                    "exp": int(asyncio.get_event_loop().time()) + 3600,
-                }
-            },
+            json={"properties": {"room_name": room_name, "is_owner": True, "user_name": "GoldEye Agent", "exp": exp}},
         )
         t.raise_for_status()
         bot_token = t.json()["token"]
 
-        # Create meeting token for the user (browser)
+        # User token
         u = await client.post(
             f"{DAILY_API_URL}/meeting-tokens",
             headers=headers,
-            json={
-                "properties": {
-                    "room_name": room_name,
-                    "user_name": "Customer",
-                    "exp": int(asyncio.get_event_loop().time()) + 3600,
-                }
-            },
+            json={"properties": {"room_name": room_name, "user_name": "Customer", "exp": exp}},
         )
         u.raise_for_status()
         user_token = u.json()["token"]
 
-    return {
-        "room_url": room_url,
-        "room_name": room_name,
-        "bot_token": bot_token,
-        "user_token": user_token,
-    }
+    return {"room_url": room_url, "room_name": room_name, "bot_token": bot_token, "user_token": user_token}
 
 
 # ── Pipeline runner ──────────────────────────────────────────────────────────
@@ -107,26 +89,23 @@ async def run_gold_pipeline(
     session_id: str,
     room_url: str,
     bot_token: str,
-    on_assessment_ready,   # async callback(captured_frames_dict)
+    on_assessment_ready,
 ):
-    """
-    Build and run the Pipecat pipeline. Blocks until session ends.
-    Meant to be run as a background asyncio task.
-    """
+    """Build and run the Pipecat 1.2.1 pipeline. Blocks until session ends."""
     try:
         from pipecat.pipeline.pipeline import Pipeline
         from pipecat.pipeline.runner import PipelineRunner
         from pipecat.pipeline.task import PipelineTask, PipelineParams
-        from pipecat.frames.frames import TextFrame, EndFrame
-        from pipecat.transports.services.daily import DailyTransport, DailyParams
+        from pipecat.frames.frames import TextFrame, LLMContextFrame, EndFrame
+        from pipecat.transports.daily.transport import DailyTransport, DailyParams
         from pipecat.audio.vad.silero import SileroVADAnalyzer
-        from pipecat.services.groq import GroqSTTService, GroqLLMService
-        from pipecat.processors.aggregators.openai_llm_context import (
-            OpenAILLMContext,
-            OpenAILLMContextAggregator,
-        )
+        from pipecat.services.groq.stt import GroqSTTService
+        from pipecat.services.groq.llm import GroqLLMService
+        from pipecat.processors.aggregators.llm_context import LLMContext
+        from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
     except ImportError as e:
-        logger.error(f"Pipecat not installed: {e}. Run: pip install 'pipecat-ai[daily,groq,silero]'")
+        logger.error(f"Pipecat import failed: {e}")
+        logger.error("Run: /opt/homebrew/bin/python3.11 -m pip install 'pipecat-ai[daily,groq,silero,cartesia]'")
         return
 
     from app.pipeline.frame_analyzer import GoldFrameAnalyzer
@@ -137,13 +116,11 @@ async def run_gold_pipeline(
         room_url,
         bot_token,
         "GoldEye Agent",
-        DailyParams(
-            audio_out_enabled=True,
+        params=DailyParams(
             audio_in_enabled=True,
-            video_out_enabled=False,
-            video_in_enabled=True,       # we need to see the customer's camera
-            transcription_enabled=False,  # we use Groq STT instead
-            vad_enabled=True,
+            audio_out_enabled=True,
+            video_in_enabled=True,
+            microphone_out_enabled=True,
             vad_analyzer=SileroVADAnalyzer(),
         ),
     )
@@ -165,31 +142,29 @@ async def run_gold_pipeline(
 
     # ── Frame analyzer ─────────────────────────────────────────────────────────
     async def _on_complete(captured: dict):
-        logger.info(f"[{session_id}] All angles captured — triggering assessment")
+        logger.info(f"[{session_id}] All 5 angles captured — triggering assessment callback")
         await on_assessment_ready(captured)
-        # Give TTS time to finish speaking before ending
         await asyncio.sleep(5)
         await task.queue_frame(EndFrame())
 
     frame_analyzer = GoldFrameAnalyzer(session_id=session_id, on_complete=_on_complete)
 
-    # ── LLM context ────────────────────────────────────────────────────────────
-    context = OpenAILLMContext(messages=[
+    # ── LLM context + aggregator pair ──────────────────────────────────────────
+    context = LLMContext(messages=[
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "assistant", "content": frame_analyzer.get_intro_message()},
     ])
-    context_aggregator = llm.create_context_aggregator(context)
+    aggregators = LLMContextAggregatorPair(context)
 
     # ── Pipeline ───────────────────────────────────────────────────────────────
     pipeline = Pipeline([
         transport.input(),
         stt,
         frame_analyzer,
-        context_aggregator.user(),
+        aggregators.user(),
         llm,
         tts,
         transport.output(),
-        context_aggregator.assistant(),
+        aggregators.assistant(),
     ])
 
     task = PipelineTask(
@@ -197,15 +172,17 @@ async def run_gold_pipeline(
         PipelineParams(allow_interruptions=True, enable_metrics=False),
     )
 
-    # Speak the intro message as soon as the bot joins
+    # Speak the intro message when a non-bot participant joins
     @transport.event_handler("on_participant_joined")
     async def on_join(transport_ref, participant):
-        if participant.get("info", {}).get("userName") == "GoldEye Agent":
+        # Skip the bot itself
+        info = participant.get("info", {})
+        if info.get("userName") == "GoldEye Agent":
             return
-        logger.info(f"[{session_id}] Customer joined — sending intro")
-        await task.queue_frame(
-            TextFrame(frame_analyzer.get_intro_message())
-        )
+        logger.info(f"[{session_id}] Customer joined — queuing intro message")
+        intro = frame_analyzer.get_intro_message()
+        context.add_message({"role": "assistant", "content": intro})
+        await task.queue_frame(TextFrame(intro))
 
     runner = PipelineRunner()
     await runner.run(task)
@@ -213,51 +190,23 @@ async def run_gold_pipeline(
 
 
 def _build_tts():
-    """Return a TTS service. Cartesia if key present, else edge-tts fallback."""
+    """Cartesia Kiara (Indian English) → edge-tts fallback."""
     if CARTESIA_API_KEY:
         try:
-            from pipecat.services.cartesia import CartesiaTTSService
+            from pipecat.services.cartesia.tts import CartesiaTTSService
             return CartesiaTTSService(
                 api_key=CARTESIA_API_KEY,
                 # Kiara — English, Indian-accented female, clear enunciation
                 voice_id="f8f5f1b2-f02d-4d8e-a40d-fd850a487b3d",
                 model="sonic-2",
-                language="en",
             )
         except ImportError:
-            pass
+            logger.warning("Cartesia not installed — falling back to edge-tts")
 
-    # edge-tts is free and requires no API key
     try:
         from pipecat.services.edge_tts import EdgeTTSService
-        return EdgeTTSService(voice="en-IN-NeerjaNeural")  # Indian English female fallback
+        return EdgeTTSService(voice="en-IN-NeerjaNeural")
     except ImportError:
         pass
 
-    # Last resort: Google TTS via gTTS (pip install pipecat-ai[google])
-    try:
-        from pipecat.services.google import GoogleTTSService
-        return GoogleTTSService(voice_id="en-IN-Standard-A")
-    except ImportError:
-        pass
-
-    raise RuntimeError(
-        "No TTS service available. "
-        "Install one of: pipecat-ai[cartesia], pipecat-ai[google], or edge-tts"
-    )
-
-
-# ── Active sessions registry ─────────────────────────────────────────────────
-# Maps session_id → {task, progress_getter, room_url}
-_active_sessions: dict = {}
-
-
-def get_session_progress(session_id: str) -> Optional[dict]:
-    entry = _active_sessions.get(session_id)
-    if not entry:
-        return None
-    return entry["progress_getter"]()
-
-
-def end_session(session_id: str):
-    _active_sessions.pop(session_id, None)
+    raise RuntimeError("No TTS available. Install pipecat-ai[cartesia] or edge-tts.")
