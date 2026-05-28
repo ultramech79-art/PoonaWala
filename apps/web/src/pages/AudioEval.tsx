@@ -30,6 +30,7 @@ interface TapResult {
   spectral_centroid_hz: number
   q_factor: number
   gold_band_ratio: number
+  decay_r2: number
   reasoning: string
 }
 
@@ -250,11 +251,11 @@ export function AudioEval() {
 
                 <div className="border-t border-stone-100 pt-3 space-y-2">
                   {[
-                    { label: 'Decay time', value: `${result.decay_ms.toFixed(0)} ms`, ref: '60–350 ms = gold' },
-                    { label: 'Dominant frequency', value: `${result.dominant_freq_hz.toFixed(0)} Hz`, ref: '200–1200 Hz' },
-                    { label: 'Spectral centroid', value: `${result.spectral_centroid_hz?.toFixed(0) ?? '—'} Hz`, ref: '150–700 Hz = gold' },
-                    { label: 'Q-factor', value: result.q_factor?.toFixed(1) ?? '—', ref: '5–30 = damped ring' },
-                    { label: 'Gold-band energy', value: result.gold_band_ratio != null ? `${(result.gold_band_ratio * 100).toFixed(0)}%` : '—', ref: '>45% = solid gold' },
+                    { label: 'Decay time',       value: `${result.decay_ms.toFixed(0)} ms`,                            ref: '80–400 ms = gold' },
+                    { label: 'Spectral centroid', value: `${result.spectral_centroid_hz?.toFixed(0) ?? '—'} Hz`,        ref: '300–800 Hz = gold' },
+                    { label: 'Gold-band energy', value: result.gold_band_ratio != null ? `${(result.gold_band_ratio * 100).toFixed(0)}%` : '—', ref: '>40% = dense metal' },
+                    { label: 'Decay quality R²', value: result.decay_r2 != null ? result.decay_r2.toFixed(2) : '—',    ref: '>0.85 = clean ring' },
+                    { label: 'Q-factor',         value: result.q_factor?.toFixed(1) ?? '—',                            ref: '8–50 = good resonance' },
                   ].map(({ label, value, ref }) => (
                     <div key={label} className="flex items-center justify-between text-xs">
                       <span className="text-stone-500">{label}</span>
