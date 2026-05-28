@@ -28,11 +28,8 @@ const CIBIL_COLOR: Record<string, string> = {
 
 interface CityPrices {
   '24k': number
-  '23k': number
   '22k': number
-  '20k': number
   '18k': number
-  '14k': number
 }
 
 export function FinalEvaluation() {
@@ -55,7 +52,7 @@ export function FinalEvaluation() {
     [selectedState, selectedCity],
   )
 
-  // ── City gold price from allindiabullion.com ────────────────────────────────
+  // ── City gold price from Times of India ─────────────────────────────────────
   const [cityPrices, setCityPrices]       = useState<CityPrices | null>(null)
   const [priceSource, setPriceSource]     = useState('')
   const [priceLoading, setPriceLoading]   = useState(false)
@@ -83,25 +80,26 @@ export function FinalEvaluation() {
 
   // ── Gold value using real city price ────────────────────────────────────────
   const detectedKarat = result.purity.point_estimate_karat
-  const netWeightG = Math.max(
-    result.weight.estimated_g - (result.value_inr.stone_weight_excluded_g ?? 0),
-    result.weight.estimated_g * 0.94,
-  )
+  const netWeightG = result.weight.method === 'BILL_CERTIFICATE_OCR'
+    ? result.weight.estimated_g
+    : Math.max(
+      result.weight.estimated_g - (result.value_inr.stone_weight_excluded_g ?? 0),
+      result.weight.estimated_g * 0.94,
+    )
 
   const cityPriceForKarat = useMemo(() => {
     if (!cityPrices) return 0
-    if (detectedKarat >= 23) return cityPrices['24k']
-    if (detectedKarat >= 22) return cityPrices['23k']
-    if (detectedKarat >= 21) return cityPrices['22k']
-    if (detectedKarat >= 19) return cityPrices['20k']
-    if (detectedKarat >= 16) return cityPrices['18k']
-    if (detectedKarat >= 13) return cityPrices['14k']
+    if (detectedKarat >= 23.5) return cityPrices['24k']
+    if (detectedKarat >= 21.5 && detectedKarat < 22.5) return cityPrices['22k']
+    if (detectedKarat >= 17.5 && detectedKarat < 18.5) return cityPrices['18k']
     return cityPrices['24k'] * detectedKarat / 24
   }, [cityPrices, detectedKarat])
 
   const cityGoldValue = cityPriceForKarat > 0
     ? Math.round(cityPriceForKarat * netWeightG)
     : 0
+  const hallmarkVisible = Boolean(result.purity.huid_verified || state.certificateData?.huid || state.huidCode)
+  const weightVerified = result.weight.method === 'BILL_CERTIFICATE_OCR' || Boolean(state.certificateData?.weightG)
 
   // ── PAN + derived credit profile ────────────────────────────────────────────
   const [pan, setPan] = useState('')
@@ -116,11 +114,12 @@ export function FinalEvaluation() {
     return computeLTV({
       goldValueInr: cityGoldValue,
       karatEstimate: detectedKarat,
-      huidVerified: result.purity.huid_verified,
       aiConfidence: result.confidence.score,
       goldType: 'jewelry',
+      hallmarkVisible,
+      weightVerified,
     })
-  }, [region, cityGoldValue, detectedKarat, result])
+  }, [region, cityGoldValue, detectedKarat, result, hallmarkVisible, weightVerified])
 
   const kycStatus = useMemo(
     () => getPANKYCStatus(ltvResult?.maxLoanInr ?? 0),
@@ -150,7 +149,7 @@ export function FinalEvaluation() {
 
   const locationReady = Boolean(region)
   const panReady      = !kycStatus.panRequired || panValidation.valid
-  const canProceed    = locationReady && eligible && !priceLoading && cityGoldValue > 0
+  const canProceed    = locationReady && panReady && eligible && !priceLoading && cityGoldValue > 0
 
   function handleContinue() {
     if (!canProceed || !region || !ltvResult || !cityPrices) return
@@ -169,8 +168,11 @@ export function FinalEvaluation() {
       cibilTierLabel: cibilInfo.label,
       pan,
       ltvFinalPct: ltvResult.finalLtvPct,
+      ltvLowPct: ltvResult.provisionalLowLtvPct,
       maxLoanInr: ltvResult.maxLoanInr,
+      provisionalLoanLowInr: ltvResult.provisionalLowLoanInr,
       ltvComponents: ltvResult.components,
+      ltvProvisionalComponents: ltvResult.provisionalComponents,
       ticketTierLabel: ltvResult.ticketTierLabel,
       processingFeePct: cibilInfo.processing_fee_pct,
       eligible: true,
@@ -202,7 +204,7 @@ export function FinalEvaluation() {
               {cityGoldValue > 0 ? (
                 <p className="text-xs text-stone-500 mt-0.5">
                   City value ~{fmt(cityGoldValue)}
-                  {priceSource === 'allindiabullion.com' && (
+                  {priceSource === 'timesofindia' && (
                     <span className="ml-1 text-emerald-600 font-medium">· live city rate</span>
                   )}
                   {priceSource === 'ibja_national' && (
@@ -215,7 +217,10 @@ export function FinalEvaluation() {
             </div>
             <div className="text-right">
               {result.purity.huid_verified && (
-                <span className="badge-green text-[10px]"><CheckCircle className="w-3 h-3" /> BIS Verified</span>
+                <span className="badge-green text-[10px]"><CheckCircle className="w-3 h-3" /> HUID visible</span>
+              )}
+              {!result.purity.huid_verified && (
+                <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-semibold">Verification pending</span>
               )}
               <p className="text-xs text-stone-400 mt-1">AI conf. {Math.round(result.confidence.score * 100)}%</p>
             </div>
@@ -278,22 +283,19 @@ export function FinalEvaluation() {
                   </div>
                   <span className={clsx(
                     'text-[10px] font-semibold px-2 py-0.5 rounded-full',
-                    priceSource === 'allindiabullion.com'
+                    priceSource === 'timesofindia'
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-stone-100 text-stone-500',
                   )}>
-                    {priceSource === 'allindiabullion.com' ? 'Live city rate' : 'IBJA national'}
+                    {priceSource === 'timesofindia' ? 'Live city rate' : 'IBJA national'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   {([
                     ['24K', cityPrices['24k'], detectedKarat >= 23],
-                    ['23K', cityPrices['23k'], detectedKarat === 23],
                     ['22K', cityPrices['22k'], detectedKarat >= 21 && detectedKarat < 23],
-                    ['20K', cityPrices['20k'], detectedKarat >= 19 && detectedKarat < 21],
                     ['18K', cityPrices['18k'], detectedKarat >= 16 && detectedKarat < 19],
-                    ['14K', cityPrices['14k'], detectedKarat >= 13 && detectedKarat < 16],
                   ] as [string, number, boolean][]).map(([label, price, highlight]) => (
                     <div
                       key={label}
@@ -438,9 +440,24 @@ export function FinalEvaluation() {
                     </p>
                   </div>
                   <div className="bg-white rounded-xl p-3 border border-stone-200">
-                    <p className="text-[10px] text-stone-400 mb-1">Max Loan (LTV {ltvResult.finalLtvPct}%)</p>
-                    <p className="font-display font-black text-base text-brand-600">{fmt(ltvResult.maxLoanInr)}</p>
-                    <p className="text-[10px] text-stone-400 mt-0.5">{ltvResult.ticketTierLabel}</p>
+                    <p className="text-[10px] text-stone-400 mb-1">
+                      {ltvResult.provisionalLowLoanInr < ltvResult.maxLoanInr ? 'Provisional Loan Range' : `Max Loan (LTV ${ltvResult.finalLtvPct}%)`}
+                    </p>
+                    {ltvResult.provisionalLowLoanInr < ltvResult.maxLoanInr ? (
+                      <>
+                        <p className="font-display font-black text-base text-brand-600">
+                          {fmt(ltvResult.provisionalLowLoanInr)} - {fmt(ltvResult.maxLoanInr)}
+                        </p>
+                        <p className="text-[10px] text-stone-400 mt-0.5">
+                          {ltvResult.provisionalLowLtvPct}% - {ltvResult.finalLtvPct}% LTV
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-display font-black text-base text-brand-600">{fmt(ltvResult.maxLoanInr)}</p>
+                        <p className="text-[10px] text-stone-400 mt-0.5">{ltvResult.ticketTierLabel}</p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -467,14 +484,29 @@ export function FinalEvaluation() {
                       </div>
                     ))}
                     <div className="flex items-center justify-between px-3 py-2 bg-brand-50">
-                      <span className="text-xs font-bold text-brand-700">Final LTV</span>
+                      <span className="text-xs font-bold text-brand-700">Upper LTV after verification</span>
                       <span className="text-sm font-black text-brand-600">{ltvResult.finalLtvPct}%</span>
                     </div>
+                    {ltvResult.provisionalComponents.map((c, i) => (
+                      <div key={`provisional-${i}`} className="flex items-center justify-between px-3 py-2 bg-amber-50">
+                        <span className="text-[11px] text-amber-700 flex-1">{c.label}</span>
+                        <span className="text-[11px] font-mono font-semibold text-amber-600 w-12 text-right">
+                          {c.deltaPct}%
+                        </span>
+                        <span className="text-[11px] font-bold text-amber-700 w-14 text-right">{c.runningPct}%</span>
+                      </div>
+                    ))}
+                    {ltvResult.provisionalLowLtvPct < ltvResult.finalLtvPct && (
+                      <div className="flex items-center justify-between px-3 py-2 bg-amber-100">
+                        <span className="text-xs font-bold text-amber-800">Provisional digital floor</span>
+                        <span className="text-sm font-black text-amber-700">{ltvResult.provisionalLowLtvPct}%</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <p className="text-[10px] text-stone-400 mt-2 text-center">
-                  LTV based on gold quality only · Credit score adjusts interest rate, not eligibility
+                  LTV is up to 75% of accepted gold value · Range can increase after agent verification
                 </p>
 
                 {region && !region.serviceable && (

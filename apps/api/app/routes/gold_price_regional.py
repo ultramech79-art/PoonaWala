@@ -1,23 +1,21 @@
 """
 GET /api/gold-price/city?city=Mumbai&state=Maharashtra
 
-Scrapes allindiabullion.com which covers 120+ Indian cities.
-Uses JSON-LD structured data (schema.org Dataset) — no fragile HTML parsing.
+Scrapes Times of India city gold-rate pages:
+  /business/gold-rates-today/gold-price-in-{city-slug}
 
-All karat prices (24K, 23K, 22K, 20K, 18K, 14K) are derived from the
-24K (Gold Retail 999) base price, exactly as the site does:
-  price_NK = price_24K × N/24
+TOI exposes the exact per-gram 24K, 22K, and 18K card values on the page.
+Other karats are intentionally not scraped; callers may derive them from 24K.
 
 Falls back to IBJA national rate for cities not covered by the site.
 Cache: 1 hour per city.
 """
 import re
-import json
 import time
 import logging
-from typing import Optional, Tuple
+from html import unescape
+from typing import Optional
 import httpx
-from bs4 import BeautifulSoup
 from fastapi import APIRouter, Query
 
 logger = logging.getLogger("goldeye.gold_price_regional")
@@ -35,55 +33,29 @@ HEADERS = {
     "Accept-Language": "en-IN,en;q=0.9",
 }
 
-# ── State slug overrides (allindiabullion.com uses hyphens, no special chars) ─
-STATE_OVERRIDES: dict = {
-    "jammu & kashmir":                      "jammu-and-kashmir",
-    "jammu and kashmir":                    "jammu-and-kashmir",
-    "andaman & nicobar islands":            "andaman-and-nicobar-islands",
-    "andaman and nicobar islands":          "andaman-and-nicobar-islands",
-    "dadra & nagar haveli and daman & diu": "dadra-and-nagar-haveli",
-    "dadra and nagar haveli and daman and diu": "dadra-and-nagar-haveli",
-    "delhi":                                "delhi",
-}
-
 # ── City slug overrides ────────────────────────────────────────────────────────
-# Format: "app city name (lowercase)" → (city_slug, optional_state_slug_override)
+# Format: "app city name (lowercase)" → "TOI city slug"
 CITY_OVERRIDES: dict = {
-    # Karnataka — site uses old English names for some
-    "bengaluru":    ("bangalore",   None),
-    "mysuru":       ("mysuru",      None),    # verified ✓
-    "mangaluru":    ("mangaluru",   None),    # try exact first; site may not have it → IBJA fallback
-
-    # Haryana
-    "gurugram":     ("gurgaon",     None),
+    "bengaluru":    "bangalore",
+    "mysuru":       "mysore",
+    "mangaluru":    "mangalore",
+    "gurugram":     "gurgaon",
 
     # Delhi — all sub-areas map to the single city page
-    "new delhi":    ("delhi",       "delhi"),
-    "south delhi":  ("delhi",       "delhi"),
-    "east delhi":   ("delhi",       "delhi"),
-    "north delhi":  ("delhi",       "delhi"),
-    "west delhi":   ("delhi",       "delhi"),
-    "dwarka":       ("delhi",       "delhi"),
-    "rohini":       ("delhi",       "delhi"),
+    "new delhi":    "delhi",
+    "south delhi":  "delhi",
+    "east delhi":   "delhi",
+    "north delhi":  "delhi",
+    "west delhi":   "delhi",
+    "dwarka":       "delhi",
+    "rohini":       "delhi",
 
-    # Telangana
-    "secunderabad": ("hyderabad",   None),
-
-    # Goa — site splits into north/south-goa, no panaji/margao pages
-    "panaji":           ("north-goa",  "goa"),
-    "mapusa":           ("north-goa",  "goa"),
-    "margao":           ("south-goa",  "goa"),
-    "vasco da gama":    ("south-goa",  "goa"),
-
-    # Puducherry / Karaikal
-    "puducherry":   ("puducherry",  "puducherry"),
-    "karaikal":     ("puducherry",  "puducherry"),
+    "secunderabad": "hyderabad",
 
     # Cities with alternate spellings
-    "prayagraj":    ("prayagraj",   None),
-    "allahabad":    ("prayagraj",   None),
-    "aurangabad":   ("aurangabad",  None),
-    "navi mumbai":  ("navi-mumbai", None),
+    "prayagraj":    "allahabad",
+    "navi mumbai":  "mumbai",
+    "vasai virar":  "mumbai",
 }
 
 
@@ -92,46 +64,45 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower().strip()).strip("-")
 
 
-def _resolve_slugs(state: str, city: str) -> Tuple[str, str]:
-    """Return (state_slug, city_slug) for the allindiabullion.com URL."""
+def _resolve_city_slug(city: str) -> str:
+    """Return TOI city slug for /gold-price-in-{city_slug}."""
     city_lower  = city.lower().strip()
-    state_lower = state.lower().strip()
-
-    if city_lower in CITY_OVERRIDES:
-        city_slug, state_slug_override = CITY_OVERRIDES[city_lower]
-        state_slug = state_slug_override or STATE_OVERRIDES.get(state_lower, _slugify(state))
-    else:
-        city_slug  = _slugify(city)
-        state_slug = STATE_OVERRIDES.get(state_lower, _slugify(state))
-
-    return state_slug, city_slug
+    return CITY_OVERRIDES.get(city_lower, _slugify(city))
 
 
-def _parse_jsonld(html: str) -> Optional[float]:
-    """Extract 24K price per gram from JSON-LD Dataset on allindiabullion.com."""
-    soup = BeautifulSoup(html, "lxml")
-    for script in soup.find_all("script", type="application/ld+json"):
-        try:
-            data = json.loads(script.string or "")
-        except (json.JSONDecodeError, AttributeError):
-            continue
-        if not isinstance(data, dict) or data.get("@type") != "Dataset":
-            continue
-        for var in data.get("variableMeasured", []):
-            name  = (var.get("name") or "").lower()
-            value = var.get("value")
-            if not isinstance(value, (int, float)) or value <= 0:
-                continue
-            # "24K gold per 10 grams" or "Gold Retail 999"
-            if ("24k" in name or "retail 999" in name or "gold retail" in name) and "silver" not in name:
-                return round(value / 10, 2)
-    return None
+def _html_to_text(html: str) -> str:
+    """Convert TOI HTML to compact text while preserving card labels."""
+    text = re.sub(r"<script[^>]*>.*?</script>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<style[^>]*>.*?</style>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
-async def _fetch_24k(state: str, city: str) -> Tuple[Optional[float], str]:
-    """Fetch 24K/gram price from allindiabullion.com. Returns (price, source)."""
-    state_slug, city_slug = _resolve_slugs(state, city)
-    url = f"https://allindiabullion.com/gold-rate/{state_slug}/{city_slug}"
+def _parse_price_after_label(text: str, karat: int) -> Optional[float]:
+    """Extract the first rupee value after e.g. '22K gold/gm'."""
+    pattern = rf"{karat}\s*K\s+gold/gm\s*₹\s*([0-9,]+)"
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return float(match.group(1).replace(",", ""))
+
+
+def _parse_toi_prices(html: str) -> Optional[dict]:
+    """Extract TOI's exact 24K/22K/18K per-gram card prices."""
+    text = _html_to_text(html)
+    p24 = _parse_price_after_label(text, 24)
+    p22 = _parse_price_after_label(text, 22)
+    p18 = _parse_price_after_label(text, 18)
+    if not (p24 and p22 and p18):
+        return None
+    return _exact_karats(p24=p24, p22=p22, p18=p18)
+
+
+async def _fetch_toi_prices(city: str) -> tuple[Optional[dict], str]:
+    """Fetch per-gram city gold prices from Times of India."""
+    city_slug = _resolve_city_slug(city)
+    url = f"https://timesofindia.indiatimes.com/business/gold-rates-today/gold-price-in-{city_slug}"
     logger.info(f"Fetching: {url}")
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=HEADERS) as client:
@@ -139,29 +110,23 @@ async def _fetch_24k(state: str, city: str) -> Tuple[Optional[float], str]:
         if r.status_code != 200:
             logger.debug(f"{city}: HTTP {r.status_code} — IBJA fallback")
             return None, "ibja_national"
-        p24 = _parse_jsonld(r.text)
-        if p24:
-            logger.info(f"{city}, {state}: 24K=₹{p24}/g")
-            return p24, "allindiabullion.com"
-        logger.debug(f"{city}: JSON-LD not found — IBJA fallback")
+        prices = _parse_toi_prices(r.text)
+        if prices:
+            logger.info(f"{city}: TOI 24K=₹{prices['24k']}/g, 22K=₹{prices['22k']}/g, 18K=₹{prices['18k']}/g")
+            return prices, "timesofindia"
+        logger.debug(f"{city}: TOI gold cards not found — IBJA fallback")
         return None, "ibja_national"
     except Exception as e:
         logger.debug(f"{city} fetch error: {e}")
         return None, "ibja_national"
 
 
-def _all_karats(p24: float) -> dict:
-    """
-    Derive all standard karat prices from 24K base.
-    Formula: p_NK = p_24K × N/24  (same as allindiabullion.com)
-    """
+def _exact_karats(p24: float, p22: Optional[float] = None, p18: Optional[float] = None) -> dict:
+    """Return only the three rates shown on TOI. Missing values are derived from 24K."""
     return {
         "24k": round(p24, 2),
-        "23k": round(p24 * 23 / 24, 2),
-        "22k": round(p24 * 22 / 24, 2),
-        "20k": round(p24 * 20 / 24, 2),
-        "18k": round(p24 * 18 / 24, 2),
-        "14k": round(p24 * 14 / 24, 2),
+        "22k": round(p22 if p22 is not None else p24 * 22 / 24, 2),
+        "18k": round(p18 if p18 is not None else p24 * 18 / 24, 2),
     }
 
 
@@ -171,8 +136,8 @@ async def city_gold_price(
     state: str = Query("", description="State name e.g. Maharashtra"),
 ):
     """
-    Live city gold rates (all karats) from allindiabullion.com JSON-LD.
-    Falls back to IBJA national rate for cities not on the site.
+    Live city gold rates from Times of India city pages.
+    Falls back to IBJA national rate for cities not covered by TOI.
     """
     from app.decision.ibja import price_metadata
 
@@ -183,15 +148,15 @@ async def city_gold_price(
         if time.time() - fetched_at < CACHE_TTL:
             return _build_response(city, state, prices, src, fetched_at, cached=True)
 
-    p24, source = await _fetch_24k(state, city)
+    prices, source = await _fetch_toi_prices(city)
 
-    if not p24:
+    if not prices:
         ibja = price_metadata()
         ibja_prices = ibja.get("prices", {})
         p24 = float(ibja_prices.get("24K", 0))
+        prices = _exact_karats(p24)
         source = "ibja_national"
 
-    prices = _all_karats(p24)
     fetched_at = time.time()
     _cache[cache_key] = (fetched_at, prices, source)
     return _build_response(city, state, prices, source, fetched_at, cached=False)
@@ -204,7 +169,7 @@ def _build_response(
     return {
         "city": city,
         "state": state,
-        "prices_per_gram": prices,   # 24k, 23k, 22k, 20k, 18k, 14k
+        "prices_per_gram": prices,   # exact/supported: 24k, 22k, 18k
         "source": source,
         "cached": cached,
         "fetched_at": fetched_at,

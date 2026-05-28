@@ -40,6 +40,8 @@ export function GoldLoanApplication() {
   const { available_months } = loanParams.tenure_options
   const minLoan = loanParams.loan_limits.min_inr
   const maxLoan = evalData.maxLoanInr
+  const provisionalLowLoan = evalData.provisionalLoanLowInr
+  const hasVerificationRange = provisionalLowLoan < maxLoan
 
   // ── User inputs ─────────────────────────────────────────────────────────────
   const [loanAmount, setLoanAmount] = useState(() => Math.round(maxLoan * 0.75 / 1000) * 1000)
@@ -77,6 +79,7 @@ export function GoldLoanApplication() {
   const safeCustodyInr   = Math.round(charges.safe_custody_inr_per_g_per_month * netWeightG * tenure)
   const totalDeductions  = processingFeeInr + gstOnFeeInr + stampDutyInr
   const disbursementInr  = loanAmount - totalDeductions
+  const totalCustomerCost = emiResult.totalPayment + safeCustodyInr
 
   // ── Slider position for LTV bubble ─────────────────────────────────────────
   const sliderPct = maxLoan > minLoan ? ((loanAmount - minLoan) / (maxLoan - minLoan)) * 100 : 0
@@ -149,10 +152,20 @@ export function GoldLoanApplication() {
           <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-stone-800">
-              Eligible up to <span className="text-brand-600 font-black">{fmt(maxLoan)}</span>
+              {hasVerificationRange ? (
+                <>
+                  Range <span className="text-brand-600 font-black">{fmt(provisionalLowLoan)} - {fmt(maxLoan)}</span>
+                </>
+              ) : (
+                <>
+                  Eligible up to <span className="text-brand-600 font-black">{fmt(maxLoan)}</span>
+                </>
+              )}
             </p>
             <p className="text-[10px] text-stone-500 mt-0.5 truncate">
-              LTV {evalData.ltvFinalPct}% · {evalData.city}, {evalData.state} · {evalData.cibilTierLabel} credit
+              {hasVerificationRange
+                ? `LTV ${evalData.ltvLowPct}% - ${evalData.ltvFinalPct}% · upper subject to agent verification`
+                : `LTV ${evalData.ltvFinalPct}% · ${evalData.city}, ${evalData.state} · ${evalData.cibilTierLabel} credit`}
             </p>
           </div>
         </div>
@@ -172,6 +185,11 @@ export function GoldLoanApplication() {
               <span className="mx-1 text-stone-300">·</span>
               Max {evalData.ltvFinalPct}%
             </p>
+            {hasVerificationRange && loanAmount > provisionalLowLoan && (
+              <p className="text-[10px] text-amber-600 mt-1">
+                Amount above {fmt(provisionalLowLoan)} depends on agent verification of hallmark/net weight.
+              </p>
+            )}
           </div>
 
           {/* Draggable range slider with floating LTV bubble */}
@@ -354,7 +372,7 @@ export function GoldLoanApplication() {
                 className="w-full flex items-center justify-between text-xs text-stone-500 py-1"
               >
                 <span>
-                  Charges (Processing + GST{stampDutyInr > 0 ? ' + Stamp' : ''})
+                  Disbursement deductions
                 </span>
                 <div className="flex items-center gap-1">
                   <span className="font-medium text-stone-700">{fmt(totalDeductions)}</span>
@@ -382,7 +400,7 @@ export function GoldLoanApplication() {
                     <span className="font-semibold">{fmt(safeCustodyInr)}</span>
                   </div>
                   <p className="text-[10px] text-stone-400 pt-1">
-                    Custody payable monthly. Foreclosure: {charges.foreclosure_after_30_days_pct}% after 30 days.
+                    Safe custody is billed separately, not deducted from disbursement. Foreclosure: {charges.foreclosure_after_30_days_pct}% after 30 days.
                   </p>
                 </div>
               )}
@@ -397,6 +415,10 @@ export function GoldLoanApplication() {
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-stone-900">Total Repayable</span>
                 <span className="text-sm font-black text-brand-600">{fmt(emiResult.totalPayment)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-stone-900">Total Customer Cost</span>
+                <span className="text-sm font-black text-brand-600">{fmt(totalCustomerCost)}</span>
               </div>
               {evalData.processingFeePct === 0 && (
                 <p className="text-[10px] text-emerald-600 font-medium">Processing fee waived (Excellent credit)</p>

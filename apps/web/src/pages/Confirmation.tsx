@@ -36,6 +36,7 @@ export function Confirmation() {
     : loan.repaymentType === 'interest_only'
     ? `${fmt(loan.monthlyPayment)}/mo interest + ${fmt(loan.bulletPayment)} at end`
     : `${fmt(loan.bulletPayment)} at month ${loan.tenureMonths}`
+  const totalCustomerCost = loan.totalPayment + loan.safeCustodyInr
 
   return (
     <div className="page overflow-y-auto no-scrollbar animate-fade-in bg-gradient-to-b from-[#FEFDFC] via-white to-emerald-50/20">
@@ -91,14 +92,15 @@ export function Confirmation() {
             <div className="mt-3 space-y-2 pt-3 border-t border-stone-100 animate-slide-down">
               {[
                 { label: `Gold Value (${evalD.city})`, value: fmt(evalD.cityGoldValueInr) },
-                { label: `LTV Applied`,             value: `${evalD.ltvFinalPct}%` },
+                { label: `LTV Range`,               value: evalD.ltvLowPct < evalD.ltvFinalPct ? `${evalD.ltvLowPct}% - ${evalD.ltvFinalPct}%` : `${evalD.ltvFinalPct}%` },
                 { label: 'Total Interest',          value: fmt(loan.totalInterest) },
                 { label: `Processing Fee (${evalD.processingFeePct}%)`, value: fmt(loan.processingFeeInr) },
                 { label: 'GST on Processing (18%)', value: fmt(loan.gstOnFeeInr) },
                 ...(loan.stampDutyInr > 0 ? [{ label: `Stamp Duty (${evalD.state})`, value: fmt(loan.stampDutyInr) }] : []),
-                { label: `Safe Custody (₹5/g/mo × ${loan.tenureMonths}mo)`, value: fmt(loan.safeCustodyInr) },
+                { label: `Safe Custody (₹5/g/mo × ${loan.tenureMonths}mo)`, value: `${fmt(loan.safeCustodyInr)} billed separately` },
                 { label: 'Net Disbursement',        value: fmt(loan.disbursementInr), bold: true },
                 { label: 'Total Repayable',         value: fmt(loan.totalPayment),    bold: true },
+                { label: 'Total Customer Cost',      value: fmt(totalCustomerCost),    bold: true },
               ].map((r, i) => (
                 <div key={i} className={clsx('flex justify-between items-center', (r as any).bold && 'border-t border-stone-200 pt-2')}>
                   <span className={clsx('text-xs', (r as any).bold ? 'font-bold text-stone-900' : 'text-stone-500')}>{r.label}</span>
