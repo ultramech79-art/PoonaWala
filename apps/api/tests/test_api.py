@@ -25,6 +25,9 @@ ASSESS_PAYLOAD = {
 
 @pytest.fixture
 async def client():
+    from app.db.database import engine, Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
@@ -96,10 +99,10 @@ async def test_assess_graceful_degradation_no_audio(client):
     assert r.json()["routing"] in ("INSTANT", "AGENT", "RECAPTURE", "REJECT")
 
 
-async def test_assess_rbi_ltv_85_for_small_loans(client):
+async def test_assess_rbi_ltv_for_small_loans(client):
     r = await client.post("/api/assess", json={**ASSESS_PAYLOAD, "weight_g": 5.0})
     assert r.status_code == 200
-    assert r.json()["loan_offer"]["ltv_applied_pct"] == 85
+    assert r.json()["loan_offer"]["ltv_applied_pct"] == 75  # RBI ceiling is 75% for NBFCs
 
 
 async def test_session_not_found(client):
