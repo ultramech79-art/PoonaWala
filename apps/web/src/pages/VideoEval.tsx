@@ -21,6 +21,17 @@ function grabFrame(video: HTMLVideoElement): string {
   return c.toDataURL('image/jpeg', 0.80).split(',')[1]
 }
 
+function frameDataUrl(b64: string): string {
+  return `data:image/jpeg;base64,${b64}`
+}
+
+function frameBlob(b64: string): Blob {
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type: 'image/jpeg' })
+}
+
 type Phase = 'intro' | 'recording' | 'analyzing' | 'result'
 
 interface VideoResult {
@@ -38,7 +49,7 @@ interface VideoResult {
 
 export function VideoEval() {
   const navigate = useNavigate()
-  const { setLiveAuthResult } = useSessionStore()
+  const { setLiveAuthResult, addCapture } = useSessionStore()
   const lang = (localStorage.getItem('goldeye_lang') ?? 'en') as 'en' | 'hi'
 
   const videoRef  = useRef<HTMLVideoElement>(null)
@@ -79,6 +90,22 @@ export function VideoEval() {
       // Last frame
       if (videoRef.current) { const b64 = grabFrame(videoRef.current); if (b64) framesRef.current.push(b64) }
       stream.getTracks().forEach(t => t.stop()); streamRef.current = null
+
+      const usableFrames = framesRef.current.filter(Boolean).slice(0, 10)
+      if (usableFrames.length) {
+        const dataUrls = usableFrames.map(frameDataUrl)
+        addCapture({
+          type: 'video',
+          dataUrl: dataUrls[0],
+          blob: frameBlob(usableFrames[0]),
+          timestamp: Date.now(),
+          exif: {
+            videoFramesDataUrl: dataUrls,
+            videoFrameCount: dataUrls.length,
+            source: 'video-eval',
+          },
+        })
+      }
 
       setPhase('analyzing')
       await runAnalysis()

@@ -37,6 +37,42 @@ def test_same_volume_estimates_more_weight_for_higher_karat():
     assert w24["density_g_cm3"] == 19.32
 
 
+def test_reference_free_visual_prior_uses_geometry_not_static_mean():
+    from app.data.image_utils import estimate_volume_from_measurement, estimate_weight_range_from_volume
+
+    small_compact = {
+        "area_px2": 5_000,
+        "image_area_px2": 1_000_000,
+        "width_px": 90,
+        "height_px": 80,
+        "major_axis_px": 95,
+        "minor_axis_px": 75,
+        "fill_ratio": 0.72,
+        "component_count": 1,
+    }
+    large_hollow = {
+        "area_px2": 150_000,
+        "image_area_px2": 1_000_000,
+        "width_px": 520,
+        "height_px": 440,
+        "major_axis_px": 520,
+        "minor_axis_px": 430,
+        "fill_ratio": 0.34,
+        "component_count": 1,
+    }
+
+    small_volume = estimate_volume_from_measurement(small_compact, None)
+    large_volume = estimate_volume_from_measurement(large_hollow, None)
+    small_weight = estimate_weight_range_from_volume(small_volume, karat=22)
+    large_weight = estimate_weight_range_from_volume(large_volume, karat=22)
+
+    assert small_volume["method"] == "reference_free_visual_prior"
+    assert large_volume["method"] == "reference_free_visual_prior"
+    assert small_weight["estimated_weight_g"] != 7.9
+    assert large_weight["estimated_weight_g"] > small_weight["estimated_weight_g"]
+    assert large_weight["band_high_g"] - large_weight["band_low_g"] > 20
+
+
 def test_fusion_reapplies_density_from_purity_band_to_volume():
     from app.workers.fusion import fuse
 
@@ -67,4 +103,3 @@ def test_fusion_reapplies_density_from_purity_band_to_volume():
     assert low_purity["final_weight_g"] < high_purity["final_weight_g"]
     assert low_purity["density_g_cm3"] < high_purity["density_g_cm3"]
     assert low_purity["weight_lo_g"] < low_purity["final_weight_g"] < low_purity["weight_hi_g"]
-

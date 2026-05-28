@@ -18,6 +18,7 @@ import pickle
 from typing import Any, Optional
 
 import numpy as np
+from app.data.image_utils import DEFAULT_REFERENCE_FREE_WEIGHT_G
 from app.data.gold_physics import density_band_for_karat_range, density_for_karat
 
 logger = logging.getLogger("goldeye.workers.fusion")
@@ -109,7 +110,7 @@ def extract_features(signals: dict[str, Any]) -> dict[str, float]:
         "hallmark_quality_score":  float(s2.get("hallmark_quality_score", 0.5)),
         "coin_detected":           1.0 if s5.get("coin_detected") else 0.0,
         "jewelry_area_px2":        float(s5.get("jewelry_area_px2", 0)),
-        "estimated_weight_g":      float(s6.get("estimated_weight_g", 7.9)),
+        "estimated_weight_g":      float(s6.get("estimated_weight_g", DEFAULT_REFERENCE_FREE_WEIGHT_G)),
         "weight_method_hybrid":    1.0 if s6.get("method") == "hybrid" else 0.0,
         "solid_probability_s7":    float(s7.get("solid_probability", 0.5)),
         "vlm_confidence":          float(signals.get("s8_conf", 0.5)),

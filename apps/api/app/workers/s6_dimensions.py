@@ -40,11 +40,16 @@ async def run(
             vision_weight = weight_range["estimated_weight_g"]
             method = "coin_scaled_volume_density_22k_pending_fusion"
             cv_confidence = float(volume.get("confidence", 0.64))
+        elif measurement:
+            weight_range = estimate_weight_range_from_volume(volume, karat=22)
+            vision_weight = weight_range["estimated_weight_g"]
+            method = "reference_free_visual_prior_density"
+            cv_confidence = float(volume.get("confidence", 0.28))
         else:
             weight_range = estimate_weight_range_from_volume(volume, karat=22)
             vision_weight = weight_range["estimated_weight_g"]
-            method = "population_mean_volume_density"
-            cv_confidence = 0.25
+            method = "fallback_visual_prior_density"
+            cv_confidence = float(volume.get("confidence", 0.16))
 
         if weight_g:
             # Keep estimated_weight_g as the CV estimate; fusion performs the

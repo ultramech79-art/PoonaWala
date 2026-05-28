@@ -85,6 +85,35 @@ function getLiveGoldPer24KGram(): number {
   return _readCache() ?? 9_000
 }
 
+function getVideoFrameDataUrls(state: SessionState): string[] {
+  const video = state.captures.video
+  const exif = video?.exif as Record<string, unknown> | undefined
+  const rawFrames = exif?.videoFramesDataUrl
+  const frames = Array.isArray(rawFrames)
+    ? rawFrames.filter((v): v is string => typeof v === 'string' && v.startsWith('data:image/'))
+    : []
+  if (video?.dataUrl?.startsWith('data:image/') && !frames.includes(video.dataUrl)) {
+    return [video.dataUrl, ...frames].slice(0, 10)
+  }
+  return frames.slice(0, 10)
+}
+
+function fallbackVisualWeight(state: SessionState): number {
+  if (state.certificateData?.weightG) return state.certificateData.weightG
+  if (state.weightG) return state.weightG
+
+  const photoCount = (Object.keys(state.captures) as (keyof SessionState['captures'])[])
+    .filter(k => k !== 'audio' && k !== 'video' && k !== 'selfie' && k !== 'certificate')
+    .length
+  const videoFrames = getVideoFrameDataUrls(state).length
+
+  if (videoFrames >= 6 && photoCount >= 3) return 11.5
+  if (videoFrames >= 3) return 10.5
+  if (photoCount >= 4) return 9.5
+  if (photoCount >= 1) return 6.0
+  return 10.0
+}
+
 // ── SHAP contributions driven by what was actually captured ──────────────────
 function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: boolean) {
   const has = (k: keyof SessionState['captures']) => !!state.captures[k]
@@ -123,7 +152,7 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
 
 function buildMockResult(sessionId: string, state: SessionState, isFailCase = false): AssessmentResult {
   const isFail = isFailCase
-  const weightG = state.certificateData?.weightG ?? state.weightG ?? 7.9
+  const weightG = fallbackVisualWeight(state)
   const stoneExclusionG = state.certificateData?.weightG ? 0 : 0.4
 
   // Priority: 
@@ -154,9 +183,9 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
     weight: {
       manual_entry_g: state.certificateData?.weightG ?? state.weightG,
       estimated_g: weightG,
-      band_low_g: +(weightG * 0.95).toFixed(1),
-      band_high_g: +(weightG * 1.05).toFixed(1),
-      method: 'CV_WEIGHT_FUSION',
+      band_low_g: state.certificateData?.weightG || state.weightG ? +(weightG * 0.95).toFixed(1) : +(weightG * 0.45).toFixed(1),
+      band_high_g: state.certificateData?.weightG || state.weightG ? +(weightG * 1.05).toFixed(1) : +(weightG * 2.2).toFixed(1),
+      method: state.certificateData?.weightG ? 'BILL_CERTIFICATE_OCR' : state.weightG ? 'MANUAL_ENTRY' : 'REFERENCE_FREE_VISUAL_PRIOR',
     },
     value_inr: {
       band_low: goldValue.band_low,
@@ -285,6 +314,10 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
     if (!url || url.startsWith('local://')) return `local://${sessionId}/${k}`
     try { return await resizeDataUrl(url, 1280) } catch { return url }
   }))
+  const videoFrames = await Promise.all(getVideoFrameDataUrls(state).map(async url => {
+    try { return await resizeDataUrl(url, 1280) } catch { return url }
+  }))
+  const assessmentFrames = [...frames, ...videoFrames].slice(0, 10)
   const videoCapture = state.captures['video']
   const audioCapture = state.captures['audio']
   const selfieCapture = state.captures['selfie']
@@ -304,8 +337,8 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
     const [rawResult] = await Promise.all([
       assessAPI({
         session_id: sessionId,
-        frames: frames.length > 0 ? frames : [`local://${sessionId}/demo`],
-        video: videoCapture ? `local://${sessionId}/video` : undefined,
+        frames: assessmentFrames.length > 0 ? assessmentFrames : [`local://${sessionId}/demo`],
+        video: videoCapture?.dataUrl?.startsWith('data:') ? videoCapture.dataUrl : undefined,
         audio: audioCapture ? `local://${sessionId}/audio` : undefined,
         selfie: selfieCapture ? `local://${sessionId}/selfie` : undefined,
         weight_g: weightG ?? undefined,

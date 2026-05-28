@@ -60,6 +60,8 @@ REFERENCE_OBJECT_ALIASES = {
 
 # 22K default density is only used before purity fusion has run.
 GOLD_DENSITY_G_CM3 = density_for_karat(22).mid
+DEFAULT_REFERENCE_FREE_WEIGHT_G = 10.0
+DEFAULT_REFERENCE_FREE_VOLUME_CM3 = DEFAULT_REFERENCE_FREE_WEIGHT_G / GOLD_DENSITY_G_CM3
 
 
 async def fetch_image_bytes(url: str) -> Optional[bytes]:
@@ -283,7 +285,11 @@ def estimate_jewelry_bbox_px(
         "y_px": int(y),
         "width_px": int(w),
         "height_px": int(h),
+        "image_width_px": int(w_img),
+        "image_height_px": int(h_img),
+        "image_area_px2": int(round(img_area)),
         "area_px2": int(round(mask_area_px2)),
+        "area_fraction": round(mask_area_px2 / max(img_area, 1.0), 6),
         "contour_area_px2": round(component_area_px2, 2),
         "bbox_area_px2": int(round(bbox_area_px2)),
         "major_axis_px": round(major_px, 3),
@@ -318,6 +324,54 @@ def classify_jewelry_geometry(measurement: dict, px_per_mm: Optional[float]) -> 
     return "compact_or_pendant"
 
 
+def _reference_free_volume_from_measurement(measurement: Optional[dict]) -> dict:
+    """
+    Broad visual prior for cases without a scale coin.
+
+    Absolute weight is not identifiable from a single uncalibrated image, so
+    this path intentionally returns a wide band and low confidence. It still
+    uses visible geometry instead of the old fixed 7.9 g population mean.
+    """
+    if not measurement:
+        low_g, mid_g, high_g = 2.0, DEFAULT_REFERENCE_FREE_WEIGHT_G, 45.0
+        geometry_class = "unknown"
+        coverage = 0.0
+        confidence = 0.16
+    else:
+        geometry_class = classify_jewelry_geometry(measurement, None)
+        area_px2 = float(measurement.get("area_px2", 0.0))
+        image_area = float(measurement.get("image_area_px2") or 0.0)
+        if image_area <= 0:
+            image_area = float(measurement.get("image_width_px", 0.0)) * float(measurement.get("image_height_px", 0.0))
+        coverage = area_px2 / max(image_area, 1.0)
+        fill = float(measurement.get("fill_ratio", 0.5))
+
+        if geometry_class == "chain_like":
+            mid_g = 6.0 if coverage < 0.035 else 11.0 if coverage < 0.11 else 20.0
+            low_g, high_g = mid_g * 0.30, mid_g * 2.60
+        elif geometry_class == "ring_or_bangle" or fill <= 0.48:
+            mid_g = 5.0 if coverage < 0.04 else 12.0 if coverage < 0.14 else 26.0
+            low_g, high_g = mid_g * 0.35, mid_g * 2.15
+        else:
+            mid_g = 3.5 if coverage < 0.025 else 7.5 if coverage < 0.09 else 15.0
+            low_g, high_g = mid_g * 0.34, mid_g * 2.10
+
+        confidence = max(0.18, min(0.38, 0.18 + min(coverage, 0.18) * 0.75))
+
+    return {
+        "volume_cm3": round(mid_g / GOLD_DENSITY_G_CM3, 4),
+        "volume_low_cm3": round(max(0.2, low_g) / density_for_karat(18).high, 4),
+        "volume_high_cm3": round(min(5000.0, high_g) / density_for_karat(24).low, 4),
+        "geometry_class": geometry_class,
+        "method": "reference_free_visual_prior",
+        "confidence": round(confidence, 3),
+        "scale_uncertainty_pct": 0.75,
+        "reference_free": True,
+        "note": "No coin scale detected; absolute weight is a broad visual prior.",
+        "area_fraction": round(coverage, 6),
+    }
+
+
 def estimate_volume_from_measurement(
     measurement: Optional[dict],
     px_per_mm: Optional[float],
@@ -330,22 +384,13 @@ def estimate_volume_from_measurement(
     density for the estimated purity band.
     """
     if not measurement or px_per_mm is None or px_per_mm <= 0:
-        volume = 7.9 / GOLD_DENSITY_G_CM3
-        return {
-            "volume_cm3": round(volume, 4),
-            "volume_low_cm3": round(volume * 0.55, 4),
-            "volume_high_cm3": round(volume * 1.90, 4),
-            "method": "population_mean_volume",
-            "geometry_class": "unknown",
-            "confidence": 0.25,
-            "scale_uncertainty_pct": 0.35,
-        }
+        return _reference_free_volume_from_measurement(measurement)
 
     area_px2 = float(measurement.get("area_px2", 0.0))
     major_px = float(measurement.get("major_axis_px", measurement.get("width_px", 0.0)))
     minor_px = float(measurement.get("minor_axis_px", measurement.get("height_px", 0.0)))
     if area_px2 <= 0 or major_px <= 0 or minor_px <= 0:
-        return estimate_volume_from_measurement(None, None)
+        return _reference_free_volume_from_measurement(measurement)
 
     area_mm2 = area_px2 / (px_per_mm * px_per_mm)
     major_mm = major_px / px_per_mm
@@ -410,7 +455,7 @@ def estimate_volume_from_measurement(
 def estimate_weight_range_from_volume(volume: dict, karat: float | int = 22) -> dict:
     """Apply karat-aware density to a volume estimate."""
     density = density_for_karat(karat)
-    mid_volume = float(volume.get("volume_cm3", 7.9 / GOLD_DENSITY_G_CM3))
+    mid_volume = float(volume.get("volume_cm3", DEFAULT_REFERENCE_FREE_VOLUME_CM3))
     low_volume = float(volume.get("volume_low_cm3", mid_volume * 0.65))
     high_volume = float(volume.get("volume_high_cm3", mid_volume * 1.45))
     estimate = mid_volume * density.mid
@@ -434,10 +479,11 @@ def estimate_weight_from_bbox(
 ) -> float:
     """
     Rough weight estimate from bounding box area × assumed thickness × density.
-    Falls back to 7.9g population mean if scale anchor is unavailable.
+    Falls back to a wide visual prior if scale anchor is unavailable.
     """
     if px_per_mm is None or px_per_mm <= 0:
-        return 7.9  # population mean for Indian bangles (PRD §4.2)
+        volume = _reference_free_volume_from_measurement(bbox)
+        return estimate_weight_range_from_volume(volume, karat=22)["estimated_weight_g"]
 
     if "area_px2" in bbox and "major_axis_px" in bbox:
         volume = estimate_volume_from_measurement(bbox, px_per_mm)

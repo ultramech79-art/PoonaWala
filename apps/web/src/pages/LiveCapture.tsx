@@ -118,6 +118,17 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
+function videoFrameDataUrl(b64: string): string {
+  return `data:image/jpeg;base64,${b64}`
+}
+
+function videoFrameBlob(b64: string): Blob {
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type: 'image/jpeg' })
+}
+
 function drawOverlay(
   canvas: HTMLCanvasElement, quality: number, capturedCount: number, angle: Angle,
   flash: boolean, analyzing: boolean, ts: number,
@@ -640,6 +651,21 @@ export function LiveCapture() {
 
   const finishAuthEvaluation = useCallback(async (audio?: { samplesB64: string; sampleRate: number } | null) => {
     setAuthPhase('analyzing')
+    const usableFrames = authFramesRef.current.filter(Boolean).slice(0, 10)
+    if (usableFrames.length) {
+      const dataUrls = usableFrames.map(videoFrameDataUrl)
+      addCapture({
+        type: 'video',
+        dataUrl: dataUrls[0],
+        blob: videoFrameBlob(usableFrames[0]),
+        timestamp: Date.now(),
+        exif: {
+          videoFramesDataUrl: dataUrls,
+          videoFrameCount: dataUrls.length,
+          source: 'live-capture-auth',
+        },
+      })
+    }
     try {
       const result = await authCheck(authFramesRef.current, langRef.current, audio?.samplesB64, audio?.sampleRate)
       setAuthResult(result)
@@ -648,7 +674,7 @@ export function LiveCapture() {
       setAuthResult(null)
     }
     setAuthPhase('results')
-  }, [])
+  }, [addCapture])
 
   const beginAuthEvaluation = useCallback(() => {
     authFramesRef.current = []
