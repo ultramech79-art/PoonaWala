@@ -73,6 +73,46 @@ def test_reference_free_visual_prior_uses_geometry_not_static_mean():
     assert large_weight["band_high_g"] - large_weight["band_low_g"] > 20
 
 
+def test_multiframe_volume_fusion_uses_more_than_one_frame():
+    from app.data.image_utils import fuse_volume_estimates
+
+    estimates = [
+        {
+            "volume_cm3": 0.40,
+            "volume_low_cm3": 0.32,
+            "volume_high_cm3": 0.50,
+            "confidence": 0.78,
+            "method": "coin_scaled_mask_volume",
+            "geometry_class": "compact_or_pendant",
+        },
+        {
+            "volume_cm3": 0.80,
+            "volume_low_cm3": 0.62,
+            "volume_high_cm3": 1.05,
+            "confidence": 0.76,
+            "method": "coin_scaled_mask_volume",
+            "geometry_class": "compact_or_pendant",
+        },
+        {
+            "volume_cm3": 0.95,
+            "volume_low_cm3": 0.40,
+            "volume_high_cm3": 2.20,
+            "confidence": 0.31,
+            "method": "reference_free_visual_prior",
+            "reference_free": True,
+            "geometry_class": "compact_or_pendant",
+        },
+    ]
+
+    fused = fuse_volume_estimates(estimates)
+
+    assert fused["method"] == "multi_frame_volume_fusion"
+    assert fused["frame_count"] == 3
+    assert fused["coin_scaled_frame_count"] == 2
+    assert 0.40 < fused["volume_cm3"] < 0.80
+    assert fused["volume_low_cm3"] < fused["volume_cm3"] < fused["volume_high_cm3"]
+
+
 def test_fusion_reapplies_density_from_purity_band_to_volume():
     from app.workers.fusion import fuse
 

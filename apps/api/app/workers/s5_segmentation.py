@@ -13,6 +13,7 @@ from app.data.image_utils import (
     detect_coin_hough,
     estimate_jewelry_bbox_px,
     estimate_volume_from_measurement,
+    fuse_volume_estimates,
 )
 
 logger = logging.getLogger("goldeye.workers.s5")
@@ -33,8 +34,11 @@ async def run(
         best_volume: Optional[dict] = None
         used_frame_idx = -1
         frame_measurements: list[dict] = []
+        frame_volume_estimates: list[dict] = []
 
-        priority = [0, 1, 3, 2] if len(frames) > 3 else list(range(len(frames)))
+        preferred = [0, 1, 3, 2]
+        priority = [idx for idx in preferred if idx < len(frames)]
+        priority.extend(idx for idx in range(len(frames)) if idx not in priority)
         for idx in priority:
             url = frames[idx] if idx < len(frames) else ""
             raw = await fetch_image_bytes(url)
@@ -52,6 +56,24 @@ async def run(
             if detected_coin and (coin_result is None or detected_coin.get("confidence", 0) > coin_result.get("confidence", 0)):
                 coin_result = detected_coin
 
+            volume = None
+            quality = 0.0
+            if bbox:
+                if detected_coin:
+                    volume = estimate_volume_from_measurement(bbox, detected_coin["px_per_mm"], detected_coin)
+                    quality = (
+                        float(volume.get("confidence", 0.0))
+                        + float(detected_coin.get("confidence", 0.0)) * 0.25
+                        + min(0.12, float(bbox.get("area_px2", 0)) / max(float(img.shape[0] * img.shape[1]), 1.0))
+                    )
+                else:
+                    volume = estimate_volume_from_measurement(bbox, None, None)
+                    quality = (
+                        float(volume.get("confidence", 0.0)) * 0.45
+                        + min(0.06, float(bbox.get("area_px2", 0)) / max(float(img.shape[0] * img.shape[1]), 1.0))
+                    )
+                frame_volume_estimates.append({**volume, "frame_idx": idx, "_quality": quality})
+
             frame_measurements.append({
                 "frame_idx": idx,
                 "coin_detected": detected_coin is not None,
@@ -59,15 +81,12 @@ async def run(
                 "px_per_mm": round(detected_coin["px_per_mm"], 4) if detected_coin else None,
                 "jewelry_area_px2": bbox.get("area_px2", 0) if bbox else 0,
                 "jewelry_bbox": bbox,
+                "volume_estimate": {k: v for k, v in (volume or {}).items() if not k.startswith("_")},
+                "weight_frame_quality": round(quality, 4),
+                "usable_for_weight": bool(volume),
             })
 
-            if bbox and detected_coin:
-                volume = estimate_volume_from_measurement(bbox, detected_coin["px_per_mm"], detected_coin)
-                quality = (
-                    float(volume.get("confidence", 0.0))
-                    + float(detected_coin.get("confidence", 0.0)) * 0.25
-                    + min(0.12, float(bbox.get("area_px2", 0)) / max(float(img.shape[0] * img.shape[1]), 1.0))
-                )
+            if bbox and volume:
                 if best_bbox is None or quality > best_volume.get("_quality", -1):
                     best_bbox = bbox
                     best_volume = {**volume, "_quality": quality}
@@ -83,7 +102,10 @@ async def run(
                     best_bbox = item["jewelry_bbox"]
                     used_frame_idx = int(item["frame_idx"])
                     break
-        volume_payload = dict(best_volume or estimate_volume_from_measurement(best_bbox, px_per_mm, coin_result))
+        if frame_volume_estimates:
+            volume_payload = fuse_volume_estimates(frame_volume_estimates)
+        else:
+            volume_payload = dict(best_volume or estimate_volume_from_measurement(best_bbox, px_per_mm, coin_result))
         volume_payload.pop("_quality", None)
 
         area_px2 = best_bbox["area_px2"] if best_bbox else 0
@@ -106,17 +128,18 @@ async def run(
                 "jewelry_measurement": best_bbox,
                 "volume_estimate": volume_payload,
                 "frame_measurements": frame_measurements,
+                "frames_used_for_weight": int(volume_payload.get("frame_count", len(frame_volume_estimates))),
                 "used_frame_idx": used_frame_idx,
                 "stone_mask_present": False,  # Phase 3: SAM2 stone masking
             },
             error=None,
             duration_ms=int((time.time() - t0) * 1000),
-            model_version="opencv-coin-volume-v2",
+            model_version="opencv-multiframe-coin-volume-v3",
         )
     except Exception as e:
         logger.warning(f"[{session_id}] s5_segmentation failed: {e}")
         return SignalResult(
             signal_id="s5_segmentation", confidence=0.0, payload={},
             error=str(e), duration_ms=int((time.time() - t0) * 1000),
-            model_version="opencv-coin-volume-v2",
+            model_version="opencv-multiframe-coin-volume-v3",
         )

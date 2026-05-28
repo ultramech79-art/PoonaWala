@@ -81,17 +81,21 @@ async def run(
                 "top_area_mm2": volume.get("top_area_mm2"),
                 "thickness_mm": volume.get("thickness_mm"),
                 "weight_model": volume.get("method"),
+                "frames_used_for_weight": s5.get("frames_used_for_weight") or volume.get("frame_count"),
+                "coin_scaled_frame_count": volume.get("coin_scaled_frame_count"),
+                "reference_free_frame_count": volume.get("reference_free_frame_count"),
+                "volume_disagreement_pct": volume.get("volume_disagreement_pct"),
                 "scale_mm_per_px": s5.get("scale_mm_per_px"),
                 "method": method,
             },
             error=None,
             duration_ms=int((time.time() - t0) * 1000),
-            model_version="coin-volume-density-v2",
+            model_version="multiframe-coin-volume-density-v3",
         )
     except Exception as e:
         logger.warning(f"[{session_id}] s6_dimensions failed: {e}")
         return SignalResult(
             signal_id="s6_dimensions", confidence=0.0, payload={},
             error=str(e), duration_ms=int((time.time() - t0) * 1000),
-            model_version="coin-volume-density-v2",
+            model_version="multiframe-coin-volume-density-v3",
         )

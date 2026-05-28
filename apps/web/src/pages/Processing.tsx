@@ -317,7 +317,7 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const videoFrames = await Promise.all(getVideoFrameDataUrls(state).map(async url => {
     try { return await resizeDataUrl(url, 1280) } catch { return url }
   }))
-  const assessmentFrames = [...frames, ...videoFrames].slice(0, 10)
+  const assessmentFrames = [...frames, ...videoFrames].slice(0, 20)
   const videoCapture = state.captures['video']
   const audioCapture = state.captures['audio']
   const selfieCapture = state.captures['selfie']

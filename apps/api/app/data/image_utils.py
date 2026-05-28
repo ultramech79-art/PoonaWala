@@ -452,6 +452,117 @@ def estimate_volume_from_measurement(
     }
 
 
+def _weighted_average(items: list[tuple[float, float]]) -> float:
+    total_weight = sum(max(0.0, w) for _, w in items)
+    if total_weight <= 0:
+        return sum(v for v, _ in items) / max(len(items), 1)
+    return sum(v * max(0.0, w) for v, w in items) / total_weight
+
+
+def _weighted_quantile(items: list[tuple[float, float]], quantile: float) -> float:
+    if not items:
+        return 0.0
+    ordered = sorted((float(v), max(0.0, float(w))) for v, w in items)
+    total = sum(w for _, w in ordered)
+    if total <= 0:
+        idx = int(max(0, min(len(ordered) - 1, round((len(ordered) - 1) * quantile))))
+        return ordered[idx][0]
+    threshold = total * max(0.0, min(1.0, quantile))
+    running = 0.0
+    for value, weight in ordered:
+        running += weight
+        if running >= threshold:
+            return value
+    return ordered[-1][0]
+
+
+def fuse_volume_estimates(estimates: list[dict]) -> dict:
+    """
+    Fuse per-frame volume estimates from all usable photos/video frames.
+
+    Coin-scaled frames carry the most weight. Reference-free video/photo frames
+    still contribute orientation and size evidence, but with a lower weight
+    because absolute scale is underdetermined without a coin in that frame.
+    """
+    valid = [v for v in estimates if float(v.get("volume_cm3") or 0.0) > 0]
+    if not valid:
+        return estimate_volume_from_measurement(None, None)
+
+    weighted_entries: list[tuple[dict, float, float]] = []
+    for estimate in valid:
+        confidence = max(0.05, min(0.95, float(estimate.get("confidence", 0.25))))
+        method = str(estimate.get("method", ""))
+        if estimate.get("reference_free"):
+            source_weight = 0.28
+        elif method == "coin_scaled_mask_volume":
+            source_weight = 1.25
+        else:
+            source_weight = 0.65
+        weighted_entries.append((estimate, float(estimate["volume_cm3"]), confidence * source_weight))
+
+    weighted = [(mid, weight) for _, mid, weight in weighted_entries]
+    center = _weighted_quantile(weighted, 0.50)
+    if len(weighted) >= 4 and center > 0:
+        filtered_entries = [
+            (estimate, mid, weight)
+            for estimate, mid, weight in weighted_entries
+            if center * 0.35 <= mid <= center * 2.80
+        ]
+        if len(filtered_entries) >= max(2, len(weighted_entries) // 2):
+            weighted_entries = filtered_entries
+            weighted = [(mid, weight) for _, mid, weight in weighted_entries]
+
+    mid = _weighted_average(weighted)
+    interval_items = [(estimate, weight) for estimate, _, weight in weighted_entries]
+
+    if not interval_items:
+        interval_items = [(v, 0.2) for v in valid]
+
+    low_q = _weighted_quantile(
+        [(float(v.get("volume_low_cm3", v["volume_cm3"])), w) for v, w in interval_items],
+        0.20,
+    )
+    high_q = _weighted_quantile(
+        [(float(v.get("volume_high_cm3", v["volume_cm3"])), w) for v, w in interval_items],
+        0.80,
+    )
+
+    deviations = [(abs(float(v["volume_cm3"]) - mid), w) for v, w in interval_items]
+    disagreement = _weighted_quantile(deviations, 0.75) / max(mid, 0.0001)
+    disagreement = max(0.08, min(0.70, disagreement))
+    low = min(low_q, mid * (1.0 - disagreement))
+    high = max(high_q, mid * (1.0 + disagreement))
+
+    coin_scaled_count = sum(1 for v in valid if v.get("method") == "coin_scaled_mask_volume")
+    reference_free_count = sum(1 for v in valid if v.get("reference_free"))
+    avg_confidence = _weighted_average([
+        (float(v.get("confidence", 0.25)), 1.0 if not v.get("reference_free") else 0.45)
+        for v in valid
+    ])
+    confidence = min(0.92, avg_confidence + min(0.10, 0.015 * max(0, len(valid) - 1)))
+    if coin_scaled_count == 0:
+        confidence = min(0.42, confidence)
+
+    geometry_weights: dict[str, float] = {}
+    for v, weight in interval_items:
+        geometry = str(v.get("geometry_class", "unknown"))
+        geometry_weights[geometry] = geometry_weights.get(geometry, 0.0) + weight
+    geometry_class = max(geometry_weights, key=geometry_weights.get) if geometry_weights else "unknown"
+
+    return {
+        "volume_cm3": round(mid, 4),
+        "volume_low_cm3": round(max(0.0001, min(low, mid)), 4),
+        "volume_high_cm3": round(max(high, mid), 4),
+        "method": "multi_frame_volume_fusion",
+        "geometry_class": geometry_class,
+        "confidence": round(confidence, 3),
+        "frame_count": len(valid),
+        "coin_scaled_frame_count": coin_scaled_count,
+        "reference_free_frame_count": reference_free_count,
+        "volume_disagreement_pct": round(disagreement, 3),
+    }
+
+
 def estimate_weight_range_from_volume(volume: dict, karat: float | int = 22) -> dict:
     """Apply karat-aware density to a volume estimate."""
     density = density_for_karat(karat)
