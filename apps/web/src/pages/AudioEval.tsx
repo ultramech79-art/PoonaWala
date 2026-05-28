@@ -25,12 +25,15 @@ type Phase = 'intro' | 'recording' | 'analyzing' | 'result'
 interface TapResult {
   score: number
   label: string
+  valid: boolean
+  reject_reason: string | null
   decay_ms: number
   dominant_freq_hz: number
   spectral_centroid_hz: number
   q_factor: number
   gold_band_ratio: number
   decay_r2: number
+  snr_db: number
   reasoning: string
 }
 
@@ -44,6 +47,7 @@ export function AudioEval() {
   const audioChunksRef = useRef<Float32Array[]>([])
   const sampleRateRef  = useRef(44100)
 
+  const [ornamentType, setOrnamentType] = useState('unknown')
   const [phase, setPhase]             = useState<Phase>('intro')
   const [secondsLeft, setSecondsLeft] = useState(0)
   const [result, setResult]           = useState<TapResult | null>(null)
@@ -110,7 +114,7 @@ export function AudioEval() {
       const res = await fetch(`${apiBase}/api/audio-eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ samples_b64: samplesB64, sample_rate: sampleRateRef.current, language: lang }),
+        body: JSON.stringify({ samples_b64: samplesB64, sample_rate: sampleRateRef.current, language: lang, ornament_type: ornamentType }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data: TapResult = await res.json()
@@ -154,23 +158,60 @@ export function AudioEval() {
                 <Mic className="w-8 h-8 text-white" />
               </div>
               <div className="text-center">
-                <p className="font-bold text-stone-900 text-lg">10-Second Tap Test</p>
+                <p className="font-bold text-stone-900 text-lg">Drop Test — 10 Seconds</p>
                 <p className="text-stone-600 text-sm mt-1 leading-relaxed">
-                  Gently tap the gold piece on a hard surface. Solid gold produces a warm damped ring distinct from plated metal.
+                  Drop the gold ornament from <strong>10–15 cm</strong> onto a hard surface. The drop creates the clearest resonance signature for solid gold authentication.
                 </p>
               </div>
             </div>
 
+            {/* Ornament type selector */}
+            <div className="bg-white border border-stone-200 rounded-2xl p-4">
+              <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">What ornament are you testing?</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: 'ring',     label: 'Ring' },
+                  { id: 'bangle',   label: 'Bangle' },
+                  { id: 'chain',    label: 'Chain' },
+                  { id: 'necklace', label: 'Necklace' },
+                  { id: 'pendant',  label: 'Pendant' },
+                  { id: 'earring',  label: 'Earring' },
+                  { id: 'coin',     label: 'Coin/Bar' },
+                ].map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setOrnamentType(id)}
+                    className={clsx(
+                      'px-3 py-1.5 rounded-full text-xs font-semibold border transition-all',
+                      ornamentType === id
+                        ? 'bg-blue-600 border-blue-600 text-white'
+                        : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {ornamentType !== 'unknown' && (
+                <p className="text-[10px] text-blue-600 mt-2">
+                  Reference ranges adjusted for {ornamentType}
+                </p>
+              )}
+            </div>
+
             <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2.5">
               {[
-                'Place gold on a firm surface — table or marble',
-                'Use a coin or knuckle to tap the piece',
-                'Tap 3–5 times evenly during the 10 seconds',
-                'Hold phone microphone within 15–20 cm',
-              ].map((tip, i) => (
+                { step: 'Use marble, tile, or glass floor — must be hard', note: 'Carpet or cloth will muffle the ring' },
+                { step: 'Drop from 10–15 cm above the surface', note: 'Hold ornament by fingertips, let it fall naturally' },
+                { step: 'Works for rings, bangles, chains, earrings — any ornament', note: 'Larger pieces ring lower; smaller pieces ring higher' },
+                { step: 'Keep phone close (15–20 cm) and environment quiet', note: 'One clear drop is enough — can drop 2–3 times' },
+              ].map(({ step, note }, i) => (
                 <div key={i} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
-                  <p className="text-sm text-stone-700">{tip}</p>
+                  <div>
+                    <p className="text-sm text-stone-800 font-medium">{step}</p>
+                    <p className="text-xs text-stone-400 mt-0.5">{note}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -183,13 +224,13 @@ export function AudioEval() {
             )}
 
             <button onClick={startRecording} className="w-full btn-primary">
-              <Mic className="w-5 h-5" /> Start 10-Second Tap Test
+              <Mic className="w-5 h-5" /> Start 10-Second Recording
             </button>
             <button
               onClick={() => navigate('/weight')}
               className="w-full btn-secondary text-sm flex items-center justify-center gap-2"
             >
-              <SkipForward className="w-4 h-4" /> Skip Tap Test — Continue
+              <SkipForward className="w-4 h-4" /> Skip Drop Test — Continue
             </button>
           </div>
         )}
@@ -206,7 +247,7 @@ export function AudioEval() {
             </div>
             <div className="text-center">
               <p className="text-stone-900 font-black text-4xl tabular-nums">{secondsLeft}s</p>
-              <p className="text-stone-500 text-sm mt-1.5">Tap the gold piece now…</p>
+              <p className="text-stone-500 text-sm mt-1.5">Drop the ornament on a hard surface now…</p>
             </div>
             <div className="w-56 bg-stone-100 rounded-full h-2.5">
               <div
@@ -232,9 +273,26 @@ export function AudioEval() {
         {/* RESULT */}
         {phase === 'result' && (
           <div className="space-y-4 animate-fade-in">
-            {result ? (
+            {/* Invalid recording — ask to redo */}
+            {result && !result.valid ? (
+              <div className="space-y-4">
+                <div className="bg-red-50 border border-red-200 rounded-3xl p-5 flex flex-col items-center gap-3 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-red-500" />
+                  </div>
+                  <p className="font-bold text-red-800 text-base">Not a valid metal drop</p>
+                  <p className="text-sm text-red-700 leading-relaxed">{result.reject_reason}</p>
+                </div>
+                <button onClick={() => { setResult(null); setError(''); setPhase('intro') }} className="w-full btn-primary">
+                  <Mic className="w-5 h-5" /> Try Again
+                </button>
+                <button onClick={() => navigate('/weight')} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
+                  <SkipForward className="w-4 h-4" /> Skip — Continue Without Drop Test
+                </button>
+              </div>
+            ) : result ? (
               <div className="bg-white border border-stone-200 rounded-3xl p-5 space-y-4">
-                <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold">Tap Test Result</p>
+                <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold">Drop Test Result</p>
 
                 <div className="flex items-center gap-4">
                   <div className="text-center">
@@ -251,11 +309,11 @@ export function AudioEval() {
 
                 <div className="border-t border-stone-100 pt-3 space-y-2">
                   {[
-                    { label: 'Decay time',       value: `${result.decay_ms.toFixed(0)} ms`,                            ref: '80–400 ms = gold' },
-                    { label: 'Spectral centroid', value: `${result.spectral_centroid_hz?.toFixed(0) ?? '—'} Hz`,        ref: '300–800 Hz = gold' },
-                    { label: 'Gold-band energy', value: result.gold_band_ratio != null ? `${(result.gold_band_ratio * 100).toFixed(0)}%` : '—', ref: '>40% = dense metal' },
-                    { label: 'Decay quality R²', value: result.decay_r2 != null ? result.decay_r2.toFixed(2) : '—',    ref: '>0.85 = clean ring' },
-                    { label: 'Q-factor',         value: result.q_factor?.toFixed(1) ?? '—',                            ref: '8–50 = good resonance' },
+                    { label: 'Decay time',        value: `${result.decay_ms.toFixed(0)} ms`,                                          ref: '80–400 ms = gold' },
+                    { label: 'Spectral centroid',  value: `${result.spectral_centroid_hz?.toFixed(0) ?? '—'} Hz`,                      ref: '300–800 Hz = gold' },
+                    { label: 'Gold-band energy',  value: result.gold_band_ratio != null ? `${(result.gold_band_ratio * 100).toFixed(0)}%` : '—', ref: '>40% = dense' },
+                    { label: 'Decay quality R²',  value: result.decay_r2 != null ? result.decay_r2.toFixed(2) : '—',                  ref: '>0.85 = clean ring' },
+                    { label: 'Recording SNR',     value: result.snr_db != null ? `${result.snr_db.toFixed(0)} dB` : '—',              ref: '>15 dB = clear' },
                   ].map(({ label, value, ref }) => (
                     <div key={label} className="flex items-center justify-between text-xs">
                       <span className="text-stone-500">{label}</span>
@@ -266,27 +324,26 @@ export function AudioEval() {
                     </div>
                   ))}
                 </div>
-
                 <p className="text-xs text-stone-500 leading-relaxed border-t border-stone-100 pt-3">{result.reasoning}</p>
               </div>
             ) : (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-amber-800">Tap test unavailable</p>
-                  <p className="text-xs text-amber-700 mt-0.5">{error || 'Analysis did not return a result. Continuing to weight entry.'}</p>
-                </div>
+                <p className="text-sm text-amber-700">{error || 'Analysis failed. Please try again.'}</p>
               </div>
             )}
 
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5">
-              <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <p className="text-xs font-semibold text-emerald-700">Tap test complete — next: Weight entry</p>
-            </div>
-
-            <button onClick={() => navigate('/weight')} className="w-full btn-primary">
-              Continue to Weight Entry <ChevronRight className="w-5 h-5" />
-            </button>
+            {result?.valid && (
+              <>
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <p className="text-xs font-semibold text-emerald-700">Drop test complete — next: Weight entry</p>
+                </div>
+                <button onClick={() => navigate('/weight')} className="w-full btn-primary">
+                  Continue to Weight Entry <ChevronRight className="w-5 h-5" />
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

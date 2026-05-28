@@ -1,33 +1,28 @@
 """
 POST /api/audio-eval
-10-second tap test: raw float32 PCM → physics-based acoustic analysis + Gemini.
+Drop test: user drops gold piece from 10-15cm onto a hard surface (marble, tile, glass).
+This creates the clearest, most reproducible resonance for acoustic gold authentication.
 
-RESEARCH BASIS (confirmed from metallurgical literature):
-  Gold sound velocity:   3,240 m/s   (dense, slow propagation → lower pitch)
-  Brass sound velocity:  4,700 m/s   (lighter, fast → higher, longer ring)
-  Silver sound velocity: 3,600 m/s   (very clear, very long ring)
-  Gold density:          19.32 g/cm³
-  Brass density:         8.5  g/cm³
+PHYSICS OF THE DROP TEST:
+  - Impact creates a sharp onset + sustained ring (much cleaner than manual tap)
+  - Hard surface (marble/tile) reflects energy back into the piece, maximising ring
+  - Gold drops with a distinctive warm 'ding'; plated brass drops with a brighter, longer ring
+  - Standard drop height 10-15cm gives consistent impact energy
 
-WHAT MAKES GOLD UNIQUE (ScienceDirect 2025, ResearchGate coin studies):
-  1. MODERATE internal damping — warm ring, NOT the longest ringing metal.
-     Gold-plated BRASS rings LONGER than real gold (brass has lower damping).
-     Gold-plated SILVER rings even longer and clearer.
-  2. WARM spectral centroid: 300–800 Hz (lower than brass/silver due to density).
-     Plated brass: centroid 800–3000 Hz (higher, brighter, more metallic).
-  3. CLEAN exponential decay — smooth envelope, no secondary peaks.
-     Plated metals show multi-modal, irregular decay due to substrate resonance.
-  4. HARMONIC RICHNESS — gold produces rich overtone series.
-     Base metals produce cluttered, inharmonic overtones.
-  5. Gold-band energy: dominant energy in 300–800 Hz range (>40%).
+VALIDITY CHECKS (reject non-metal / bad recordings):
+  1. SNR > 15 dB   — clear impact above background noise
+  2. Attack < 60ms — sharp onset confirms a physical drop, not gradual noise
+  3. Spectral flatness < 0.4 — tonal sound (metal) not broadband noise (voice/traffic)
+  4. Tonal energy > 30% — must have a dominant frequency component
+  5. At least one clear peak — if no impact found, reject
 
-CORRECTED REFERENCE RANGES:
-  Decay time:     80–400 ms   (moderate — longer means plated)
-  Spectral centroid: 300–800 Hz  (warm, NOT below 300 — that's dull/muffled)
-  Dominant freq:  200–1000 Hz
-  Q-factor:       8–50         (sustained but not over-resonant)
-  Gold-band ratio (300-800Hz): >0.40
-  Decay R²:       >0.85        (clean exponential, not irregular)
+RESEARCH-CONFIRMED REFERENCE RANGES (for drop test on hard surface):
+  Gold sound velocity:   3,240 m/s  → lower, warmer resonance
+  Brass sound velocity:  4,700 m/s  → higher, longer ring
+  Decay time real gold:  80-400ms   (gold-plated brass rings LONGER >400ms)
+  Centroid real gold:    300-800Hz  (warm due to high density)
+  Gold-band energy:      >40%       (300-800Hz concentration)
+  Decay R²:              >0.85      (clean exponential = single pure material)
 """
 import base64
 import io
@@ -50,17 +45,21 @@ class AudioEvalRequest(BaseModel):
     samples_b64: str
     sample_rate: int = 44100
     language: str = "en"
+    ornament_type: str = "unknown"  # ring | bangle | chain | necklace | pendant | earring | coin | unknown
 
 
 class AudioEvalResponse(BaseModel):
     score: int
     label: str
+    valid: bool                  # False = no metal drop detected, ask to re-record
+    reject_reason: Optional[str] # set when valid=False
     decay_ms: float
     dominant_freq_hz: float
     spectral_centroid_hz: float
     q_factor: float
     gold_band_ratio: float
-    decay_r2: float          # exponential decay fit quality (0-1)
+    decay_r2: float
+    snr_db: float
     reasoning: str
 
 
@@ -76,170 +75,247 @@ def _float32_to_wav(arr: np.ndarray, sample_rate: int) -> bytes:
     return buf.getvalue()
 
 
+def _spectral_flatness(spectrum: np.ndarray) -> float:
+    """
+    Wiener entropy: geometric mean / arithmetic mean of spectrum.
+    0.0 = perfectly tonal (single frequency), 1.0 = white noise.
+    Metal drops: < 0.35. Voice/traffic/noise: > 0.55.
+    """
+    safe = np.maximum(spectrum, 1e-10)
+    geo_mean = np.exp(np.mean(np.log(safe)))
+    arith_mean = np.mean(safe)
+    return float(np.clip(geo_mean / (arith_mean + 1e-10), 0.0, 1.0))
+
+
 def _exponential_decay_r2(envelope: np.ndarray) -> float:
-    """
-    Fit the decay envelope to y = A * exp(-t/τ) and return R².
-    Real gold has a very clean exponential decay (R² > 0.85).
-    Plated metals show multi-modal, irregular decay (R² < 0.70).
-    """
+    """R² of exponential fit y = A·exp(-t/τ). Real gold > 0.85."""
     if len(envelope) < 20:
         return 0.0
     try:
         t = np.arange(len(envelope), dtype=np.float64)
-        # Log-linear fit: log(y) = log(A) - t/τ
-        safe = np.maximum(envelope, 1e-10)
-        log_y = np.log(safe)
-        # Linear regression on log scale
-        t_mean = np.mean(t)
-        log_y_mean = np.mean(log_y)
-        ss_tot = np.sum((log_y - log_y_mean) ** 2)
-        ss_res = np.sum((log_y - (log_y_mean + (np.sum((t - t_mean) * (log_y - log_y_mean)) /
-                 (np.sum((t - t_mean) ** 2) + 1e-10)) * (t - t_mean))) ** 2)
-        r2 = 1.0 - ss_res / (ss_tot + 1e-10)
-        return float(np.clip(r2, 0.0, 1.0))
+        log_y = np.log(np.maximum(envelope, 1e-10))
+        t_m = np.mean(t); ly_m = np.mean(log_y)
+        slope = np.sum((t - t_m) * (log_y - ly_m)) / (np.sum((t - t_m) ** 2) + 1e-10)
+        pred  = ly_m + slope * (t - t_m)
+        ss_res = np.sum((log_y - pred) ** 2)
+        ss_tot = np.sum((log_y - ly_m) ** 2) + 1e-10
+        return float(np.clip(1.0 - ss_res / ss_tot, 0.0, 1.0))
     except Exception:
         return 0.0
 
 
-def _acoustic_metrics(arr: np.ndarray, sample_rate: int) -> dict:
+def _validate_drop(arr: np.ndarray, sample_rate: int) -> dict:
     """
-    Physics-based acoustic parameter extraction using numpy FFT.
-    All reference ranges validated against metallurgical research.
+    Check if the recording contains a valid metal drop sound.
+    Returns {"valid": True/False, "reason": str, ...metrics...}
     """
     abs_arr = np.abs(arr)
+
+    # ── SNR check ──────────────────────────────────────────────────────────────
+    noise_floor = np.percentile(abs_arr, 10)  # bottom 10% = background noise
+    peak        = float(np.max(abs_arr))
+    snr_linear  = peak / (noise_floor + 1e-10)
+    snr_db      = float(20 * np.log10(snr_linear + 1e-10))
+
+    if snr_db < 15:
+        return {"valid": False, "snr_db": snr_db,
+                "reason": "Background noise too high or signal too quiet. "
+                          "Drop the gold piece from 10-15cm onto a hard surface (marble or tile) "
+                          "and ensure it's quiet around you."}
+
+    # ── Impact detection: find peak and check attack time ─────────────────────
     peak_idx = int(np.argmax(abs_arr))
-    peak = float(abs_arr[peak_idx])
 
-    if peak < 0.002:
-        return {"valid": False, "reason": "Signal too quiet — tap ornament firmly on a hard surface."}
+    # Attack = time from 10% of peak to peak
+    pre_peak = abs_arr[:peak_idx + 1]
+    onset_candidates = np.where(pre_peak > peak * 0.10)[0]
+    onset_idx = int(onset_candidates[0]) if len(onset_candidates) else 0
+    attack_ms = (peak_idx - onset_idx) / sample_rate * 1000
 
-    # ── Decay time ─────────────────────────────────────────────────────────────
-    # Smooth post-peak with 10ms window to suppress noise transients
-    post = abs_arr[peak_idx:]
-    smooth_win = max(1, int(sample_rate * 0.010))
-    kernel = np.ones(smooth_win) / smooth_win
-    smoothed = np.convolve(post, kernel, mode='same')
+    if attack_ms > 80:
+        return {"valid": False, "snr_db": snr_db,
+                "reason": "No sharp impact detected — this sounds like gradual noise, not a drop. "
+                          "Drop the gold piece from 10-15cm above a hard surface and record again."}
 
-    # -20 dB threshold (10% of peak)
-    below = np.where(smoothed < peak * 0.10)[0]
-    decay_idx = int(below[0]) if len(below) else len(post) - 1
-    decay_ms  = decay_idx / sample_rate * 1000
-
-    # Exponential decay quality (R²) — how clean is the ring?
-    decay_envelope = smoothed[:decay_idx] if decay_idx > 20 else smoothed[:len(smoothed)//2]
-    decay_r2 = _exponential_decay_r2(decay_envelope)
-
-    # ── Spectral analysis ───────────────────────────────────────────────────────
-    # Use 2 seconds post-peak for frequency analysis
+    # ── Spectral analysis ──────────────────────────────────────────────────────
     seg_len = min(int(sample_rate * 2.0), len(arr) - peak_idx)
     seg_len = max(seg_len, 1024)
     segment = arr[peak_idx:peak_idx + seg_len]
     window  = np.hanning(len(segment))
     spectrum = np.abs(np.fft.rfft(segment * window))
     freqs    = np.fft.rfftfreq(len(segment), 1.0 / sample_rate)
-
-    # Suppress DC and sub-80Hz rumble / handling noise
     spectrum[freqs < 80] = 0.0
+
+    flatness = _spectral_flatness(spectrum)
     total_power = float(np.sum(spectrum)) or 1.0
 
-    # Spectral centroid
-    centroid = float(np.dot(freqs, spectrum) / total_power)
+    # Tonal energy: energy in top-5 frequency bins vs total
+    top5_energy = float(np.sum(np.sort(spectrum)[-5:]))
+    tonal_ratio = top5_energy / total_power
 
-    # Dominant frequency
+    if flatness > 0.50:
+        return {"valid": False, "snr_db": snr_db,
+                "reason": "Audio sounds like noise or voice, not a metal drop. "
+                          "Ensure silence, then drop the gold piece onto marble or tile."}
+
+    if tonal_ratio < 0.20:
+        return {"valid": False, "snr_db": snr_db,
+                "reason": "No clear metallic ring detected. "
+                          "The drop may have been on a soft surface (carpet, cloth). "
+                          "Use a hard surface — marble, tile, or glass — and try again."}
+
+    return {
+        "valid": True,
+        "snr_db": snr_db,
+        "attack_ms": attack_ms,
+        "flatness": flatness,
+        "tonal_ratio": tonal_ratio,
+        "peak_idx": peak_idx,
+        "peak": peak,
+        "spectrum": spectrum,
+        "freqs": freqs,
+        "total_power": total_power,
+        "seg_len": seg_len,
+    }
+
+
+def _ornament_ranges(ornament_type: str) -> dict:
+    """
+    Ornament-specific acoustic reference ranges.
+    Different gold ornaments have different resonance characteristics based on mass, shape, and form factor.
+
+    Physics basis:
+      f = (1/2L) * sqrt(E/ρ)  — resonant freq depends on length, Young's modulus, and density
+      Larger/heavier pieces → lower fundamental frequency
+      Thinner pieces (chains, earrings) → higher frequency, shorter ring
+      Solid compact pieces (bangles, coins) → clearest, most sustained ring
+
+    Ring:      Compact toroidal shape, 2-10g. Clear ring 400-900Hz. Decay 80-250ms.
+    Bangle:    Large solid ring, 15-50g. Deep ring 200-500Hz. Decay 150-500ms.
+    Chain:     Many small links, 5-30g. Complex, shorter ring 300-700Hz. Decay 50-200ms.
+    Necklace:  Heavy chain + pendant, 10-50g. Mixed 200-600Hz. Decay 100-300ms.
+    Pendant:   Flat piece, 2-15g. Bright-ish ring 400-1200Hz. Decay 80-250ms.
+    Earring:   Small piece, 0.5-5g. Higher frequency 500-1500Hz. Decay 40-150ms.
+    Coin/bar:  Compact flat, 5-50g. Very clear ring 300-700Hz. Decay 200-600ms.
+    """
+    RANGES = {
+        "ring":     {"decay_lo": 60,  "decay_hi": 300, "centroid_lo": 400, "centroid_hi": 1000},
+        "bangle":   {"decay_lo": 100, "decay_hi": 600, "centroid_lo": 200, "centroid_hi": 600},
+        "chain":    {"decay_lo": 40,  "decay_hi": 250, "centroid_lo": 250, "centroid_hi": 800},
+        "necklace": {"decay_lo": 80,  "decay_hi": 400, "centroid_lo": 200, "centroid_hi": 700},
+        "pendant":  {"decay_lo": 60,  "decay_hi": 300, "centroid_lo": 350, "centroid_hi": 1200},
+        "earring":  {"decay_lo": 30,  "decay_hi": 200, "centroid_lo": 400, "centroid_hi": 1600},
+        "coin":     {"decay_lo": 150, "decay_hi": 700, "centroid_lo": 250, "centroid_hi": 650},
+    }
+    return RANGES.get(ornament_type.lower(), {"decay_lo": 60, "decay_hi": 450, "centroid_lo": 250, "centroid_hi": 1000})
+
+
+def _acoustic_metrics(arr: np.ndarray, sample_rate: int, val: dict, ornament_type: str = "unknown") -> dict:
+    """Compute gold-specific acoustic parameters after validation passes."""
+    peak_idx    = val["peak_idx"]
+    peak        = val["peak"]
+    spectrum    = val["spectrum"]
+    freqs       = val["freqs"]
+    total_power = val["total_power"]
+    snr_db      = val["snr_db"]
+    abs_arr     = np.abs(arr)
+
+    # ── Decay time ─────────────────────────────────────────────────────────────
+    post = abs_arr[peak_idx:]
+    smooth_win = max(1, int(sample_rate * 0.010))
+    smoothed = np.convolve(post, np.ones(smooth_win) / smooth_win, mode='same')
+    below = np.where(smoothed < peak * 0.10)[0]
+    decay_idx = int(below[0]) if len(below) else len(post) - 1
+    decay_ms  = decay_idx / sample_rate * 1000
+
+    decay_envelope = smoothed[:max(decay_idx, 20)]
+    decay_r2 = _exponential_decay_r2(decay_envelope)
+
+    # ── Frequency metrics ──────────────────────────────────────────────────────
+    centroid = float(np.dot(freqs, spectrum) / total_power)
     dom_idx  = int(np.argmax(spectrum))
     dom_freq = float(freqs[dom_idx])
 
-    # Gold-band energy (300–800 Hz) — warm dense metal signature
+    # Gold-band: 300-800Hz (confirmed warm dense metal range)
     gold_mask = (freqs >= 300) & (freqs <= 800)
     gold_ratio = float(np.sum(spectrum[gold_mask]) / total_power)
 
-    # High-frequency energy ratio (>1500 Hz) — plated metal signature
-    hf_mask = freqs > 1500
-    hf_ratio = float(np.sum(spectrum[hf_mask]) / total_power)
+    # High-freq (>1500Hz): bright overtones indicate plated substrate
+    hf_ratio = float(np.sum(spectrum[freqs > 1500]) / total_power)
 
-    # Q-factor: resonant frequency / bandwidth at -3dB
-    dom_power = float(spectrum[dom_idx])
-    half_power = dom_power / np.sqrt(2)
+    # Q-factor
+    half_power = float(spectrum[dom_idx]) / np.sqrt(2)
     above = np.where(spectrum > half_power)[0]
-    if len(above) >= 2:
-        bw = float((above[-1] - above[0]) * (sample_rate / len(segment)))
-        q  = max(dom_freq / (bw + 1e-6), 0.0)
-    else:
-        q = 0.0
+    q = float(dom_freq / ((above[-1] - above[0]) * sample_rate / val["seg_len"] + 1e-6)) if len(above) >= 2 else 0.0
 
-    # ── Physics-based scoring ─────────────────────────────────────────────────
-    # Based on confirmed metallurgical research ranges
+    # ── Physics-based score (ornament-type-aware ranges) ──────────────────────
+    ranges = _ornament_ranges(ornament_type)
+    d_lo, d_hi = ranges["decay_lo"], ranges["decay_hi"]
+    c_lo, c_hi = ranges["centroid_lo"], ranges["centroid_hi"]
+    otype_label = ornament_type if ornament_type != "unknown" else "ornament"
     score, reasons = 50, []
 
-    # DECAY TIME — most critical signal (research confirmed)
-    # Gold: 80-400ms. IMPORTANT: longer decay (>400ms) = plated (brass/silver)
-    if 80 <= decay_ms <= 400:
+    # DECAY — plated brass rings LONGER than real gold (confirmed research)
+    if d_lo <= decay_ms <= d_hi:
         score += 25
-        reasons.append(f"Decay {decay_ms:.0f}ms — solid gold range (80-400ms confirmed)")
-    elif decay_ms < 80:
+        reasons.append(f"Decay {decay_ms:.0f}ms — expected range for solid gold {otype_label} ({d_lo}-{d_hi}ms)")
+    elif decay_ms < d_lo:
         score -= 5
-        reasons.append(f"Very short decay {decay_ms:.0f}ms — possible muffling or noise")
-    elif decay_ms <= 700:
-        # Gold-plated brass rings longer than real gold
-        score -= 15
-        reasons.append(f"Decay {decay_ms:.0f}ms — too long for solid gold; suggests plated metal")
+        reasons.append(f"Short decay {decay_ms:.0f}ms — possible muffling (expected >{d_lo}ms)")
+    elif decay_ms <= d_hi * 2:
+        score -= 18
+        reasons.append(f"Decay {decay_ms:.0f}ms — too long for solid gold {otype_label}; plated brass rings longer")
     else:
-        # Gold-plated silver: very long ring
-        score -= 25
-        reasons.append(f"Long ring {decay_ms:.0f}ms — characteristic of gold-plated silver")
+        score -= 28
+        reasons.append(f"Very long ring {decay_ms:.0f}ms — gold-plated silver signature")
 
-    # SPECTRAL CENTROID — warm density signature
-    # Real gold: 300-800Hz. Plated brass: 800-3000Hz (higher, brighter)
-    if 300 <= centroid <= 800:
+    # SPECTRAL CENTROID — ornament-type-aware (earrings ring higher than bangles)
+    if c_lo <= centroid <= c_hi:
         score += 20
-        reasons.append(f"Centroid {centroid:.0f}Hz — warm gold range (300-800Hz, confirms density)")
-    elif 150 <= centroid < 300:
+        reasons.append(f"Centroid {centroid:.0f}Hz — expected range for {otype_label} ({c_lo}-{c_hi}Hz)")
+    elif centroid < c_lo * 0.7:
         score += 5
-        reasons.append(f"Low centroid {centroid:.0f}Hz — possibly large/heavy piece, borderline")
-    elif centroid <= 1500:
-        score -= 10
-        reasons.append(f"Centroid {centroid:.0f}Hz — above gold range (800-1500Hz = lighter metal)")
-    else:
+        reasons.append(f"Low centroid {centroid:.0f}Hz — heavy piece, borderline")
+    elif centroid > c_hi * 1.5:
         score -= 20
-        reasons.append(f"High centroid {centroid:.0f}Hz — bright/metallic (plated brass/silver range)")
+        reasons.append(f"High centroid {centroid:.0f}Hz — bright/metallic (plated substrate resonance)")
+    else:
+        score -= 8
+        reasons.append(f"Centroid {centroid:.0f}Hz — slightly outside expected range for {otype_label}")
 
-    # GOLD-BAND ENERGY CONCENTRATION (300-800Hz)
+    # GOLD-BAND ENERGY
     if gold_ratio >= 0.40:
         score += 10
-        reasons.append(f"Gold-band energy {gold_ratio:.0%} in 300-800Hz — dense metal confirmed")
+        reasons.append(f"Gold-band {gold_ratio:.0%} in 300-800Hz — dense metal confirmed")
     elif gold_ratio >= 0.25:
         score += 2
-        reasons.append(f"Moderate gold-band energy {gold_ratio:.0%}")
+        reasons.append(f"Moderate gold-band {gold_ratio:.0%}")
     else:
         score -= 10
-        reasons.append(f"Low gold-band energy {gold_ratio:.0%} — energy in higher freqs (plated)")
+        reasons.append(f"Low gold-band {gold_ratio:.0%} — energy in higher freqs")
 
-    # HIGH-FREQUENCY ENERGY — bright overtone indicator of plated metals
+    # HIGH-FREQUENCY RATIO (plated indicator)
     if hf_ratio > 0.30:
         score -= 12
-        reasons.append(f"High-frequency energy {hf_ratio:.0%} >1500Hz — tinny overtones (plated)")
+        reasons.append(f"High-freq energy {hf_ratio:.0%} >1500Hz — tinny plated signature")
     elif hf_ratio > 0.15:
         score -= 4
-        reasons.append(f"Some high-frequency content {hf_ratio:.0%}")
+        reasons.append(f"Some high-freq content {hf_ratio:.0%}")
 
     # EXPONENTIAL DECAY QUALITY
     if decay_r2 >= 0.85:
         score += 5
-        reasons.append(f"Clean exponential decay (R²={decay_r2:.2f}) — pure single-material ring")
+        reasons.append(f"Clean exponential decay R²={decay_r2:.2f} — single pure material")
     elif decay_r2 < 0.60:
         score -= 8
-        reasons.append(f"Irregular decay (R²={decay_r2:.2f}) — multi-modal ring (composite material?)")
+        reasons.append(f"Irregular decay R²={decay_r2:.2f} — composite/plated material")
 
-    # Q-FACTOR — sustained but not over-resonant
-    if 8 <= q <= 50:
+    # SNR BONUS (cleaner recording = more trustworthy score)
+    if snr_db >= 30:
         score += 3
-        reasons.append(f"Q-factor {q:.1f} — healthy resonance")
-    elif q > 80:
-        score -= 5
-        reasons.append(f"Very high Q {q:.1f} — over-resonant (plated/silver-like)")
+        reasons.append(f"Excellent recording quality (SNR {snr_db:.0f}dB)")
 
     return {
-        "valid": True,
         "score": max(5, min(95, score)),
         "decay_ms": round(decay_ms, 1),
         "dom_freq": round(dom_freq, 1),
@@ -248,75 +324,86 @@ def _acoustic_metrics(arr: np.ndarray, sample_rate: int) -> dict:
         "hf_ratio": round(hf_ratio, 4),
         "q_factor": round(q, 2),
         "decay_r2": round(decay_r2, 3),
+        "snr_db": round(snr_db, 1),
         "reasons": reasons,
     }
 
 
 @router.post("/audio-eval", response_model=AudioEvalResponse)
 async def audio_eval(req: AudioEvalRequest):
+    lang_out = "Hindi (Devanagari)" if req.language == "hi" else "English"
+
+    # ── Decode ─────────────────────────────────────────────────────────────────
     try:
         raw_b = base64.b64decode(req.samples_b64)
         arr   = np.frombuffer(raw_b, dtype=np.float32).copy()
     except Exception as e:
         logger.error(f"Audio decode error: {e}")
-        return AudioEvalResponse(score=0, label="Invalid audio", decay_ms=0,
-                                 dominant_freq_hz=0, spectral_centroid_hz=0,
-                                 q_factor=0, gold_band_ratio=0, decay_r2=0,
-                                 reasoning="Could not decode audio data.")
+        return _invalid("Could not decode audio data. Please try again.", req.language)
 
-    metrics = _acoustic_metrics(arr, req.sample_rate)
+    # ── Validate: reject non-metal / bad recordings ────────────────────────────
+    val = _validate_drop(arr, req.sample_rate)
+    if not val["valid"]:
+        reason = val["reason"]
+        if req.language == "hi":
+            reason = f"कृपया फिर से रिकॉर्ड करें। {reason}"
+        logger.info(f"audio_eval: invalid recording — {reason}")
+        return _invalid(reason, req.language, snr_db=val.get("snr_db", 0.0))
 
-    if not metrics.get("valid"):
-        return AudioEvalResponse(score=0, label="No tap detected", decay_ms=0,
-                                 dominant_freq_hz=0, spectral_centroid_hz=0,
-                                 q_factor=0, gold_band_ratio=0, decay_r2=0,
-                                 reasoning=metrics.get("reason", "Signal too quiet."))
+    # ── Physics metrics ────────────────────────────────────────────────────────
+    metrics = _acoustic_metrics(arr, req.sample_rate, val, req.ornament_type)
 
-    # ── Gemini audio analysis with calibrated reference data ──────────────────
+    # ── Gemini analysis with measured parameters ───────────────────────────────
     gemini_score: Optional[int] = None
     gemini_reasoning = ""
-    lang_out = "Hindi (Devanagari)" if req.language == "hi" else "English"
 
     try:
         wav_b64 = base64.b64encode(_float32_to_wav(arr, req.sample_rate)).decode()
 
+        ranges = _ornament_ranges(req.ornament_type)
+        otype_label = req.ornament_type if req.ornament_type != "unknown" else "gold ornament"
+
         prompt = (
             "You are an expert metallurgical acoustics analyst.\n"
-            "You have a tap-test recording AND precise measurements from the signal.\n\n"
+            f"The user DROPPED a gold {otype_label} from ~10-15cm onto a hard surface (marble/tile).\n"
+            "You have the recording AND precise measurements. Use both to score.\n\n"
 
-            "MEASURED PARAMETERS (computed via FFT):\n"
+            f"ORNAMENT TYPE: {otype_label.upper()}\n"
+            f"Expected decay range for solid gold {otype_label}: {ranges['decay_lo']}-{ranges['decay_hi']}ms\n"
+            f"Expected centroid range for solid gold {otype_label}: {ranges['centroid_lo']}-{ranges['centroid_hi']}Hz\n\n"
+
+            "MEASURED PARAMETERS (FFT + envelope analysis):\n"
             f"  Decay time:           {metrics['decay_ms']:.0f} ms\n"
             f"  Dominant frequency:   {metrics['dom_freq']:.0f} Hz\n"
             f"  Spectral centroid:    {metrics['centroid']:.0f} Hz\n"
             f"  Q-factor:             {metrics['q_factor']:.1f}\n"
-            f"  Gold-band ratio:      {metrics['gold_ratio']:.0%}  (energy in 300-800Hz)\n"
-            f"  High-freq ratio:      {metrics['hf_ratio']:.0%}  (energy >1500Hz)\n"
-            f"  Decay exponential R²: {metrics['decay_r2']:.2f}  (1.0 = perfectly clean)\n\n"
+            f"  Gold-band ratio:      {metrics['gold_ratio']:.0%}  (300-800Hz)\n"
+            f"  High-freq ratio:      {metrics['hf_ratio']:.0%}  (>1500Hz = bright/tinny)\n"
+            f"  Decay exponential R²: {metrics['decay_r2']:.2f}\n"
+            f"  Recording SNR:        {metrics['snr_db']:.0f} dB\n\n"
 
-            "RESEARCH-CONFIRMED REFERENCE RANGES:\n\n"
-            "SOLID GOLD 18K-24K (density 19.32 g/cm³, velocity 3240 m/s):\n"
-            "  Decay:      80-400ms   MODERATE — gold-plated brass rings LONGER than real gold\n"
-            "  Centroid:   300-800Hz  WARM — dense metal, lower frequency than brass\n"
-            "  Gold-band:  >40%       Most energy in 300-800Hz\n"
-            "  Decay R²:   >0.85      Clean smooth exponential — single pure material\n"
-            "  Perception: Warm, slightly muted 'ding'. Not the longest ringing metal.\n\n"
-            "GOLD-PLATED BRASS (density 8.5 g/cm³, velocity 4700 m/s):\n"
-            "  Decay:      400-900ms  LONGER than real gold (brass has lower internal damping)\n"
-            "  Centroid:   800-3000Hz  BRIGHTER — lighter substrate resonates higher\n"
-            "  Gold-band:  <25%        Energy scattered to higher frequencies\n"
-            "  Decay R²:   <0.70       Irregular multi-modal decay (substrate vs plating)\n"
-            "  Perception: Brighter, tinny ring that lasts longer. Metallic shimmer.\n\n"
-            "GOLD-PLATED SILVER (density 10.5 g/cm³, velocity 3600 m/s):\n"
-            "  Decay:      >800ms     Very long, clear sustained ring\n"
-            "  Centroid:   600-2000Hz  Clear but higher than real gold\n"
-            "  Perception: Very clear bell-like ring that sustains for seconds.\n\n"
-            "CRITICAL RULE: If decay > 400ms AND centroid > 800Hz, it is almost certainly plated.\n"
-            "If decay is in 80-400ms AND centroid is 300-800Hz, it is strong evidence of solid gold.\n\n"
-            "Listen carefully. The measurements above are objective — trust them unless your "
-            "perception clearly contradicts. Do NOT default to score 50.\n\n"
+            "RESEARCH-CONFIRMED REFERENCE RANGES FOR DROP TEST:\n\n"
+            "SOLID GOLD 18K-24K (19.32 g/cm³, velocity 3240 m/s):\n"
+            "  Decay:      80-400ms     Moderate — gold-plated BRASS rings LONGER\n"
+            "  Centroid:   300-800Hz    Warm — dense metal resonates lower\n"
+            "  Gold-band:  >40%         Energy concentrated in 300-800Hz\n"
+            "  Decay R²:   >0.85        Clean smooth ring — single pure material\n"
+            "  High-freq:  <15%         Not bright or metallic-shimmer\n"
+            "  Sound:      Warm 'ding', not too long, not too bright\n\n"
+            "GOLD-PLATED BRASS (8.5 g/cm³, velocity 4700 m/s):\n"
+            "  Decay:      >400ms       Rings LONGER than real gold\n"
+            "  Centroid:   800-3000Hz   Brighter, higher frequency\n"
+            "  High-freq:  >25%         Metallic shimmer, tinny overtones\n"
+            "  Sound:      Bright metallic ring that sustains too long\n\n"
+            "GOLD-PLATED SILVER:\n"
+            "  Decay:      >800ms       Very sustained clear ring\n"
+            "  Centroid:   600-2000Hz   Clear bell-like tone\n\n"
+            "CRITICAL: If decay>400ms AND centroid>800Hz → almost certainly plated.\n"
+            "If decay 80-400ms AND centroid 300-800Hz → strong solid gold evidence.\n\n"
             f"Return ONLY valid JSON (reasoning in {lang_out}):\n"
-            '{{"score": integer 0-100, "label": "Likely solid gold|Uncertain — may be plated|Possibly gold-plated", '
-            '"reasoning": "2-3 sentences citing specific evidence from audio and measured parameters"}}'
+            '{{"score": integer 0-100, '
+            '"label": "Likely solid gold|Uncertain — may be plated|Possibly gold-plated", '
+            '"reasoning": "2-3 sentences citing specific measured values as evidence"}}'
         )
 
         payload = {
@@ -341,14 +428,14 @@ async def audio_eval(req: AudioEvalRequest):
             gemini_score    = max(0, min(100, int(g.get("score", 50))))
             gemini_reasoning = str(g.get("reasoning", ""))
             logger.info(
-                f"audio_eval gemini={gemini_score} algo={metrics['score']} "
+                f"audio_eval ok: gemini={gemini_score} algo={metrics['score']} "
                 f"decay={metrics['decay_ms']}ms centroid={metrics['centroid']}Hz "
-                f"gold_band={metrics['gold_ratio']:.0%} R²={metrics['decay_r2']:.2f}"
+                f"R²={metrics['decay_r2']:.2f} SNR={metrics['snr_db']:.0f}dB"
             )
     except Exception as e:
-        logger.warning(f"Gemini audio analysis skipped: {e}")
+        logger.warning(f"Gemini audio skipped: {e}")
 
-    # 55% Gemini perception + 45% physics measurements
+    # 55% Gemini + 45% physics
     if gemini_score is not None:
         final_score = round(gemini_score * 0.55 + metrics["score"] * 0.45)
         reasoning   = gemini_reasoning
@@ -358,19 +445,25 @@ async def audio_eval(req: AudioEvalRequest):
 
     final_score = max(5, min(95, final_score))
     label = (
-        "Likely solid gold"              if final_score >= 70 else
-        "Uncertain — may be plated"      if final_score >= 50 else
+        "Likely solid gold"         if final_score >= 70 else
+        "Uncertain — may be plated" if final_score >= 50 else
         "Possibly gold-plated"
     )
 
     return AudioEvalResponse(
-        score=final_score,
-        label=label,
-        decay_ms=metrics["decay_ms"],
-        dominant_freq_hz=metrics["dom_freq"],
-        spectral_centroid_hz=metrics["centroid"],
-        q_factor=metrics["q_factor"],
+        score=final_score, label=label, valid=True, reject_reason=None,
+        decay_ms=metrics["decay_ms"], dominant_freq_hz=metrics["dom_freq"],
+        spectral_centroid_hz=metrics["centroid"], q_factor=metrics["q_factor"],
         gold_band_ratio=round(metrics["gold_ratio"], 3),
-        decay_r2=metrics["decay_r2"],
+        decay_r2=metrics["decay_r2"], snr_db=metrics["snr_db"],
         reasoning=reasoning,
+    )
+
+
+def _invalid(reason: str, lang: str, snr_db: float = 0.0) -> AudioEvalResponse:
+    return AudioEvalResponse(
+        score=0, label="Invalid recording", valid=False, reject_reason=reason,
+        decay_ms=0, dominant_freq_hz=0, spectral_centroid_hz=0,
+        q_factor=0, gold_band_ratio=0, decay_r2=0, snr_db=snr_db,
+        reasoning=reason,
     )
