@@ -6,7 +6,7 @@ import { Consent } from './pages/Consent'
 import { OTP } from './pages/OTP'
 import { Setup } from './pages/Setup'
 import { CaptureFlow } from './pages/CaptureFlow'
-import { GuidedCapture } from './pages/GuidedCapture'
+import { LiveCapture } from './pages/LiveCapture'
 import { CertificateScan } from './pages/CertificateScan'
 import { WeightEntry } from './pages/WeightEntry'
 import { Processing } from './pages/Processing'
@@ -17,6 +17,7 @@ import { Dashboard } from './pages/Dashboard'
 import { DashboardDetail } from './pages/DashboardDetail'
 import { FieldAgent } from './pages/FieldAgent'
 import { Confirmation } from './pages/Confirmation'
+import { VideoAudioEval } from './pages/VideoAudioEval'
 import { useSessionStore } from './store/session'
 
 function App() {
@@ -31,8 +32,9 @@ function App() {
           <Route path="/otp" element={<OTP />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/capture" element={<CaptureFlow />} />
-          <Route path="/guided-capture" element={<GuidedCapture />} />
+          <Route path="/live-capture" element={<LiveCapture />} />
           <Route path="/certificate-scan" element={<CertificateScan />} />
+          <Route path="/video-eval" element={<VideoAudioEval />} />
           <Route path="/weight" element={<WeightEntry />} />
           <Route path="/processing" element={<Processing />} />
           <Route path="/result" element={<Result />} />

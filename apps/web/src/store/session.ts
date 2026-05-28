@@ -3,7 +3,21 @@ import type { LTVComponent } from '../lib/ltvEngine'
 import type { ROIComponent } from '../lib/roiEngine'
 import type { RepaymentType, AmortizationRow } from '../lib/emiEngine'
 
-export type CaptureType = 'top' | '45deg' | 'side' | 'macro' | 'video' | 'audio' | 'selfie'
+export type CaptureType = 'top' | '45deg' | 'side' | 'macro' | 'video' | 'audio' | 'selfie' | 'certificate'
+
+export interface CertificateData {
+  source: 'ocr'
+  authenticityFound: boolean
+  karat: number | null
+  weightG: number | null
+  huid: string | null
+  itemDescription: string | null
+  billNumber: string | null
+  jewellerName: string | null
+  purchaseDate: string | null
+  confidence: number
+  notes: string[]
+}
 
 // ── Evaluation data (FinalEvaluation page output) ─────────────────────────────
 export interface EvalData {
@@ -14,15 +28,18 @@ export interface EvalData {
   stampDutyInr: number
   serviceable: boolean
   cityGoldValueInr: number        // gold value at real city-specific price
-  cityPricePerG: number           // fetched from allindiabullion.com
-  priceSource: string             // 'allindiabullion.com' | 'ibja_national'
+  cityPricePerG: number           // fetched from Times of India city rates
+  priceSource: string             // 'timesofindia' | 'ibja_national'
   cibilScore: number | null
   cibilTierKey: string
   cibilTierLabel: string
   pan: string
   ltvFinalPct: number
+  ltvLowPct: number
   maxLoanInr: number
+  provisionalLoanLowInr: number
   ltvComponents: LTVComponent[]
+  ltvProvisionalComponents: LTVComponent[]
   ticketTierLabel: string
   processingFeePct: number
   eligible: boolean
@@ -56,6 +73,24 @@ export interface CapturedAsset {
   exif?: Record<string, unknown>
 }
 
+export interface LiveAuthResult {
+  video_score: number
+  audio_score: number
+  combined_score: number
+  verdict: string
+  video_signals: string[]
+  audio_signals: string[]
+  purity_estimate: string | null
+}
+
+export interface TapTestResult {
+  score: number
+  label: string
+  decay_ms: number
+  dominant_freq_hz: number
+  reasoning: string
+}
+
 export interface SessionState {
   sessionId: string | null
   lang: string
@@ -66,6 +101,9 @@ export interface SessionState {
   weightG: number | null
   huidCode: string | null
   scannedKarat: number | null
+  certificateData: CertificateData | null
+  liveAuthResult: LiveAuthResult | null
+  tapTestResult: TapTestResult | null
   result: AssessmentResult | null
   evalData: EvalData | null
   loanAppData: LoanAppData | null
@@ -142,6 +180,9 @@ let _state: SessionState = {
   weightG: null,
   huidCode: null,
   scannedKarat: null,
+  certificateData: null,
+  liveAuthResult: null,
+  tapTestResult: null,
   result: null,
   evalData: null,
   loanAppData: null,
@@ -183,6 +224,9 @@ export function useSessionStore() {
     setWeight: (g: number | null) => setState({ weightG: g }),
     setHuid: (code: string | null) => setState({ huidCode: code }),
     setScannedKarat: (karat: number | null) => setState({ scannedKarat: karat }),
+    setCertificateData: (certificateData: CertificateData | null) => setState({ certificateData }),
+    setLiveAuthResult: (liveAuthResult: LiveAuthResult | null) => setState({ liveAuthResult }),
+    setTapTestResult: (tapTestResult: TapTestResult | null) => setState({ tapTestResult }),
     setResult: (result: AssessmentResult) => setState({ result }),
     setEvalData: (evalData: EvalData) => setState({ evalData }),
     setLoanAppData: (loanAppData: LoanAppData) => setState({ loanAppData }),
@@ -200,6 +244,9 @@ export function useSessionStore() {
       weightG: null,
       huidCode: null,
       scannedKarat: null,
+      certificateData: null,
+      liveAuthResult: null,
+      tapTestResult: null,
       result: null,
       evalData: null,
       loanAppData: null,

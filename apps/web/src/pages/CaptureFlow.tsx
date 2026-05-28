@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
+import { TutorialOverlay } from '../components/TutorialOverlay'
 import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield } from 'lucide-react'
 import { clsx } from 'clsx'
 import { evaluateFrameAPI, type FrameEvalResult } from '../lib/api'
@@ -72,23 +73,6 @@ export function CaptureFlow() {
       demoUrl: '/assets/demo/macro.jpg',
     },
     {
-      type: 'video',
-      titleKey: 'step_video_title',
-      hintKey: 'step_video_hint',
-      voiceGuide: t('voice_video'),
-      isVideo: true,
-      demoUrl: '/assets/demo/video.mp4',
-    },
-    {
-      type: 'audio',
-      titleKey: 'step_audio_title',
-      hintKey: 'step_audio_hint',
-      voiceGuide: t('voice_audio'),
-      isAudio: true,
-      optional: true,
-      demoUrl: '/assets/demo/audio.mp3',
-    },
-    {
       type: 'selfie',
       titleKey: 'step_selfie_title',
       hintKey: 'step_selfie_hint',
@@ -100,7 +84,7 @@ export function CaptureFlow() {
 
   const STEP_LABELS = [
     t('step_label_top'), t('step_label_45'), t('step_label_side'),
-    t('step_label_hallmark'), t('step_label_video'), t('step_label_audio'), t('step_label_selfie'),
+    t('step_label_hallmark'), t('step_label_selfie'),
   ]
 
   const [stepIdx, setStepIdx] = useState(0)
@@ -108,6 +92,7 @@ export function CaptureFlow() {
   const [evals, setEvals] = useState<Record<number, StepEval>>({})
   const [cameraKey, setCameraKey] = useState(0)
   const [showDemo, setShowDemo] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(true)  // auto-show on first step
   const [showManualHuid, setShowManualHuid] = useState(false)
   const [manualHuid, setManualHuid] = useState(state.huidCode || '')
   const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat || null)
@@ -207,8 +192,13 @@ export function CaptureFlow() {
   }, [step.demoUrl, handleCapture])
 
   const next = () => {
-    if (stepIdx < STEPS.length - 1) setStepIdx(i => i + 1)
-    else { speak(t('speak_all_done')); navigate('/weight') }
+    if (stepIdx < STEPS.length - 1) {
+      setStepIdx(i => i + 1)
+      setShowTutorial(true)   // show tutorial when entering each new step
+    } else {
+      speak(t('speak_all_done'))
+      navigate('/certificate-scan')
+    }
   }
 
   const skip = () => { if (step.optional) { speak(t('speak_skip')); next() } }
@@ -258,6 +248,27 @@ export function CaptureFlow() {
           <Volume2 className="w-4 h-4 text-stone-500" />
         </button>
       </div>
+
+      {/* AI Live Capture banner */}
+      {stepIdx === 0 && (
+        <div className="px-5 pb-3 pt-1">
+          <button
+            onClick={() => navigate('/live-capture')}
+            className="w-full flex items-center justify-between bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl px-4 py-3 shadow-lg shadow-amber-500/25"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                <span className="text-lg">✨</span>
+              </div>
+              <div className="text-left">
+                <p className="text-white font-bold text-sm leading-none">Try AI Live Capture</p>
+                <p className="text-white/75 text-[11px] mt-0.5">Auto-scan with Gemini — Hindi & English</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-white/80 flex-shrink-0" />
+          </button>
+        </div>
+      )}
 
       {/* Demo Button */}
       {step.demoUrl && (
@@ -526,6 +537,14 @@ export function CaptureFlow() {
           </button>
         )}
       </div>
+      {/* Tutorial Overlay — auto-shows on each new step */}
+      {showTutorial && !step.isVideo && !step.isAudio && (
+        <TutorialOverlay
+          stepType={step.type}
+          onDismiss={() => setShowTutorial(false)}
+        />
+      )}
+
       {/* Demo Overlay */}
       {showDemo && step.demoUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-md p-6 animate-fade-in">
