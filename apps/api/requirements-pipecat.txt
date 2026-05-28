@@ -1,0 +1,4 @@
+# Pipecat guided session pipeline — installed separately in its own venv
+# The guided_session route spawns a Python 3.11 subprocess that uses this env.
+# Do NOT add to requirements.txt — pipecat conflicts with pinned API deps.
+pipecat-ai[daily,groq,silero]>=0.0.36
