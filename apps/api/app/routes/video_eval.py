@@ -1,13 +1,46 @@
 """
 POST /api/video-eval
-Multiple frames from 15-second rotation → Gemini 2.5-flash multi-frame analysis.
-Gemini evaluates weighted signals across ALL frames simultaneously:
-  - Edge color consistency  (35%) — strongest single indicator
-  - Surface hue uniformity  (30%) — warm uniform yellow = real
-  - Luster quality          (20%) — warm amber vs chrome/flat
-  - Temporal consistency    (10%) — colour must not shift across frames
-  - Hallmark presence       (5%)  — depth/quality of BIS stamp
-Each signal is scored independently, then weighted into a final 0-100.
+Multiple frames from 15-second rotation → multi-signal gold authenticity analysis.
+
+RESEARCH BASIS (validated visual parameters for phone-camera gold authentication):
+
+WEAR AND TEAR INDICATORS (strongest visual signals):
+  Real gold: uniform wear throughout — same colour visible everywhere including worn areas
+  Plated: contrasting metal exposed at high-contact points (clasps, hinges, bends, inner bands)
+  Plating wears off first at: edges, clasps, hinges, ring inner bands, bracelet links
+
+EDGE SUBSTRATE EXPOSURE (most reliable single indicator):
+  Real gold: ALL edges, corners, clasps same warm yellow as body — no exceptions
+  Plated: grey/copper/silver substrate shows through at any edge or contact point
+  Even one patch of exposed substrate = plated
+
+COLOUR SCIENCE (spectroscopy research):
+  22K gold (916): hue 46-52° in HSL, warm orange-yellow, slightly reddish undertone
+  18K gold (750): hue 48-54°, slightly paler, still warm
+  Brass substrate: hue 55°+ (greener undertone), visibly different yellow
+  Plated surfaces at wear points: brassy green-yellow or copper/grey showing
+
+LUSTER / REFLECTION (optical research US patent 4278353):
+  Real gold: lower reflectance in 450-500nm (blue) → warm amber appearance
+             soft glow, NOT mirror-bright, "luxurious warmth" quality
+  Plated brass: higher reflectance across all wavelengths, chrome-like brightness
+  Gold-plated silver: very bright, cold reflection, almost white
+
+SURFACE ORIGINALITY:
+  Real gold: minimal porosity, consistent fine granular texture, smooth seams/solder joints
+  Plated: visible micro-porosity at contact areas (dark spots/pitting), uneven solder near seams
+  Authenticity: no flaking, no peeling, consistent hallmark depth
+
+SIGNAL WEIGHTS (based on research reliability):
+  Wear at contact points:  35%  — most definitive visual indicator
+  Edge substrate exposure: 30%  — single strongest indicator
+  Luster/reflection:       20%  — warm amber vs chrome
+  Surface originality:     10%  — porosity, solder, consistency
+  Colour hue accuracy:      5%  — 22K/18K specific hue range
+
+Hard cap rules:
+  Any visible substrate exposure at edges/clasps → cap score at 30
+  Wrong colour at any contact point → cap score at 45
 """
 import json
 import logging
@@ -22,8 +55,6 @@ from app.data.gemini import _gemini_request
 logger = logging.getLogger("goldeye.video_eval")
 router = APIRouter()
 
-MODEL = os.getenv("VIDEO_GEMINI_MODEL", "gemini-2.5-flash")
-
 
 class VideoEvalRequest(BaseModel):
     frames_b64: list[str]
@@ -33,11 +64,11 @@ class VideoEvalRequest(BaseModel):
 class VideoEvalResponse(BaseModel):
     video_score: int
     verdict: str
-    edge_score: int
-    hue_score: int
-    luster_score: int
-    consistency_score: int
-    hallmark_score: int
+    wear_score: int                  # wear at contact points
+    edge_substrate_score: int        # edge colour consistency
+    luster_score: int                # warm amber vs chrome
+    surface_originality_score: int   # porosity, solder, peeling
+    hue_score: int                   # correct gold hue range
     video_signals: list[str]
     purity_estimate: Optional[str]
     guidance: str
@@ -46,78 +77,94 @@ class VideoEvalResponse(BaseModel):
 @router.post("/video-eval", response_model=VideoEvalResponse)
 async def video_eval(req: VideoEvalRequest):
     if not req.frames_b64:
-        return _error_response("No frames received", req.language)
+        return _error("No frames received", req.language)
 
-    n_frames  = min(len(req.frames_b64), 10)
-    lang_out  = "Hindi (Devanagari)" if req.language == "hi" else "English"
+    n_frames = min(len(req.frames_b64), 10)
+    lang_out = "Hindi (Devanagari)" if req.language == "hi" else "English"
 
-    prompt = f"""You are a gold authentication expert for Poonawalla Fincorp gold-loan appraisal.
-You are given {n_frames} frames from a 15-second slow rotation of a gold ornament.
-Analyse ALL frames together. Each signal must be scored 0-100 independently — do NOT average them.
+    prompt = f"""You are a gold authentication expert examining {n_frames} frames of a gold ornament rotating over 15 seconds.
 
-━━━ SIGNAL 1: EDGE COLOR CONSISTENCY (weight 35%) ━━━
-Score 0-100 based on: do ALL visible edges, corners, clasps, and hinges match the surface colour?
-• 90-100: Every edge is identical warm yellow as the surface — classic solid gold
-• 70-89:  Edges mostly match, minor variation at one clasp or corner
-• 50-69:  Noticeable colour difference at some edges, uncertain
-• 20-49:  Clear colour difference — grey, silver, or copper showing at edges
-• 0-19:   Obvious base metal exposed at edges — definitely plated
+Examine ALL frames carefully together. Score each signal 0-100 independently based on what you actually see.
 
-━━━ SIGNAL 2: HUE UNIFORMITY (weight 30%) ━━━
-Score 0-100 based on: is the gold colour warm, deep, and consistent across all surfaces?
-• 90-100: Rich deep warm yellow (22K: #D4A017 range), completely uniform
-• 70-89:  Warm yellow, slight variation in lighting areas
-• 50-69:  Pale or uneven yellow, may be 14K or uncertain
-• 20-49:  Thin, brassy, or coppery tone — surface plating characteristics
-• 0-19:   Obviously wrong colour — silver-toned, bright chrome, or clearly artificial
+━━━ SIGNAL 1: WEAR AT CONTACT POINTS (weight 35%) ━━━
+Where plating wears off FIRST: inner ring bands, bracelet link joints, clasp mechanisms, hinge points, chain link interiors, pendant bails.
+Score based on: is the colour at these high-contact/high-wear areas the SAME as the rest of the piece?
 
-━━━ SIGNAL 3: LUSTER QUALITY (weight 20%) ━━━
-Score 0-100 based on: what is the reflection character?
-• 90-100: Warm amber-toned luster, soft glow, depth — solid gold characteristic
-• 70-89:  Good warm luster with minor bright spots
-• 50-69:  Mixed — some warm areas, some overly bright
-• 20-49:  Overly mirror-bright (chrome-like) or completely flat/dull
-• 0-19:   Clearly wrong — metallic shimmer or plastic-like sheen
+• 90-100: No wear exposure anywhere. All contact areas same warm yellow throughout. Consistent even wear with same underlying colour.
+• 70-89:  Very minor variation at one contact point, still warm yellow colour.
+• 50-69:  Some wear visible at joints/edges showing slightly different tone. Uncertain.
+• 20-49:  Clear colour change at clasps, hinges, or link interiors — different metal showing.
+• 0-19:   Obvious substrate exposure at multiple contact points — grey/copper/silver clearly visible at worn areas.
 
-━━━ SIGNAL 4: TEMPORAL CONSISTENCY (weight 10%) ━━━
-Score 0-100 based on: does the colour remain stable as the ornament rotates across all frames?
-• 90-100: Colour is completely stable — no hue shift between frames
-• 70-89:  Stable with minor lighting-induced variation
-• 40-69:  Noticeable colour shift between frames — suspicious
-• 0-39:   Strong colour shift across frames — suggests thin plating or coating
+━━━ SIGNAL 2: EDGE SUBSTRATE EXPOSURE (weight 30%) ━━━
+Examine ALL edges, corners, clasps, and the undersides of settings under any angle visible in the frames.
+Real gold: every edge is identical warm yellow. No exceptions.
 
-━━━ SIGNAL 5: HALLMARK PRESENCE (weight 5%) ━━━
-Score 0-100 based on: any BIS hallmark, HUID, or purity stamp visible?
-• 90-100: Clear deep BIS stamp with purity digits (916/750/999) visible
-• 60-89:  Partial or slightly blurred hallmark visible
-• 20-59:  No hallmark visible but surface looks correct for stamping
-• 0-19:   No hallmark AND surface shows signs of covering marks
+• 90-100: Every edge/corner identical warm yellow to body. Zero substrate exposure anywhere.
+• 70-89:  Edges mostly match, one ambiguous corner under difficult lighting.
+• 50-69:  Noticeable colour difference at some edge but uncertain about substrate vs lighting.
+• 20-49:  Visibly different colour at edges — grey, silver-grey, or copper tones showing.
+• 0-19:   Clear base metal (grey/copper/silver) at multiple edges/corners. Definitely plated.
+
+━━━ SIGNAL 3: LUSTER AND REFLECTION CHARACTER (weight 20%) ━━━
+Real gold: warm amber glow. Reflections have orange-yellow warmth. NOT mirror-bright.
+Plated brass: chrome-like bright mirror. Cold, harsh reflections. Over-shiny.
+Gold-plated silver: very bright cold white reflections, almost like chrome.
+
+• 90-100: Rich warm amber luster. Soft glow. Reflections are warm orange-yellow. Looks deep not bright.
+• 70-89:  Good warm luster with minor bright spots under direct light.
+• 50-69:  Mixed — some warm areas, some overly bright patches.
+• 20-49:  Chrome-like or cold reflections. Mirror-bright in most areas.
+• 0-19:   Clearly wrong — bright silver/chrome appearance, cold metallic, or plastic-like sheen.
+
+━━━ SIGNAL 4: SURFACE ORIGINALITY (weight 10%) ━━━
+Look for: peeling, flaking, porosity (dark spots at contact areas), solder quality at joints.
+Real gold: smooth throughout, even solder, no flaking. Solder joints same colour.
+Plated: visible dark pores at contact areas, uneven solder near seams, any signs of peeling.
+
+• 90-100: Perfect surface integrity. No pores, no peeling, smooth consistent seams. Solder joints same colour.
+• 70-89:  Minor texture variation, no peeling or pores visible.
+• 50-69:  Slight pitting or uneven texture at some point.
+• 20-49:  Visible porosity/dark spots at contact areas, or discoloured solder joints.
+• 0-19:   Peeling, flaking, or obvious defects inconsistent with solid gold.
+
+━━━ SIGNAL 5: COLOUR HUE ACCURACY (weight 5%) ━━━
+22K gold (916): warm orange-yellow, slightly reddish — not bright yellow, not greenish.
+18K gold (750): slightly paler, still warm — not white, not green.
+Brass: has greenish-yellow undertone compared to gold's warm orange-yellow.
+
+• 90-100: Perfect warm orange-yellow throughout. Matches 22K or 18K reference exactly.
+• 70-89:  Good warm yellow, minor variation in shaded areas.
+• 50-69:  Slightly off — a bit pale (14K?) or slightly green-tinted in places.
+• 20-49:  Noticeably greenish-yellow or brassy tone overall.
+• 0-19:   Wrong colour — clearly not gold hue. Too green, too pale, or unnatural.
 
 ━━━ PURITY ESTIMATE ━━━
-If any hallmark digits are visible, report the purity code (999/916/875/750/585).
-Otherwise report null.
+If any hallmark stamp digits are visible in any frame: report the fineness (999/916/875/750/585).
+Otherwise: null.
 
-━━━ SCORING RULES ━━━
-• Commit to clear scores — do NOT cluster at 50.
-• If edge colour is wrong (score <40), cap video_score at 45 regardless of other signals.
-• If hue is obviously wrong (score <30), cap video_score at 35.
-• video_score = round(edge*0.35 + hue*0.30 + luster*0.20 + consistency*0.10 + hallmark*0.05)
-• Most ornaments presented for gold loans ARE real 22K/18K gold — score accordingly.
+━━━ HARD RULES ━━━
+• If edge substrate exposure score < 30 (substrate clearly visible): cap video_score at 30 regardless.
+• If wear score < 25 (clear substrate at contact areas): cap video_score at 40.
+• Do NOT give scores in the 45-55 range unless genuinely uncertain. Commit to a position.
+• Most ornaments presented for gold loans ARE real 22K/18K — score high when evidence supports it.
+• video_score = round(wear*0.35 + edge_substrate*0.30 + luster*0.20 + surface_originality*0.10 + hue*0.05)
+• Apply caps AFTER computing weighted score.
 
 Return ONLY valid JSON:
 {{
-  "edge_score": integer 0-100,
-  "hue_score": integer 0-100,
+  "wear_score": integer 0-100,
+  "edge_substrate_score": integer 0-100,
   "luster_score": integer 0-100,
-  "consistency_score": integer 0-100,
-  "hallmark_score": integer 0-100,
+  "surface_originality_score": integer 0-100,
+  "hue_score": integer 0-100,
   "video_score": integer 0-100,
-  "edge_observation": "specific 1-sentence observation about edges across frames",
-  "hue_observation": "specific 1-sentence observation about colour",
-  "luster_observation": "specific 1-sentence observation about reflections",
-  "consistency_observation": "specific 1-sentence on colour stability across frames",
-  "red_flags": ["list only real concerns, empty if none"],
-  "positive_signals": ["list confirmed positive evidence"],
+  "wear_observation": "specific 1-sentence finding about contact points and worn areas",
+  "edge_observation": "specific 1-sentence finding about edge colour across all frames",
+  "luster_observation": "specific 1-sentence finding about reflection character",
+  "surface_observation": "specific 1-sentence finding about surface integrity",
+  "red_flags": ["list only real specific concerns — empty if none"],
+  "positive_signals": ["list specific evidence of authenticity"],
   "purity_estimate": "916 or 750 or 999 or null",
   "guidance": "1-2 sentences in {lang_out}"
 }}"""
@@ -130,7 +177,7 @@ Return ONLY valid JSON:
         "contents": [{"parts": parts}],
         "generationConfig": {
             "temperature": 0.10,
-            "maxOutputTokens": 1000,
+            "maxOutputTokens": 900,
             "responseMimeType": "application/json",
         },
     }
@@ -139,72 +186,73 @@ Return ONLY valid JSON:
         data, success = await _gemini_request(payload, timeout=60)
         if not success:
             raise ValueError(data.get("error", "api_failed"))
-
         raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
         if raw.startswith("```json"): raw = raw[7:]
         if raw.startswith("```"):     raw = raw[3:]
         if raw.endswith("```"):       raw = raw[:-3]
         res = json.loads(raw.strip())
     except Exception as e:
-        logger.error(f"video_eval gemini error: {e}")
-        return _error_response(f"Analysis error: {e}", req.language)
+        logger.error(f"video_eval error: {e}")
+        return _error(str(e), req.language)
 
-    # Extract per-signal scores
-    edge_score        = _clamp(res.get("edge_score", 50))
-    hue_score         = _clamp(res.get("hue_score", 50))
-    luster_score      = _clamp(res.get("luster_score", 50))
-    consistency_score = _clamp(res.get("consistency_score", 50))
-    hallmark_score    = _clamp(res.get("hallmark_score", 50))
+    wear_score               = _clamp(res.get("wear_score", 50))
+    edge_substrate_score     = _clamp(res.get("edge_substrate_score", 50))
+    luster_score             = _clamp(res.get("luster_score", 50))
+    surface_originality_score = _clamp(res.get("surface_originality_score", 50))
+    hue_score                = _clamp(res.get("hue_score", 50))
 
-    # Recompute weighted score server-side (don't trust Gemini's arithmetic)
+    # Weighted score — computed server-side, not trusted from Gemini
     weighted = (
-        edge_score        * 0.35 +
-        hue_score         * 0.30 +
-        luster_score      * 0.20 +
-        consistency_score * 0.10 +
-        hallmark_score    * 0.05
+        wear_score               * 0.35 +
+        edge_substrate_score     * 0.30 +
+        luster_score             * 0.20 +
+        surface_originality_score * 0.10 +
+        hue_score                * 0.05
     )
-    # Apply caps: bad edges or bad hue are hard disqualifiers
-    if edge_score < 40:
-        weighted = min(weighted, 45)
-    if hue_score < 30:
-        weighted = min(weighted, 35)
+
+    # Hard caps: substrate exposure or contact-point discolouration are disqualifiers
+    if edge_substrate_score < 30:
+        weighted = min(weighted, 30)
+    if wear_score < 25:
+        weighted = min(weighted, 40)
 
     video_score = max(0, min(100, round(weighted)))
 
-    # Build signal list from specific observations
     signals = []
-    for field in ("edge_observation", "hue_observation", "luster_observation", "consistency_observation"):
+    for field in ("wear_observation", "edge_observation", "luster_observation", "surface_observation"):
         val = str(res.get(field, "")).strip()
         if val:
             signals.append(val)
     red_flags = list(res.get("red_flags", []))
     pos_sigs  = list(res.get("positive_signals", []))
-    if red_flags:
-        signals.append("⚠ " + "; ".join(red_flags))
-    if pos_sigs:
-        signals.append("✓ " + "; ".join(pos_sigs))
+    if red_flags: signals.append("⚠ " + "; ".join(red_flags))
+    if pos_sigs:  signals.append("✓ " + "; ".join(pos_sigs))
 
-    if video_score >= 70:
-        verdict = "Likely solid gold" if req.language == "en" else "संभवतः असली सोना"
-    elif video_score >= 50:
-        verdict = "Uncertain — further verification advised" if req.language == "en" else "अनिश्चित"
-    else:
-        verdict = "Possibly gold-plated" if req.language == "en" else "संभवतः गोल्ड-प्लेटेड"
+    verdict = (
+        "Likely solid gold"                          if video_score >= 70 else
+        "Uncertain — further verification advised"   if video_score >= 50 else
+        "Possibly gold-plated"
+    )
+    if req.language == "hi":
+        verdict = (
+            "संभवतः असली सोना"       if video_score >= 70 else
+            "अनिश्चित"              if video_score >= 50 else
+            "संभवतः गोल्ड-प्लेटेड"
+        )
 
     logger.info(
-        f"video_eval score={video_score} edge={edge_score} hue={hue_score} "
-        f"luster={luster_score} consistency={consistency_score} hallmark={hallmark_score}"
+        f"video_eval score={video_score} wear={wear_score} edge={edge_substrate_score} "
+        f"luster={luster_score} surface={surface_originality_score} hue={hue_score}"
     )
 
     return VideoEvalResponse(
         video_score=video_score,
         verdict=verdict,
-        edge_score=edge_score,
-        hue_score=hue_score,
+        wear_score=wear_score,
+        edge_substrate_score=edge_substrate_score,
         luster_score=luster_score,
-        consistency_score=consistency_score,
-        hallmark_score=hallmark_score,
+        surface_originality_score=surface_originality_score,
+        hue_score=hue_score,
         video_signals=signals,
         purity_estimate=res.get("purity_estimate") or None,
         guidance=str(res.get("guidance", "")),
@@ -212,17 +260,15 @@ Return ONLY valid JSON:
 
 
 def _clamp(v) -> int:
-    try:
-        return max(0, min(100, int(v)))
-    except (TypeError, ValueError):
-        return 50
+    try: return max(0, min(100, int(v)))
+    except (TypeError, ValueError): return 50
 
 
-def _error_response(msg: str, lang: str) -> VideoEvalResponse:
+def _error(msg: str, lang: str) -> VideoEvalResponse:
     return VideoEvalResponse(
         video_score=0, verdict="Analysis unavailable",
-        edge_score=0, hue_score=0, luster_score=0,
-        consistency_score=0, hallmark_score=0,
+        wear_score=0, edge_substrate_score=0, luster_score=0,
+        surface_originality_score=0, hue_score=0,
         video_signals=[msg], purity_estimate=None,
         guidance="Please try again." if lang == "en" else "कृपया पुनः प्रयास करें।",
     )

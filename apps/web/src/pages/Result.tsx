@@ -441,7 +441,7 @@ export function Result() {
               ))}
             </div>
             <p className="text-[10px] text-stone-400 mt-3 leading-relaxed">
-              Analyzed using AI Grad-CAM (hover to see focus areas). <span className="text-rose-500 font-semibold">Red zones</span> show where AI detected hallmark clarity, purity marks, and authenticity signals.
+              Grad-CAM focus map (hover to see detail areas). <span className="text-rose-500 font-semibold">Red zones</span> highlight hallmark clarity, purity marks, and key authenticity regions.
             </p>
           </div>
         </div>
@@ -484,7 +484,7 @@ export function Result() {
                   <div className="absolute inset-0 bg-black/10 mix-blend-multiply pointer-events-none" />
                 </div>
                 <p className="text-[10px] text-stone-400 mt-2 leading-relaxed">
-                  The <span className="text-rose-500 font-bold">Red Zones</span> indicate regions of maximum activation where the AI verified hallmark authenticity and surface texture.
+                  The <span className="text-rose-500 font-bold">Red Zones</span> indicate regions of highest focus — hallmark stamp, purity marks, and surface texture.
                 </p>
               </div>
             )}

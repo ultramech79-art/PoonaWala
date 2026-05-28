@@ -26,11 +26,11 @@ type Phase = 'intro' | 'recording' | 'analyzing' | 'result'
 interface VideoResult {
   video_score: number
   verdict: string
-  edge_score: number
-  hue_score: number
+  wear_score: number
+  edge_substrate_score: number
   luster_score: number
-  consistency_score: number
-  hallmark_score: number
+  surface_originality_score: number
+  hue_score: number
   video_signals: string[]
   purity_estimate: string | null
   guidance: string
@@ -109,7 +109,7 @@ export function VideoEval() {
         purity_estimate: data.purity_estimate ?? null,
       })
     } catch (e: any) {
-      setError(e?.message ?? 'Analysis failed — Vertex AI may be unavailable.')
+      setError(e?.message ?? 'Video analysis failed. Please try again.')
     }
     setPhase('result')
   }
@@ -148,7 +148,7 @@ export function VideoEval() {
               <div className="text-center">
                 <p className="font-bold text-stone-900 text-lg">15-Second Video Scan</p>
                 <p className="text-stone-600 text-sm mt-1 leading-relaxed">
-                  Slowly rotate the gold piece. Gemini AI analyses colour, luster, edge wear, and surface consistency.
+                  Slowly rotate the gold piece. We analyse wear at contact points, edge colour consistency, luster, and surface originality.
                 </p>
               </div>
             </div>
@@ -219,7 +219,7 @@ export function VideoEval() {
             <div className="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
             <div className="text-center">
               <p className="font-bold text-stone-900 text-base">Analysing {framesRef.current.length} frames…</p>
-              <p className="text-stone-500 text-sm mt-1">Gemini AI is checking colour, luster, and edge wear</p>
+              <p className="text-stone-500 text-sm mt-1">Analysing wear, surface originality, and edge consistency…</p>
             </div>
           </div>
         )}
@@ -245,11 +245,11 @@ export function VideoEval() {
                 {/* Per-signal breakdown */}
                 <div className="border-t border-stone-100 pt-3 space-y-2">
                   {[
-                    { label: 'Edge consistency', score: result.edge_score, weight: '35%' },
-                    { label: 'Hue uniformity',   score: result.hue_score,   weight: '30%' },
-                    { label: 'Luster quality',   score: result.luster_score, weight: '20%' },
-                    { label: 'Temporal stability', score: result.consistency_score, weight: '10%' },
-                    { label: 'Hallmark',          score: result.hallmark_score, weight: '5%' },
+                    { label: 'Wear at contact points', score: result.wear_score,               weight: '35%' },
+                    { label: 'Edge substrate',          score: result.edge_substrate_score,     weight: '30%' },
+                    { label: 'Luster / reflection',     score: result.luster_score,             weight: '20%' },
+                    { label: 'Surface originality',     score: result.surface_originality_score, weight: '10%' },
+                    { label: 'Colour hue',              score: result.hue_score,                weight: '5%' },
                   ].map(({ label, score, weight }) => (
                     <div key={label} className="flex items-center gap-2">
                       <span className="text-xs text-stone-500 w-32 flex-shrink-0">{label} <span className="text-stone-400">({weight})</span></span>
@@ -279,7 +279,7 @@ export function VideoEval() {
                 <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-amber-800">Video analysis unavailable</p>
-                  <p className="text-xs text-amber-700 mt-0.5">{error || 'Vertex AI did not return a result. Continuing with tap test.'}</p>
+                  <p className="text-xs text-amber-700 mt-0.5">{error || 'Video analysis did not return a result. Continuing with drop test.'}</p>
                 </div>
               </div>
             )}
