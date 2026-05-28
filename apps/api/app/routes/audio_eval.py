@@ -1,10 +1,9 @@
 """
 POST /api/audio-eval
-Accepts raw float32 PCM audio samples (base64) from a 10-second tap test.
-Blends Vertex AI gemini-3.5-flash acoustic analysis with algorithmic FFT.
-Returns: score, label, decay_ms, dominant_freq_hz, reasoning.
+Accepts raw float32 PCM audio (base64) from a 10-second tap test.
+Blends Gemini REST API acoustic analysis (60%) with algorithmic FFT (40%).
+No Vertex AI / service account needed — uses GEMINI_API_KEY.
 """
-import asyncio
 import io
 import json
 import logging
@@ -16,29 +15,10 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.data.gemini import _gemini_request
+
 logger = logging.getLogger("goldeye.audio_eval")
 router = APIRouter()
-
-MODEL_NAME = os.getenv("AUDIO_GEMINI_MODEL", "gemini-3.5-flash")
-PROJECT_ID = "poonawala-497707"
-LOCATION   = "global"
-
-_client = None
-
-def _get_client():
-    global _client
-    if _client is None:
-        from google import genai
-        _client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
-    return _client
-
-
-class _TapAudioOut(BaseModel):
-    score: int
-    decay_ms: float
-    dominant_freq_hz: float
-    label: str
-    reasoning: str
 
 
 class AudioEvalRequest(BaseModel):
@@ -69,15 +49,15 @@ def _float32_to_wav(samples: list[float], sample_rate: int) -> bytes:
 
 
 def _analyze_algorithmic(samples: list[float], sample_rate: int) -> dict:
-    """Fast algorithmic FFT-based analysis — always runs as a foundation."""
     abs_s = [abs(x) for x in samples]
     peak  = max(abs_s) if abs_s else 0
     if peak < 0.003:
-        return {"score": 0, "decay_ms": 0.0, "dom_freq": 0.0, "reasons": ["Signal too quiet — tap ornament firmly."]}
+        return {"score": 0, "decay_ms": 0.0, "dom_freq": 0.0,
+                "reasons": ["Signal too quiet — tap ornament firmly."]}
 
-    peak_i     = abs_s.index(peak)
-    decay_i    = len(abs_s) - 1
-    thresh     = peak * 0.12
+    peak_i  = abs_s.index(peak)
+    decay_i = len(abs_s) - 1
+    thresh  = peak * 0.12
     for i in range(peak_i, len(abs_s)):
         if abs_s[i] < thresh: decay_i = i; break
     decay_ms = (decay_i - peak_i) / sample_rate * 1000
@@ -115,70 +95,81 @@ def _analyze_algorithmic(samples: list[float], sample_rate: int) -> dict:
     elif centroid > 0:
         score -= 12; reasons.append(f"Bright/tinny {centroid:.0f}Hz — plated indicator")
 
-    return {"score": max(5, min(95, score)), "decay_ms": decay_ms, "dom_freq": dom_freq, "reasons": reasons}
+    return {"score": max(5, min(95, score)), "decay_ms": decay_ms,
+            "dom_freq": dom_freq, "reasons": reasons}
 
 
 @router.post("/audio-eval", response_model=AudioEvalResponse)
 async def audio_eval(req: AudioEvalRequest):
     import base64
 
-    # Decode PCM
     try:
-        raw_b  = base64.b64decode(req.samples_b64)
-        n      = len(raw_b) // 4
-        samps  = list(struct.unpack(f"<{n}f", raw_b[:n * 4]))
+        raw_b = base64.b64decode(req.samples_b64)
+        n     = len(raw_b) // 4
+        samps = list(struct.unpack(f"<{n}f", raw_b[:n * 4]))
     except Exception as e:
         logger.error(f"Audio decode error: {e}")
-        return AudioEvalResponse(score=0, label="Invalid audio", decay_ms=0, dominant_freq_hz=0, reasoning="Could not decode audio data.")
+        return AudioEvalResponse(score=0, label="Invalid audio",
+                                 decay_ms=0, dominant_freq_hz=0,
+                                 reasoning="Could not decode audio data.")
 
-    # Algorithmic analysis — always runs
     algo = _analyze_algorithmic(samps, req.sample_rate)
     if algo["score"] == 0:
-        return AudioEvalResponse(score=0, label="No tap detected", decay_ms=0.0, dominant_freq_hz=0.0, reasoning="Signal too quiet — tap the ornament firmly on a hard surface.")
+        return AudioEvalResponse(score=0, label="No tap detected",
+                                 decay_ms=0.0, dominant_freq_hz=0.0,
+                                 reasoning="Signal too quiet — tap the ornament firmly on a hard surface.")
 
-    # Vertex AI analysis — best-effort, blended with algorithmic
+    # Gemini REST API audio analysis
     gemini_score: Optional[int] = None
     gemini_reasoning = ""
     try:
-        _get_client()
-        from google.genai import types
-        wav = _float32_to_wav(samps, req.sample_rate)
-        lang_out = "Hindi (Devanagari)" if req.language == "hi" else "English"
+        wav_bytes  = _float32_to_wav(samps, req.sample_rate)
+        wav_b64    = base64.b64encode(wav_bytes).decode()
+        lang_out   = "Hindi (Devanagari)" if req.language == "hi" else "English"
 
-        audio_prompt = (
+        prompt = (
             "You are an expert metallurgical acoustics analyst for gold-loan appraisal.\n"
             "Listen carefully to this recording of a metal ornament being tapped.\n\n"
             "Key acoustic signatures:\n"
-            "- SOLID GOLD (18K–24K): Dense (15–18 g/cm³), soft metal. Warm, damped ring. "
+            "- SOLID GOLD (18K–24K): Dense (15–18 g/cm³). Warm, damped ring. "
             "Decay 80–350ms. Spectral centroid 200–700Hz. Clean exponential envelope.\n"
-            "- GOLD-PLATED BRASS: Rings brighter and LONGER. Decay 350–900ms. Centroid 600–2500Hz. Tinny overtones.\n"
+            "- GOLD-PLATED BRASS: Rings brighter and LONGER. Decay 350–900ms. "
+            "Centroid 600–2500Hz. Tinny overtones.\n"
             "- GOLD-PLATED SILVER: Very clear, long ring >1s. High centroid 1000–4000Hz.\n\n"
-            "Score 0–100 for solid gold likelihood (100=definitely solid, 0=definitely plated).\n"
-            f"reasoning field in {lang_out}."
+            f"Score 0–100 for solid gold likelihood (100=definitely solid, 0=definitely plated).\n\n"
+            f"Return ONLY valid JSON:\n"
+            '{{"score": integer, "decay_ms": float, "dominant_freq_hz": float, '
+            f'"label": "string", "reasoning": "in {lang_out}"}}'
         )
-        client = _get_client()
-        config = types.GenerateContentConfig(
-            temperature=0.1,
-            max_output_tokens=300,
-            response_mime_type="application/json",
-            response_schema=_TapAudioOut,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
-        r = await asyncio.to_thread(
-            client.models.generate_content,
-            model=MODEL_NAME,
-            contents=[types.Part.from_text(text=audio_prompt),
-                      types.Part.from_bytes(data=wav, mime_type="audio/wav")],
-            config=config,
-        )
-        g = json.loads(r.text)
-        gemini_score    = max(0, min(100, int(g.get("score", 50))))
-        gemini_reasoning = str(g.get("reasoning", ""))
-        logger.info(f"audio_eval gemini: score={gemini_score}")
-    except Exception as e:
-        logger.warning(f"Vertex AI audio analysis skipped: {e}")
 
-    # Blend: 60% Gemini + 40% algorithmic (graceful degradation)
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {"inlineData": {"mimeType": "audio/wav", "data": wav_b64}},
+                ]
+            }],
+            "generationConfig": {
+                "temperature": 0.1,
+                "maxOutputTokens": 300,
+                "responseMimeType": "application/json",
+            },
+        }
+
+        data, success = await _gemini_request(payload, timeout=45)
+        if success and "candidates" in data:
+            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            if raw.startswith("```json"): raw = raw[7:]
+            if raw.startswith("```"):     raw = raw[3:]
+            if raw.endswith("```"):       raw = raw[:-3]
+            g = json.loads(raw.strip())
+            gemini_score    = max(0, min(100, int(g.get("score", 50))))
+            gemini_reasoning = str(g.get("reasoning", ""))
+            logger.info(f"audio_eval gemini: score={gemini_score}")
+    except Exception as e:
+        logger.warning(f"Gemini audio analysis skipped: {e}")
+
+    # Blend: 60% Gemini + 40% algorithmic
     if gemini_score is not None:
         final_score = round(gemini_score * 0.60 + algo["score"] * 0.40)
         reasoning   = gemini_reasoning or " | ".join(algo["reasons"])
@@ -188,8 +179,8 @@ async def audio_eval(req: AudioEvalRequest):
 
     final_score = max(5, min(95, final_score))
     label = (
-        "Likely solid gold"          if final_score >= 70 else
-        "Uncertain — may be plated"  if final_score >= 50 else
+        "Likely solid gold"         if final_score >= 70 else
+        "Uncertain — may be plated" if final_score >= 50 else
         "Possibly gold-plated"
     )
 
