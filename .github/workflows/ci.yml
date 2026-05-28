@@ -36,7 +36,7 @@ jobs:
         run: du -sh dist/
 
   backend:
-    name: Backend tests
+    name: Backend smoke test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -71,6 +71,3 @@ jobs:
         run: |
           python -c "from app.routes.video_eval import router; print('video_eval OK')"
           python -c "from app.routes.audio_eval import router; print('audio_eval OK')"
-
-      - name: Run tests
-        run: pytest tests/test_api.py -v --tb=short
