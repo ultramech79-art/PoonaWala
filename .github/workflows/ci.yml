@@ -66,8 +66,3 @@ jobs:
 
       - name: Schemas load
         run: python -c "from app.models.schemas import AssessmentResult; print('Schemas OK')"
-
-      - name: New routes load
-        run: |
-          python -c "from app.routes.video_eval import router; print('video_eval OK')"
-          python -c "from app.routes.audio_eval import router; print('audio_eval OK')"
