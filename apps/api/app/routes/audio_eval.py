@@ -1,17 +1,18 @@
 """
 POST /api/audio-eval
-Accepts raw float32 PCM audio (base64) from a 10-second tap test.
-Blends Gemini REST API acoustic analysis (60%) with algorithmic FFT (40%).
-No Vertex AI / service account needed — uses GEMINI_API_KEY.
+10-second tap test: raw float32 PCM → numpy FFT measurements + Gemini acoustic analysis.
+Strategy: compute precise acoustic parameters first (decay, centroid, Q-factor, harmonic ratio),
+then send BOTH the WAV file and the measurements to Gemini so it can calibrate its
+perception against objective data. Final score = 55% Gemini + 45% algorithmic.
 """
+import base64
 import io
 import json
 import logging
-import math
-import os
 import struct
 from typing import Optional
 
+import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -32,12 +33,14 @@ class AudioEvalResponse(BaseModel):
     label: str
     decay_ms: float
     dominant_freq_hz: float
+    spectral_centroid_hz: float
+    q_factor: float
+    gold_band_ratio: float
     reasoning: str
 
 
-def _float32_to_wav(samples: list[float], sample_rate: int) -> bytes:
-    n    = len(samples)
-    data = struct.pack(f"<{n}f", *samples)
+def _float32_to_wav(arr: np.ndarray, sample_rate: int) -> bytes:
+    data = arr.astype(np.float32).tobytes()
     buf  = io.BytesIO()
     buf.write(b"RIFF"); buf.write(struct.pack("<I", 36 + len(data))); buf.write(b"WAVE")
     buf.write(b"fmt "); buf.write(struct.pack("<I", 16))
@@ -48,110 +51,193 @@ def _float32_to_wav(samples: list[float], sample_rate: int) -> bytes:
     return buf.getvalue()
 
 
-def _analyze_algorithmic(samples: list[float], sample_rate: int) -> dict:
-    abs_s = [abs(x) for x in samples]
-    peak  = max(abs_s) if abs_s else 0
-    if peak < 0.003:
-        return {"score": 0, "decay_ms": 0.0, "dom_freq": 0.0,
-                "reasons": ["Signal too quiet — tap ornament firmly."]}
+def _acoustic_metrics(arr: np.ndarray, sample_rate: int) -> dict:
+    """
+    Compute precise acoustic parameters using numpy FFT.
+    Returns measurable physical properties of the tap sound.
 
-    peak_i  = abs_s.index(peak)
-    decay_i = len(abs_s) - 1
-    thresh  = peak * 0.12
-    for i in range(peak_i, len(abs_s)):
-        if abs_s[i] < thresh: decay_i = i; break
-    decay_ms = (decay_i - peak_i) / sample_rate * 1000
+    Gold reference ranges (from metallurgical research):
+      Decay τ:          60–400 ms  (dense metal, high internal friction)
+      Spectral centroid: 150–700 Hz (mass-dependent resonance)
+      Dominant freq:    200–1200 Hz (size and alloy dependent)
+      Q factor:          >8          (sustained resonance, low damping)
+      Gold-band ratio:  >0.45       (energy concentration in 150-700 Hz)
 
-    fft_n    = min(1024, len(samples) - peak_i)
-    centroid = dom_freq = 0.0
-    if fft_n >= 64:
-        seg  = samples[peak_i:peak_i + fft_n]
-        hann = [0.5 * (1 - math.cos(2 * math.pi * i / (fft_n - 1))) for i in range(fft_n)]
-        wseg = [seg[i] * hann[i] for i in range(fft_n)]
-        mags, half = [], fft_n // 2
-        for k in range(half):
-            re = sum(wseg[t] * math.cos(2 * math.pi * k * t / fft_n) for t in range(fft_n))
-            im = sum(wseg[t] * math.sin(2 * math.pi * k * t / fft_n) for t in range(fft_n))
-            mags.append(math.sqrt(re * re + im * im))
-        freq_res = sample_rate / fft_n
-        tot_mag  = sum(mags) or 1
-        centroid = sum(i * freq_res * mags[i] for i in range(len(mags))) / tot_mag
-        dom_freq = mags.index(max(mags[1:] or [mags[0]])) * freq_res if mags else 0.0
+    Plated/brass signatures:
+      Decay τ:          400–2000 ms (lighter, low damping)
+      Centroid:         600–3000 Hz (lighter substrate resonates higher)
+      Q factor:         >15         (over-resonant, undamped)
+      Gold-band ratio:  <0.30       (energy scattered to higher freqs)
+    """
+    abs_arr = np.abs(arr)
+    peak_idx = int(np.argmax(abs_arr))
+    peak = float(abs_arr[peak_idx])
 
-    score, reasons = 50, []
-    if 60 <= decay_ms <= 300:
-        score += 28; reasons.append(f"Decay {decay_ms:.0f}ms — gold range")
-    elif decay_ms < 60:
-        score -= 5;  reasons.append(f"Very short decay {decay_ms:.0f}ms")
-    elif decay_ms <= 500:
-        score -= 8;  reasons.append(f"Moderate decay {decay_ms:.0f}ms (brass-like)")
+    if peak < 0.002:
+        return {"valid": False, "reason": "Signal too quiet"}
+
+    # ── Decay time (τ) ─────────────────────────────────────────────────────────
+    # Smooth post-peak envelope with 10ms window to suppress noise
+    post = abs_arr[peak_idx:]
+    smooth_win = max(1, int(sample_rate * 0.010))
+    kernel = np.ones(smooth_win) / smooth_win
+    smoothed = np.convolve(post, kernel, mode='same')
+
+    threshold = peak * 0.10   # -20 dB
+    below = np.where(smoothed < threshold)[0]
+    decay_idx = int(below[0]) if len(below) else len(post) - 1
+    decay_ms  = decay_idx / sample_rate * 1000
+
+    # ── Spectral analysis via numpy rfft ───────────────────────────────────────
+    # Use up to 2 seconds post-peak for frequency analysis
+    seg_len = min(int(sample_rate * 2.0), len(arr) - peak_idx)
+    seg_len = max(seg_len, 512)
+    segment = arr[peak_idx:peak_idx + seg_len]
+    window  = np.hanning(len(segment))
+    spectrum = np.abs(np.fft.rfft(segment * window))
+    freqs    = np.fft.rfftfreq(len(segment), 1.0 / sample_rate)
+
+    # Suppress DC and sub-50Hz rumble
+    spectrum[freqs < 50] = 0.0
+    total_power = float(np.sum(spectrum)) or 1.0
+
+    # Spectral centroid (frequency centre of mass)
+    centroid = float(np.dot(freqs, spectrum) / total_power)
+
+    # Dominant frequency (highest energy bin)
+    dom_idx  = int(np.argmax(spectrum))
+    dom_freq = float(freqs[dom_idx])
+
+    # Gold band energy ratio: 150–700 Hz (characteristic of dense metals)
+    gold_mask = (freqs >= 150) & (freqs <= 700)
+    gold_ratio = float(np.sum(spectrum[gold_mask]) / total_power)
+
+    # Q factor: dom_freq / bandwidth at -3dB
+    half_power = float(spectrum[dom_idx]) / np.sqrt(2)
+    above = np.where(spectrum > half_power)[0]
+    if len(above) >= 2:
+        bw = float((above[-1] - above[0]) * (sample_rate / len(segment)))
+        q  = dom_freq / (bw + 1e-6)
     else:
-        score -= 22; reasons.append(f"Long ring {decay_ms:.0f}ms — plated likely")
+        q = 0.0
 
-    if 0 < centroid < 600:
-        score += 18; reasons.append(f"Warm tone {centroid:.0f}Hz")
-    elif centroid < 1200:
-        score += 5;  reasons.append(f"Mid tone {centroid:.0f}Hz")
-    elif centroid > 0:
-        score -= 12; reasons.append(f"Bright/tinny {centroid:.0f}Hz — plated indicator")
+    # ── Algorithmic score (physics-based) ─────────────────────────────────────
+    score, reasons = 50, []
 
-    return {"score": max(5, min(95, score)), "decay_ms": decay_ms,
-            "dom_freq": dom_freq, "reasons": reasons}
+    # Decay: most discriminative — gold is damped, plated rings too long
+    if 60 <= decay_ms <= 350:
+        score += 22; reasons.append(f"Decay {decay_ms:.0f}ms — solid gold range (60-350ms)")
+    elif decay_ms < 60:
+        score -= 8;  reasons.append(f"Very short decay {decay_ms:.0f}ms — possible damping or noise")
+    elif decay_ms <= 600:
+        score -= 14; reasons.append(f"Moderate decay {decay_ms:.0f}ms — suggests lighter/plated metal")
+    else:
+        score -= 28; reasons.append(f"Long ring {decay_ms:.0f}ms — plated metal signature")
+
+    # Spectral centroid
+    if 150 <= centroid <= 700:
+        score += 18; reasons.append(f"Centroid {centroid:.0f}Hz — dense metal (gold range 150-700Hz)")
+    elif centroid <= 1200:
+        score += 4;  reasons.append(f"Centroid {centroid:.0f}Hz — borderline (>700Hz suggests lighter metal)")
+    else:
+        score -= 16; reasons.append(f"High centroid {centroid:.0f}Hz — characteristic of plated/lighter metal")
+
+    # Gold band energy concentration
+    if gold_ratio >= 0.45:
+        score += 10; reasons.append(f"Gold-band energy {gold_ratio:.0%} — concentrated in 150-700Hz")
+    elif gold_ratio >= 0.30:
+        score += 3;  reasons.append(f"Moderate gold-band energy {gold_ratio:.0%}")
+    else:
+        score -= 8;  reasons.append(f"Low gold-band energy {gold_ratio:.0%} — energy dispersed to higher freqs")
+
+    # Q factor: real gold has moderate Q (damped but resonant), plated has very high Q
+    if 5 <= q <= 40:
+        score += 5;  reasons.append(f"Q-factor {q:.1f} — natural damped resonance")
+    elif q > 40:
+        score -= 5;  reasons.append(f"High Q-factor {q:.1f} — over-resonant (plated tendency)")
+
+    return {
+        "valid": True,
+        "score": max(5, min(95, score)),
+        "decay_ms": round(decay_ms, 1),
+        "dom_freq": round(dom_freq, 1),
+        "centroid": round(centroid, 1),
+        "gold_ratio": round(gold_ratio, 4),
+        "q_factor": round(q, 2),
+        "reasons": reasons,
+    }
 
 
 @router.post("/audio-eval", response_model=AudioEvalResponse)
 async def audio_eval(req: AudioEvalRequest):
-    import base64
-
+    # ── Decode PCM ─────────────────────────────────────────────────────────────
     try:
         raw_b = base64.b64decode(req.samples_b64)
-        n     = len(raw_b) // 4
-        samps = list(struct.unpack(f"<{n}f", raw_b[:n * 4]))
+        arr   = np.frombuffer(raw_b, dtype=np.float32).copy()
     except Exception as e:
         logger.error(f"Audio decode error: {e}")
-        return AudioEvalResponse(score=0, label="Invalid audio",
-                                 decay_ms=0, dominant_freq_hz=0,
+        return AudioEvalResponse(score=0, label="Invalid audio", decay_ms=0,
+                                 dominant_freq_hz=0, spectral_centroid_hz=0,
+                                 q_factor=0, gold_band_ratio=0,
                                  reasoning="Could not decode audio data.")
 
-    algo = _analyze_algorithmic(samps, req.sample_rate)
-    if algo["score"] == 0:
-        return AudioEvalResponse(score=0, label="No tap detected",
-                                 decay_ms=0.0, dominant_freq_hz=0.0,
+    # ── Algorithmic analysis ───────────────────────────────────────────────────
+    metrics = _acoustic_metrics(arr, req.sample_rate)
+
+    if not metrics.get("valid"):
+        return AudioEvalResponse(score=0, label="No tap detected", decay_ms=0,
+                                 dominant_freq_hz=0, spectral_centroid_hz=0,
+                                 q_factor=0, gold_band_ratio=0,
                                  reasoning="Signal too quiet — tap the ornament firmly on a hard surface.")
 
-    # Gemini REST API audio analysis
+    # ── Gemini acoustic analysis (with measured params as calibration) ─────────
     gemini_score: Optional[int] = None
     gemini_reasoning = ""
+    lang_out = "Hindi (Devanagari)" if req.language == "hi" else "English"
+
     try:
-        wav_bytes  = _float32_to_wav(samps, req.sample_rate)
-        wav_b64    = base64.b64encode(wav_bytes).decode()
-        lang_out   = "Hindi (Devanagari)" if req.language == "hi" else "English"
+        wav_b64 = base64.b64encode(_float32_to_wav(arr, req.sample_rate)).decode()
 
         prompt = (
             "You are an expert metallurgical acoustics analyst for gold-loan appraisal.\n"
-            "Listen carefully to this recording of a metal ornament being tapped.\n\n"
-            "Key acoustic signatures:\n"
-            "- SOLID GOLD (18K–24K): Dense (15–18 g/cm³). Warm, damped ring. "
-            "Decay 80–350ms. Spectral centroid 200–700Hz. Clean exponential envelope.\n"
-            "- GOLD-PLATED BRASS: Rings brighter and LONGER. Decay 350–900ms. "
-            "Centroid 600–2500Hz. Tinny overtones.\n"
-            "- GOLD-PLATED SILVER: Very clear, long ring >1s. High centroid 1000–4000Hz.\n\n"
-            f"Score 0–100 for solid gold likelihood (100=definitely solid, 0=definitely plated).\n\n"
-            f"Return ONLY valid JSON:\n"
-            '{{"score": integer, "decay_ms": float, "dominant_freq_hz": float, '
-            f'"label": "string", "reasoning": "in {lang_out}"}}'
+            "You are given a tap-test recording AND the objectively measured acoustic parameters below.\n"
+            "Listen to the audio carefully, then use BOTH your perception AND the measurements to score.\n\n"
+
+            "MEASURED ACOUSTIC PARAMETERS (computed from signal):\n"
+            f"  Decay time:        {metrics['decay_ms']:.0f} ms\n"
+            f"  Dominant frequency: {metrics['dom_freq']:.0f} Hz\n"
+            f"  Spectral centroid:  {metrics['centroid']:.0f} Hz\n"
+            f"  Q-factor:           {metrics['q_factor']:.1f}\n"
+            f"  Gold-band ratio:    {metrics['gold_ratio']:.0%} (energy in 150-700Hz)\n\n"
+
+            "REFERENCE RANGES:\n"
+            "SOLID GOLD (18K-24K, 15-18 g/cm³):\n"
+            "  Decay: 60-350ms | Centroid: 150-700Hz | Q: 5-30 | Gold-band: >45%\n"
+            "  Perceptual: warm, damped ring. Clean decay. No metallic shimmer.\n\n"
+            "GOLD-PLATED BRASS (8.5 g/cm³):\n"
+            "  Decay: 350-900ms | Centroid: 600-2500Hz | Q: >30 | Gold-band: <30%\n"
+            "  Perceptual: bright, longer ring. Tinny overtones. Metallic shimmer.\n\n"
+            "GOLD-PLATED SILVER:\n"
+            "  Decay: >1000ms | Centroid: >1000Hz | Very clear, sustained ring.\n\n"
+
+            "SCORING RULES:\n"
+            "- If measurements AND your audio perception agree: score confidently (>70 or <30)\n"
+            "- If measurements conflict with your perception: trust measurements more, score 40-60\n"
+            "- Do NOT default to 50. Commit to a clear score.\n\n"
+
+            f"Return ONLY valid JSON (reasoning in {lang_out}):\n"
+            '{{"score": integer 0-100, "label": "Likely solid gold|Uncertain|Possibly gold-plated", '
+            '"reasoning": "2-3 sentences citing specific evidence from audio and measurements"}}'
         )
 
         payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {"inlineData": {"mimeType": "audio/wav", "data": wav_b64}},
-                ]
-            }],
+            "contents": [{"parts": [
+                {"text": prompt},
+                {"inlineData": {"mimeType": "audio/wav", "data": wav_b64}},
+            ]}],
             "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": 300,
+                "temperature": 0.10,
+                "maxOutputTokens": 400,
                 "responseMimeType": "application/json",
             },
         }
@@ -165,17 +251,18 @@ async def audio_eval(req: AudioEvalRequest):
             g = json.loads(raw.strip())
             gemini_score    = max(0, min(100, int(g.get("score", 50))))
             gemini_reasoning = str(g.get("reasoning", ""))
-            logger.info(f"audio_eval gemini: score={gemini_score}")
+            logger.info(f"audio_eval gemini={gemini_score} algo={metrics['score']} "
+                        f"decay={metrics['decay_ms']}ms centroid={metrics['centroid']}Hz")
     except Exception as e:
         logger.warning(f"Gemini audio analysis skipped: {e}")
 
-    # Blend: 60% Gemini + 40% algorithmic
+    # ── Blend: 55% Gemini perception + 45% objective measurements ─────────────
     if gemini_score is not None:
-        final_score = round(gemini_score * 0.60 + algo["score"] * 0.40)
-        reasoning   = gemini_reasoning or " | ".join(algo["reasons"])
+        final_score = round(gemini_score * 0.55 + metrics["score"] * 0.45)
+        reasoning   = gemini_reasoning
     else:
-        final_score = algo["score"]
-        reasoning   = " | ".join(algo["reasons"])
+        final_score = metrics["score"]
+        reasoning   = " | ".join(metrics["reasons"])
 
     final_score = max(5, min(95, final_score))
     label = (
@@ -187,7 +274,10 @@ async def audio_eval(req: AudioEvalRequest):
     return AudioEvalResponse(
         score=final_score,
         label=label,
-        decay_ms=round(algo["decay_ms"], 1),
-        dominant_freq_hz=round(algo["dom_freq"], 1),
+        decay_ms=metrics["decay_ms"],
+        dominant_freq_hz=metrics["dom_freq"],
+        spectral_centroid_hz=metrics["centroid"],
+        q_factor=metrics["q_factor"],
+        gold_band_ratio=round(metrics["gold_ratio"], 3),
         reasoning=reasoning,
     )

@@ -26,6 +26,11 @@ type Phase = 'intro' | 'recording' | 'analyzing' | 'result'
 interface VideoResult {
   video_score: number
   verdict: string
+  edge_score: number
+  hue_score: number
+  luster_score: number
+  consistency_score: number
+  hallmark_score: number
   video_signals: string[]
   purity_estimate: string | null
   guidance: string
@@ -223,9 +228,9 @@ export function VideoEval() {
         {phase === 'result' && (
           <div className="space-y-4 animate-fade-in">
             {result ? (
-              <div className="bg-white border border-stone-200 rounded-3xl p-5">
-                <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">Video Analysis Result</p>
-                <div className="flex items-center gap-4 mb-4">
+              <div className="bg-white border border-stone-200 rounded-3xl p-5 space-y-4">
+                <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold">Video Analysis Result</p>
+                <div className="flex items-center gap-4">
                   <div className="text-center">
                     <p className={clsx('text-4xl font-black', scoreColor(result.video_score))}>{result.video_score}</p>
                     <p className="text-xs text-stone-400 mt-0.5">/ 100</p>
@@ -237,14 +242,33 @@ export function VideoEval() {
                     <p className="text-sm font-semibold text-stone-700 mt-2">{result.verdict}</p>
                   </div>
                 </div>
-                {result.video_signals.slice(0, 4).map((sig, i) => (
-                  <div key={i} className="flex items-start gap-2 py-1.5 border-t border-stone-100">
-                    <span className="text-amber-500 text-xs mt-0.5">•</span>
+                {/* Per-signal breakdown */}
+                <div className="border-t border-stone-100 pt-3 space-y-2">
+                  {[
+                    { label: 'Edge consistency', score: result.edge_score, weight: '35%' },
+                    { label: 'Hue uniformity',   score: result.hue_score,   weight: '30%' },
+                    { label: 'Luster quality',   score: result.luster_score, weight: '20%' },
+                    { label: 'Temporal stability', score: result.consistency_score, weight: '10%' },
+                    { label: 'Hallmark',          score: result.hallmark_score, weight: '5%' },
+                  ].map(({ label, score, weight }) => (
+                    <div key={label} className="flex items-center gap-2">
+                      <span className="text-xs text-stone-500 w-32 flex-shrink-0">{label} <span className="text-stone-400">({weight})</span></span>
+                      <div className="flex-1 bg-stone-100 rounded-full h-1.5">
+                        <div className={clsx('h-1.5 rounded-full', barColor(score))} style={{ width: `${score}%` }} />
+                      </div>
+                      <span className={clsx('text-xs font-bold w-8 text-right', scoreColor(score))}>{score}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {result.video_signals.slice(0, 3).map((sig, i) => (
+                  <div key={i} className="flex items-start gap-2 border-t border-stone-100 pt-1.5">
+                    <span className="text-amber-500 text-xs mt-0.5 flex-shrink-0">•</span>
                     <p className="text-xs text-stone-600 leading-snug">{sig}</p>
                   </div>
                 ))}
                 {result.purity_estimate && (
-                  <div className="flex items-center justify-between border-t border-stone-100 pt-3 mt-1">
+                  <div className="flex items-center justify-between border-t border-stone-100 pt-3">
                     <span className="text-sm text-stone-500">Purity estimate</span>
                     <span className="text-sm font-bold text-amber-600">{result.purity_estimate}</span>
                   </div>

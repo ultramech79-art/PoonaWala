@@ -27,6 +27,9 @@ interface TapResult {
   label: string
   decay_ms: number
   dominant_freq_hz: number
+  spectral_centroid_hz: number
+  q_factor: number
+  gold_band_ratio: number
   reasoning: string
 }
 
@@ -246,14 +249,21 @@ export function AudioEval() {
                 </div>
 
                 <div className="border-t border-stone-100 pt-3 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-stone-500">
-                    <span>Decay time</span>
-                    <span className="font-semibold text-stone-700">{result.decay_ms.toFixed(0)} ms</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-stone-500">
-                    <span>Dominant frequency</span>
-                    <span className="font-semibold text-stone-700">{result.dominant_freq_hz.toFixed(0)} Hz</span>
-                  </div>
+                  {[
+                    { label: 'Decay time', value: `${result.decay_ms.toFixed(0)} ms`, ref: '60–350 ms = gold' },
+                    { label: 'Dominant frequency', value: `${result.dominant_freq_hz.toFixed(0)} Hz`, ref: '200–1200 Hz' },
+                    { label: 'Spectral centroid', value: `${result.spectral_centroid_hz?.toFixed(0) ?? '—'} Hz`, ref: '150–700 Hz = gold' },
+                    { label: 'Q-factor', value: result.q_factor?.toFixed(1) ?? '—', ref: '5–30 = damped ring' },
+                    { label: 'Gold-band energy', value: result.gold_band_ratio != null ? `${(result.gold_band_ratio * 100).toFixed(0)}%` : '—', ref: '>45% = solid gold' },
+                  ].map(({ label, value, ref }) => (
+                    <div key={label} className="flex items-center justify-between text-xs">
+                      <span className="text-stone-500">{label}</span>
+                      <div className="text-right">
+                        <span className="font-semibold text-stone-800">{value}</span>
+                        <span className="text-stone-400 ml-1.5">({ref})</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 <p className="text-xs text-stone-500 leading-relaxed border-t border-stone-100 pt-3">{result.reasoning}</p>
