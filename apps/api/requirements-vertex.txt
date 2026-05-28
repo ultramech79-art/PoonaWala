@@ -1,0 +1,5 @@
+# Vertex AI SDK — needed for live_session route on Render.
+# Conflicts with pydantic==1.10.12 so kept separate from main requirements.
+# Install on Render: pip install -r requirements.txt -r requirements-vertex.txt
+google-cloud-aiplatform>=1.60.0
+google-genai>=1.0.0
