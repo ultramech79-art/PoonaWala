@@ -2,24 +2,26 @@
 POST /api/certificate-ocr
 
 Extracts bill/certificate details from a captured jewellery invoice or
-authenticity certificate using Groq vision.
+authenticity certificate using Groq vision with Gemini fallback.
 """
-import json
 import logging
-import os
-import re
 from typing import Optional
 
-import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from app.data.gemini import (
+    GEMINI_GUIDANCE_FALLBACK_API_KEYS,
+    GEMINI_MODEL,
+    GROQ_PRIMARY_API_KEYS,
+    _gemini_request,
+    extract_gemini_text,
+    parse_json_response,
+)
+from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
+
 logger = logging.getLogger("goldeye.certificate_ocr")
 router = APIRouter()
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 
 class CertificateOCRRequest(BaseModel):
@@ -109,50 +111,58 @@ def _normalize_result(raw: dict) -> CertificateOCRResponse:
     )
 
 
-def _parse_json_object(text: str) -> dict:
-    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if not match:
-        return {}
-    return json.loads(match.group(0))
-
-
 @router.post("/certificate-ocr", response_model=CertificateOCRResponse)
 async def certificate_ocr(req: CertificateOCRRequest):
-    if not GROQ_API_KEY:
-        logger.warning("GROQ_API_KEY is not configured")
-        return CertificateOCRResponse(notes=["OCR unavailable: GROQ_API_KEY not configured"])
+    if not GROQ_PRIMARY_API_KEYS and not GEMINI_GUIDANCE_FALLBACK_API_KEYS:
+        logger.warning("No OCR provider keys are configured")
+        return CertificateOCRResponse(notes=["OCR unavailable: provider API keys not configured"])
 
-    image_url = req.image_data_url
-    if not image_url.startswith("data:image/"):
-        image_url = f"data:image/jpeg;base64,{image_url.split(',', 1)[-1]}"
+    image_b64 = req.image_data_url.split(",", 1)[-1]
 
-    try:
-        async with httpx.AsyncClient(timeout=45) as client:
-            res = await client.post(
-                GROQ_ENDPOINT,
-                headers={
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": GROQ_VISION_MODEL,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": PROMPT},
-                            {"type": "image_url", "image_url": {"url": image_url}},
-                        ],
-                    }],
-                    "temperature": 0,
-                    "max_tokens": 800,
-                },
+    errors: list[str] = []
+    if GROQ_PRIMARY_API_KEYS:
+        try:
+            data, success = await call_groq_vision_with_keys(
+                PROMPT,
+                image_b64,
+                GROQ_PRIMARY_API_KEYS,
+                "image/jpeg",
+                timeout=45,
             )
-        if res.status_code != 200:
-            logger.warning("Groq OCR returned %s: %s", res.status_code, res.text[:300])
-            return CertificateOCRResponse(notes=[f"OCR provider error: {res.status_code}"])
+            if success:
+                content = extract_gemini_text(data)
+                logger.info("certificate_ocr Groq primary ok using %s", GROQ_MODEL)
+                return _normalize_result(parse_json_response(content))
+            errors.append(str(data.get("error") or "groq_failed"))
+        except Exception as exc:
+            logger.warning("Certificate OCR Groq primary failed: %s", exc)
+            errors.append(f"groq: {exc}")
 
-        content = res.json()["choices"][0]["message"]["content"]
-        return _normalize_result(_parse_json_object(content))
+    if not GEMINI_GUIDANCE_FALLBACK_API_KEYS:
+        return CertificateOCRResponse(notes=["Groq OCR failed and Gemini fallback is not configured"])
+
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": PROMPT},
+                {"inlineData": {"mimeType": "image/jpeg", "data": image_b64}},
+            ]
+        }],
+        "generationConfig": {
+            "temperature": 0,
+            "maxOutputTokens": 800,
+            "responseMimeType": "application/json",
+        },
+    }
+    try:
+        data, success = await _gemini_request(payload, timeout=45, api_keys=GEMINI_GUIDANCE_FALLBACK_API_KEYS)
+        if success:
+            content = extract_gemini_text(data)
+            logger.info("certificate_ocr Gemini fallback ok using %s", GEMINI_MODEL)
+            return _normalize_result(parse_json_response(content))
+        errors.append(str(data.get("error") or "gemini_failed"))
     except Exception as exc:
-        logger.warning("Certificate OCR failed: %s", exc)
-        return CertificateOCRResponse(notes=["Could not extract document details"])
+        logger.warning("Certificate OCR Gemini fallback failed: %s", exc)
+        errors.append(f"gemini: {exc}")
+
+    return CertificateOCRResponse(notes=["Could not extract document details", *errors[:2]])

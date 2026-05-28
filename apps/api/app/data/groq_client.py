@@ -82,6 +82,24 @@ async def call_groq_vision(
         return {"error": str(e)}, False
 
 
+async def call_groq_vision_with_keys(
+    text_prompt: str,
+    image_base64: str,
+    api_keys: list[str],
+    mime_type: str = "image/jpeg",
+    timeout: int = 45,
+) -> Tuple[dict, bool]:
+    last: dict = {"error": "groq_key_missing"}
+    for idx, key in enumerate([k for k in api_keys if k]):
+        data, success = await call_groq_vision(text_prompt, image_base64, key, mime_type, timeout)
+        if success:
+            if idx:
+                logger.info(f"Groq vision fallback succeeded with key #{idx + 1}")
+            return data, True
+        last = data
+    return last, False
+
+
 async def call_groq_json(
     text_prompt: str,
     api_key: str,
@@ -132,3 +150,19 @@ async def call_groq_json(
     except Exception as e:
         logger.error(f"Groq text request exception: {e}")
         return {"error": str(e)}, False
+
+
+async def call_groq_json_with_keys(
+    text_prompt: str,
+    api_keys: list[str],
+    timeout: int = 45,
+) -> Tuple[dict, bool]:
+    last: dict = {"error": "groq_key_missing"}
+    for idx, key in enumerate([k for k in api_keys if k]):
+        data, success = await call_groq_json(text_prompt, key, timeout)
+        if success:
+            if idx:
+                logger.info(f"Groq text fallback succeeded with key #{idx + 1}")
+            return data, True
+        last = data
+    return last, False

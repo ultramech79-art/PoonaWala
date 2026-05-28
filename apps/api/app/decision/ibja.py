@@ -16,7 +16,7 @@ import httpx
 logger = logging.getLogger("goldeye.decision.ibja")
 
 _METAL_API_KEY = os.getenv("METAL_API_KEY", "")
-_GROQ_GOLD_KEY = os.getenv("GROQ_API_KEY", os.getenv("GROQ_API_KEY_2", ""))
+_GROQ_GOLD_KEY = os.getenv("GROQ_PRIMARY_API_KEY_1", os.getenv("GROQ_PRIMARY_API_KEY_2", ""))
 _SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
 _TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 

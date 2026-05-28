@@ -44,18 +44,23 @@ Hard cap rules:
 """
 import json
 import logging
-import os
 from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.data.gemini import GEMINI_MODEL, _gemini_request, extract_gemini_text, parse_json_response
-from app.data.groq_client import GROQ_MODEL, call_groq_vision
+from app.data.gemini import (
+    GEMINI_AUDIO_VIDEO_API_KEYS,
+    GEMINI_MODEL,
+    GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS,
+    _gemini_request,
+    extract_gemini_text,
+    parse_json_response,
+)
+from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
 
 logger = logging.getLogger("goldeye.video_eval")
 router = APIRouter()
-GROQ_VIDEO_FALLBACK_API_KEY = os.getenv("GROQ_VIDEO_FALLBACK_API_KEY") or os.getenv("GROQ_API_KEY", "")
 
 
 class VideoEvalRequest(BaseModel):
@@ -211,7 +216,7 @@ Return ONLY valid JSON:
     }
 
     try:
-        data, success = await _gemini_request(payload, timeout=60)
+        data, success = await _gemini_request(payload, timeout=60, api_keys=GEMINI_AUDIO_VIDEO_API_KEYS)
         if not success:
             raise ValueError(data.get("error", "api_failed"))
         raw = extract_gemini_text(data)
@@ -297,7 +302,7 @@ def _clamp(v) -> int:
 
 
 async def _groq_video_fallback(prompt: str, frames_b64: list[str]) -> dict:
-    if not GROQ_VIDEO_FALLBACK_API_KEY:
+    if not GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS:
         raise ValueError("groq_video_fallback_key_missing")
     if not frames_b64:
         raise ValueError("groq_video_fallback_no_frame")
@@ -311,10 +316,10 @@ async def _groq_video_fallback(prompt: str, frames_b64: list[str]) -> dict:
           "a hallmark/fineness stamp is clearly readable in this image. Return the exact "
           "requested JSON object only."
     )
-    data, success = await call_groq_vision(
+    data, success = await call_groq_vision_with_keys(
         groq_prompt,
         frames_b64[mid],
-        GROQ_VIDEO_FALLBACK_API_KEY,
+        GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS,
         "image/jpeg",
         timeout=45,
     )

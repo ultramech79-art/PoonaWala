@@ -21,7 +21,6 @@ import base64
 import io
 import json
 import logging
-import os
 import struct
 from typing import Optional
 
@@ -29,12 +28,18 @@ import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.data.gemini import GEMINI_MODEL, _gemini_request, extract_gemini_text, parse_json_response
-from app.data.groq_client import GROQ_TEXT_MODEL, call_groq_json
+from app.data.gemini import (
+    GEMINI_AUDIO_VIDEO_API_KEYS,
+    GEMINI_MODEL,
+    GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS,
+    _gemini_request,
+    extract_gemini_text,
+    parse_json_response,
+)
+from app.data.groq_client import GROQ_TEXT_MODEL, call_groq_json_with_keys
 
 logger = logging.getLogger("goldeye.audio_eval")
 router = APIRouter()
-GROQ_AUDIO_FALLBACK_API_KEY = os.getenv("GROQ_AUDIO_FALLBACK_API_KEY") or os.getenv("GROQ_API_KEY", "")
 
 
 class AudioEvalRequest(BaseModel):
@@ -547,7 +552,7 @@ async def audio_eval(req: AudioEvalRequest):
             },
         }
 
-        data, success = await _gemini_request(payload, timeout=50)
+        data, success = await _gemini_request(payload, timeout=50, api_keys=GEMINI_AUDIO_VIDEO_API_KEYS)
         if success and "candidates" in data:
             raw = extract_gemini_text(data)
             g = parse_json_response(raw)
@@ -622,7 +627,7 @@ def _invalid(reason: str, lang: str, snr_db: float = 0.0, test_mode: str = "auto
 
 
 async def _groq_audio_fallback(prompt: str) -> dict:
-    if not GROQ_AUDIO_FALLBACK_API_KEY:
+    if not GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS:
         raise ValueError("groq_audio_fallback_key_missing")
 
     groq_prompt = (
@@ -631,7 +636,7 @@ async def _groq_audio_fallback(prompt: str) -> dict:
           "tap audio here, so base your answer only on the measured FFT/envelope parameters "
           "provided above. Return the exact requested JSON object only."
     )
-    data, success = await call_groq_json(groq_prompt, GROQ_AUDIO_FALLBACK_API_KEY, timeout=45)
+    data, success = await call_groq_json_with_keys(groq_prompt, GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS, timeout=45)
     if not success:
         raise ValueError(data.get("error", "groq_audio_fallback_failed"))
     raw = extract_gemini_text(data)

@@ -17,12 +17,16 @@ import logging
 import httpx
 from fastapi import APIRouter
 
+from app.data.gemini import GEMINI_GUIDANCE_FALLBACK_API_KEYS, GROQ_PRIMARY_API_KEYS
+
 logger = logging.getLogger("goldeye.poonawalla_deals")
 router = APIRouter()
 
 SERP_API_KEY  = os.getenv("SERP_API_KEY", "")
-GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GROQ_EXTRACTION_KEY = GROQ_PRIMARY_API_KEYS[0] if GROQ_PRIMARY_API_KEYS else ""
+GEMINI_EXTRACTION_FALLBACK_KEY = (
+    GEMINI_GUIDANCE_FALLBACK_API_KEYS[0] if GEMINI_GUIDANCE_FALLBACK_API_KEYS else ""
+)
 
 CACHE_TTL_SECONDS = 3600  # 1 hour
 
@@ -114,13 +118,13 @@ async def _serp_urls() -> list[str]:
 
 
 async def _extract_groq(text: str) -> list[dict]:
-    if not GROQ_API_KEY or not text:
+    if not GROQ_EXTRACTION_KEY or not text:
         return []
     prompt = EXTRACTION_PROMPT.format(text=text)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(GROQ_ENDPOINT,
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {GROQ_EXTRACTION_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": [{"role": "user", "content": prompt}],
@@ -141,13 +145,13 @@ async def _extract_groq(text: str) -> list[dict]:
 
 
 async def _extract_gemini(text: str) -> list[dict]:
-    if not GEMINI_API_KEY or not text:
+    if not GEMINI_EXTRACTION_FALLBACK_KEY or not text:
         return []
     prompt = EXTRACTION_PROMPT.format(text=text)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
-                f"{GEMINI_ENDPOINT}?key={GEMINI_API_KEY}",
+                f"{GEMINI_ENDPOINT}?key={GEMINI_EXTRACTION_FALLBACK_KEY}",
                 json={"contents": [{"parts": [{"text": prompt}]}]},
             )
         if r.status_code != 200:
