@@ -1,6 +1,6 @@
 """
 Frame evaluation and live guidance endpoints.
-Live guidance uses GEMINI_GUIDANCE_FALLBACK_API_KEY with GROQ_GUIDANCE_FALLBACK_API_KEY fallback.
+Live guidance uses GROQ_GUIDANCE_API_KEY with GEMINI_GUIDANCE_FALLBACK_API_KEY fallback.
 """
 import base64
 import json
@@ -142,12 +142,17 @@ async def live_guidance_ws(websocket: WebSocket):
                 continue
 
             result = await evaluate_live_guidance_frame(image_b64, frame_type)
+            logger.info(
+                f"Live guidance [{frame_type}]: provider={result.get('provider', 'unknown')} "
+                f"approved={result.get('approved')} score={result.get('quality_score')}"
+            )
             await websocket.send_json({
                 "text": result.get("feedback", "Hold the ornament steady in good light."),
                 "approved": result.get("approved", True),
                 "quality_score": float(result.get("quality_score", 0.5)),
                 "issues": result.get("issues", []),
                 "detected": result.get("detected", {}),
+                "provider": result.get("provider"),
             })
     except WebSocketDisconnect:
         logger.info("Client disconnected from live guidance websocket")

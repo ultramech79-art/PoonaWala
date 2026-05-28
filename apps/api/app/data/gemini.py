@@ -29,7 +29,7 @@ def _split_keys(*names: str) -> list[str]:
 
 GROQ_PRIMARY_API_KEYS = _split_keys("GROQ_PRIMARY_API_KEY_1", "GROQ_PRIMARY_API_KEY_2")
 GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_KEY")
-GROQ_GUIDANCE_FALLBACK_API_KEYS = _split_keys("GROQ_GUIDANCE_FALLBACK_API_KEY")
+GROQ_GUIDANCE_API_KEYS = _split_keys("GROQ_GUIDANCE_API_KEY")
 
 GEMINI_AUDIO_VIDEO_API_KEYS = _split_keys("GEMINI_AUDIO_VIDEO_API_KEY")
 GEMINI_GUIDANCE_FALLBACK_API_KEYS = _split_keys("GEMINI_GUIDANCE_FALLBACK_API_KEY")
@@ -127,6 +127,7 @@ async def _gemini_request(
     attempt: int = 0,
     retry_count: int = 0,
     api_keys: Optional[list[str]] = None,
+    max_retries: int = 3,
 ) -> tuple[dict, bool]:
     """
     Make a Gemini API request with fallback to other API keys and retries.
@@ -215,29 +216,29 @@ async def _gemini_request(
                 pass
 
             if resp.status in (429, 503):
-                if retry_count < 3:
+                if retry_count < max_retries:
                     wait_time = (2 ** retry_count) * 2
                     logger.warning(f"Gemini API {resp.status} (key #{attempt+1}), retrying in {wait_time}s... Error: {body[:200]}")
                     await asyncio.sleep(wait_time)
-                    return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys)
+                    return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys, max_retries)
                 
                 logger.warning(f"Gemini API {resp.status} exhausted for key #{attempt+1}, trying next key")
-                return await _gemini_request(payload, timeout, attempt + 1, 0, keys)
+                return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
             
             else:
                 logger.error(f"Gemini API Critical Error {resp.status} (key #{attempt+1}): {body[:500]}")
                 # Fallback to next key on any failure
-                return await _gemini_request(payload, timeout, attempt + 1, 0, keys)
+                return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
 
     except asyncio.TimeoutError:
         if retry_count < 1:
-             return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys)
+             return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys, max_retries)
         logger.warning(f"Gemini API timeout with key #{attempt+1}, trying next key")
-        return await _gemini_request(payload, timeout, attempt + 1, 0, keys)
+        return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
     except Exception as e:
         logger.error(f"Gemini client-side exception with key #{attempt+1}: {str(e)}")
         # Try next key if possible
-        return await _gemini_request(payload, timeout, attempt + 1, 0, keys)
+        return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
 
 
 async def analyze_audio_gold_detection(
@@ -934,20 +935,8 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
 
 
 async def evaluate_live_guidance_frame(image_base64: str, frame_type: str) -> dict:
-    """Live guidance: Gemini guidance key first, Groq guidance fallback if Gemini is unavailable."""
-    result: dict | None = None
-    if GEMINI_GUIDANCE_FALLBACK_API_KEYS:
-        result = await _evaluate_frame_gemini(
-            image_base64,
-            frame_type,
-            GEMINI_GUIDANCE_FALLBACK_API_KEYS,
-            "gemini_guidance",
-        )
-        transient_issues = {"service_busy", "timeout", "error", "no_response", "parse_error"}
-        if not (set(result.get("issues", [])) & transient_issues):
-            return result
-
-    if GROQ_GUIDANCE_FALLBACK_API_KEYS:
+    """Live guidance: Groq primary, Gemini fallback."""
+    if GROQ_GUIDANCE_API_KEYS:
         try:
             from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
 
@@ -962,7 +951,7 @@ async def evaluate_live_guidance_frame(image_base64: str, frame_type: str) -> di
             data, success = await call_groq_vision_with_keys(
                 prompt,
                 image_base64,
-                GROQ_GUIDANCE_FALLBACK_API_KEYS,
+                GROQ_GUIDANCE_API_KEYS,
                 "image/jpeg",
                 timeout=45,
             )
@@ -975,17 +964,26 @@ async def evaluate_live_guidance_frame(image_base64: str, frame_type: str) -> di
                 groq_result.setdefault("issues", [])
                 groq_result.setdefault("detected", {})
                 groq_result["quality_score"] = max(0.0, min(1.0, float(groq_result["quality_score"])))
-                groq_result["provider"] = "groq_guidance_fallback"
+                groq_result["provider"] = "groq_guidance"
                 groq_result["model"] = GROQ_MODEL
                 return groq_result
-            logger.warning(f"Groq guidance fallback failed [{frame_type}]: {data.get('error', 'unknown')}")
+            logger.warning(f"Groq guidance failed [{frame_type}]: {data.get('error', 'unknown')}")
         except Exception as e:
-            logger.warning(f"Groq guidance fallback error [{frame_type}]: {e}")
+            logger.warning(f"Groq guidance error [{frame_type}]: {e}")
 
-    return result or {
+    if GEMINI_GUIDANCE_FALLBACK_API_KEYS:
+        return await _evaluate_frame_gemini(
+            image_base64,
+            frame_type,
+            GEMINI_GUIDANCE_FALLBACK_API_KEYS,
+            "gemini_guidance_fallback",
+            max_retries=0,
+        )
+
+    return {
         "approved": True,
         "quality_score": 0.7,
-        "feedback": "Image captured (offline mode - configure GEMINI_GUIDANCE_FALLBACK_API_KEY)",
+        "feedback": "Image captured (offline mode - configure GROQ_GUIDANCE_API_KEY)",
         "issues": [],
         "detected": {},
     }
@@ -996,6 +994,7 @@ async def _evaluate_frame_gemini(
     frame_type: str,
     api_keys: list[str],
     provider_name: str,
+    max_retries: int = 3,
 ) -> dict:
     """
     Gemini evaluates a captured frame for quality and correctness.
@@ -1050,6 +1049,7 @@ async def _evaluate_frame_gemini(
             payload,
             timeout=45,
             api_keys=api_keys,
+            max_retries=max_retries,
         )
 
         if not success:
