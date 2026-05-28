@@ -88,13 +88,15 @@ function getLiveGoldPer24KGram(): number {
 // ── SHAP contributions driven by what was actually captured ──────────────────
 function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: boolean) {
   const has = (k: keyof SessionState['captures']) => !!state.captures[k]
-  const hasWeight = state.weightG != null
-  const hasHuid = !!state.huidCode
+  const hasWeight = state.weightG != null || state.certificateData?.weightG != null
+  const hasHuid = Boolean(state.huidCode || state.certificateData?.huid)
+  const hasTapTest = !!state.tapTestResult
+  const hasVideoEval = !!state.liveAuthResult
 
   if (isFail) {
     return [
       { feature: 'huid_verified',     contribution: hasHuid ? -0.14 : -0.28 },
-      { feature: 'audio_solid_prob',  contribution: has('audio') ? -0.12 : -0.22 },
+      { feature: 'audio_solid_prob',  contribution: hasTapTest ? -0.12 : -0.22 },
       { feature: 'plated_probability',contribution: -0.15 },
       { feature: 'weight_consistency',contribution: hasWeight ? 0.11 : 0.04 },
       { feature: 'vlm_confidence',    contribution: has('macro') ? -0.08 : -0.18 },
@@ -104,8 +106,8 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
   // Happy path: weight each signal by what we actually captured with some noise to look realistic
   const jitter = () => (Math.random() * 0.04) - 0.02
   const huidContrib  = hasHuid ? 0.31 : has('macro') ? 0.18 : 0.08
-  const audioContrib = has('audio') ? 0.15 : 0.02
-  const weightContrib = hasWeight ? 0.20 : has('video') ? 0.10 : 0.04
+  const audioContrib = hasTapTest ? 0.15 : 0.02
+  const weightContrib = hasWeight ? 0.20 : hasVideoEval ? 0.10 : 0.04
   const hallmarkContrib = has('macro') ? 0.12 : 0.05
   // 18K shows lower solid-score certainty than 22K/24K
   const platedContrib = karatEstimate >= 22 ? 0.22 : karatEstimate >= 18 ? 0.14 : 0.06
@@ -121,17 +123,18 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
 
 function buildMockResult(sessionId: string, state: SessionState, isFailCase = false): AssessmentResult {
   const isFail = isFailCase
-  const weightG = state.weightG ?? 7.9
-  const stoneExclusionG = 0.4
+  const weightG = state.certificateData?.weightG ?? state.weightG ?? 7.9
+  const stoneExclusionG = state.certificateData?.weightG ? 0 : 0.4
 
   // Priority: 
-  // 1. User manual selection / AI scan (state.scannedKarat)
-  // 2. Hallmark presence (default to 22K if HUID exists)
-  // 3. Realistic random distribution (60% 22K, 40% 18K)
-  // 4. Failure fallback (16K/low purity)
+  // 1. Bill/certificate OCR if available
+  // 2. User manual selection / AI scan
+  // 3. HUID presence (default to 22K if purity is not printed)
+  // 4. Realistic random distribution (60% 22K, 40% 18K)
+  // 5. Failure fallback (16K/low purity)
   const karatEstimate = isFail 
     ? 16 
-    : (state.scannedKarat || (state.huidCode ? 22 : (Math.random() < 0.6 ? 22 : 18)))
+    : (state.certificateData?.karat || state.scannedKarat || (state.huidCode ? 22 : (Math.random() < 0.6 ? 22 : 18)))
   
   const pricePerGram24K = getLiveGoldPer24KGram()
 
@@ -146,10 +149,10 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
       band_low_karat: Math.max(9, karatEstimate - 1.5),
       band_high_karat: Math.min(24, karatEstimate + 0.5),
       point_estimate_karat: karatEstimate,
-      huid_verified: !!state.huidCode,
+      huid_verified: Boolean(state.huidCode || state.certificateData?.huid),
     },
     weight: {
-      manual_entry_g: state.weightG,
+      manual_entry_g: state.certificateData?.weightG ?? state.weightG,
       estimated_g: weightG,
       band_low_g: +(weightG * 0.95).toFixed(1),
       band_high_g: +(weightG * 1.05).toFixed(1),
@@ -178,14 +181,14 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
     // 4. Very low confidence (<40%) or high fraud signals → REJECT recommend in-branch
     routing: isFail
       ? 'REJECT'
-      : state.huidCode && 0.82 + (Math.random() * 0.1) > 0.75
+        : (state.huidCode || state.certificateData?.huid) && 0.82 + (Math.random() * 0.1) > 0.75
         ? 'INSTANT'
         : 'AGENT',
     reasoning_text: {
       lang: state.lang,
-      text: isFail 
+      text: isFail
         ? `Assessment failed due to low gold purity (${karatEstimate}K) or visual irregularities. Please try again with a hallmarked piece.`
-        : `${state.huidCode ? `BIS HUID ${state.huidCode} verified. ` : 'Visual hallmark detected. '}${karatEstimate}K gold, ${weightG}g net weight. Market value computed at ₹${pricePerGram24K.toLocaleString('en-IN')}/g (24K IBJA). No fraud signals. ${state.captures.audio ? 'Acoustic resonance: solid gold.' : ''}`,
+        : `${state.certificateData ? 'Bill/certificate details applied. ' : ''}${state.huidCode ? `BIS HUID ${state.huidCode} noted. ` : ''}${karatEstimate}K gold, ${weightG}g net weight. Market value computed at ₹${pricePerGram24K.toLocaleString('en-IN')}/g (24K IBJA). No fraud signals.${state.tapTestResult ? ` Tap test: ${state.tapTestResult.label} (${state.tapTestResult.score}%).` : ''}${state.liveAuthResult ? ` Video authenticity: ${state.liveAuthResult.verdict}.` : ''}`,
     },
     xai: {
       // Primary: macro (hallmark), fallback: top (best overall view), then 45deg, side
@@ -207,9 +210,10 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
 // using the cached live price so the result always reflects current market.
 // Also ensures all required fields are present for final result.
 function enrichWithLivePrices(result: AssessmentResult, state: SessionState): AssessmentResult {
-  const karat = result.purity.point_estimate_karat
-  const weightG = result.weight.estimated_g
-  const stoneExclusionG = result.value_inr.stone_weight_excluded_g ?? 0.4
+  const karat = state.certificateData?.karat ?? state.scannedKarat ?? result.purity.point_estimate_karat
+  const weightG = state.certificateData?.weightG ?? state.weightG ?? result.weight.estimated_g
+  const hasVerifiedHuid = Boolean(result.purity.huid_verified || state.certificateData?.huid || state.huidCode)
+  const stoneExclusionG = state.certificateData?.weightG ? 0 : (result.value_inr.stone_weight_excluded_g ?? 0.4)
   const pricePerGram24K = getLiveGoldPer24KGram()
 
   if (!karat || !weightG || pricePerGram24K <= 1000) return result
@@ -222,7 +226,7 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
   let finalRouting = result.routing
   if (!result.fraud_signals?.triggers?.length) {
     // No fraud detected
-    if (result.purity.huid_verified && result.confidence.score > 0.75) {
+    if (hasVerifiedHuid && result.confidence.score > 0.75) {
       finalRouting = 'INSTANT'
     } else if (result.confidence.score > 0.65) {
       finalRouting = 'AGENT'
@@ -236,10 +240,26 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
   // Always override to ensure live price consistency and complete data
   return {
     ...result,
+    purity: {
+      ...result.purity,
+      band_low_karat: state.certificateData?.karat ? karat : result.purity.band_low_karat,
+      band_high_karat: state.certificateData?.karat ? karat : result.purity.band_high_karat,
+      point_estimate_karat: karat,
+      huid_verified: hasVerifiedHuid,
+    },
+    weight: {
+      ...result.weight,
+      manual_entry_g: state.certificateData?.weightG ?? state.weightG ?? result.weight.manual_entry_g,
+      estimated_g: weightG,
+      band_low_g: state.certificateData?.weightG ? weightG : result.weight.band_low_g,
+      band_high_g: state.certificateData?.weightG ? weightG : result.weight.band_high_g,
+      method: state.certificateData?.weightG ? 'BILL_CERTIFICATE_OCR' : result.weight.method,
+    },
     value_inr: {
       ...result.value_inr,
       band_low:  goldValue.band_low,
       band_high: goldValue.band_high,
+      stone_weight_excluded_g: stoneExclusionG,
       ibja_reference_date: new Date().toISOString(),
     },
     loan_offer: loanOffer,
@@ -256,9 +276,9 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
 
 async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const sessionId = state.sessionId ?? 'demo'
-  const weightG = state.weightG
+  const weightG = state.certificateData?.weightG ?? state.weightG
   const captureTypes = Object.keys(state.captures) as (keyof typeof state.captures)[]
-  const photoTypes = captureTypes.filter(k => k !== 'audio' && k !== 'video' && k !== 'selfie')
+  const photoTypes = captureTypes.filter(k => k !== 'audio' && k !== 'video' && k !== 'selfie' && k !== 'certificate')
   const frames = await Promise.all(photoTypes.map(async k => {
     const cap = state.captures[k as keyof typeof state.captures]
     const url = cap?.dataUrl
@@ -293,7 +313,10 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
         device_metadata: {
           capture_count: captureTypes.length,
           ua: navigator.userAgent,
-          manual_huid: state.huidCode ?? undefined,
+          manual_huid: state.huidCode ?? state.certificateData?.huid ?? undefined,
+          certificate_karat: state.certificateData?.karat ?? undefined,
+          certificate_weight_g: state.certificateData?.weightG ?? undefined,
+          certificate_item_description: state.certificateData?.itemDescription ?? undefined,
         },
       }),
       minDelay,

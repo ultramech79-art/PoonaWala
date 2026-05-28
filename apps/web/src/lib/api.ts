@@ -156,6 +156,23 @@ export async function evaluateFrameAPI(frameType: string, imageDataUrl: string, 
   }
 }
 
+export interface CertificateOCRResult {
+  authenticity_found: boolean
+  karat: number | null
+  weight_g: number | null
+  huid: string | null
+  item_description: string | null
+  bill_number: string | null
+  jeweller_name: string | null
+  purchase_date: string | null
+  confidence: number
+  notes: string[]
+}
+
+export function certificateOcrAPI(imageDataUrl: string, timeoutMs = 45000): Promise<CertificateOCRResult> {
+  return post('/api/certificate-ocr', { image_data_url: imageDataUrl }, timeoutMs)
+}
+
 // ─── 2Factor.in OTP API ──────────────────────────────────
 export interface OtpSendResponse {
   success: boolean

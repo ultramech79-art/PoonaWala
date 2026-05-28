@@ -1,0 +1,415 @@
+{
+  "version": "2024-01",
+  "note": "gold_premium_pct = % premium over national IBJA rate. stamp_duty_flat_inr = flat stamp duty on gold loan agreement.",
+  "states": [
+    {
+      "name": "Andhra Pradesh", "code": "AP",
+      "gold_premium_pct": 0.3, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Visakhapatnam", "tier": "tier1" },
+        { "name": "Vijayawada",    "tier": "tier1" },
+        { "name": "Guntur",        "tier": "tier2" },
+        { "name": "Nellore",       "tier": "tier2" },
+        { "name": "Kurnool",       "tier": "tier2" },
+        { "name": "Rajahmundry",   "tier": "tier2" },
+        { "name": "Tirupati",      "tier": "tier2" },
+        { "name": "Kakinada",      "tier": "tier3" },
+        { "name": "Kadapa",        "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Arunachal Pradesh", "code": "AR",
+      "gold_premium_pct": 0.5, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Itanagar", "tier": "tier3" },
+        { "name": "Naharlagun", "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Assam", "code": "AS",
+      "gold_premium_pct": 0.4, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Guwahati",   "tier": "tier1" },
+        { "name": "Silchar",    "tier": "tier2" },
+        { "name": "Dibrugarh",  "tier": "tier2" },
+        { "name": "Jorhat",     "tier": "tier3" },
+        { "name": "Nagaon",     "tier": "tier3" },
+        { "name": "Tezpur",     "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Bihar", "code": "BR",
+      "gold_premium_pct": 0.2, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Patna",       "tier": "tier1" },
+        { "name": "Gaya",        "tier": "tier2" },
+        { "name": "Bhagalpur",   "tier": "tier2" },
+        { "name": "Muzaffarpur", "tier": "tier2" },
+        { "name": "Darbhanga",   "tier": "tier3" },
+        { "name": "Purnia",      "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Chhattisgarh", "code": "CG",
+      "gold_premium_pct": 0.1, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Raipur",    "tier": "tier1" },
+        { "name": "Bhilai",    "tier": "tier2" },
+        { "name": "Durg",      "tier": "tier2" },
+        { "name": "Bilaspur",  "tier": "tier2" },
+        { "name": "Korba",     "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Goa", "code": "GA",
+      "gold_premium_pct": 0.1, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Panaji",         "tier": "tier2" },
+        { "name": "Margao",         "tier": "tier2" },
+        { "name": "Vasco da Gama",  "tier": "tier2" },
+        { "name": "Mapusa",         "tier": "tier2" }
+      ]
+    },
+    {
+      "name": "Gujarat", "code": "GJ",
+      "gold_premium_pct": -0.2, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Ahmedabad",  "tier": "tier1" },
+        { "name": "Surat",      "tier": "tier1" },
+        { "name": "Vadodara",   "tier": "tier1" },
+        { "name": "Rajkot",     "tier": "tier1" },
+        { "name": "Gandhinagar","tier": "tier1" },
+        { "name": "Bhavnagar",  "tier": "tier2" },
+        { "name": "Jamnagar",   "tier": "tier2" },
+        { "name": "Junagadh",   "tier": "tier2" },
+        { "name": "Anand",      "tier": "tier2" },
+        { "name": "Navsari",    "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Haryana", "code": "HR",
+      "gold_premium_pct": 0.0, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Faridabad",  "tier": "tier1" },
+        { "name": "Gurugram",   "tier": "tier1" },
+        { "name": "Rohtak",     "tier": "tier2" },
+        { "name": "Hisar",      "tier": "tier2" },
+        { "name": "Panipat",    "tier": "tier2" },
+        { "name": "Sonipat",    "tier": "tier2" },
+        { "name": "Ambala",     "tier": "tier2" },
+        { "name": "Yamunanagar","tier": "tier3" },
+        { "name": "Karnal",     "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Himachal Pradesh", "code": "HP",
+      "gold_premium_pct": 0.3, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Shimla",       "tier": "tier2" },
+        { "name": "Dharamshala",  "tier": "tier3" },
+        { "name": "Solan",        "tier": "tier3" },
+        { "name": "Mandi",        "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Jharkhand", "code": "JH",
+      "gold_premium_pct": 0.2, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Ranchi",      "tier": "tier1" },
+        { "name": "Jamshedpur",  "tier": "tier1" },
+        { "name": "Dhanbad",     "tier": "tier2" },
+        { "name": "Bokaro",      "tier": "tier2" },
+        { "name": "Deoghar",     "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Karnataka", "code": "KA",
+      "gold_premium_pct": 0.1, "stamp_duty_flat_inr": 200, "default_tier": "tier2",
+      "cities": [
+        { "name": "Bengaluru",      "tier": "metro" },
+        { "name": "Mysuru",         "tier": "tier1" },
+        { "name": "Hubli",          "tier": "tier2" },
+        { "name": "Mangaluru",      "tier": "tier2" },
+        { "name": "Belagavi",       "tier": "tier2" },
+        { "name": "Kalaburagi",     "tier": "tier2" },
+        { "name": "Davangere",      "tier": "tier2" },
+        { "name": "Shivamogga",     "tier": "tier3" },
+        { "name": "Tumkur",         "tier": "tier3" },
+        { "name": "Vijayapura",     "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Kerala", "code": "KL",
+      "gold_premium_pct": 0.8, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Thiruvananthapuram", "tier": "tier1" },
+        { "name": "Kochi",              "tier": "tier1" },
+        { "name": "Kozhikode",          "tier": "tier1" },
+        { "name": "Kollam",             "tier": "tier2" },
+        { "name": "Thrissur",           "tier": "tier2" },
+        { "name": "Kannur",             "tier": "tier2" },
+        { "name": "Alappuzha",          "tier": "tier2" },
+        { "name": "Palakkad",           "tier": "tier2" },
+        { "name": "Malappuram",         "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Madhya Pradesh", "code": "MP",
+      "gold_premium_pct": 0.0, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Indore",  "tier": "tier1" },
+        { "name": "Bhopal",  "tier": "tier1" },
+        { "name": "Jabalpur","tier": "tier1" },
+        { "name": "Gwalior", "tier": "tier1" },
+        { "name": "Ujjain",  "tier": "tier2" },
+        { "name": "Sagar",   "tier": "tier2" },
+        { "name": "Ratlam",  "tier": "tier2" },
+        { "name": "Satna",   "tier": "tier3" },
+        { "name": "Rewa",    "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Maharashtra", "code": "MH",
+      "gold_premium_pct": 0.0, "stamp_duty_flat_inr": 200, "default_tier": "tier2",
+      "cities": [
+        { "name": "Mumbai",      "tier": "metro" },
+        { "name": "Thane",       "tier": "tier1" },
+        { "name": "Navi Mumbai", "tier": "tier1" },
+        { "name": "Pune",        "tier": "tier1" },
+        { "name": "Nagpur",      "tier": "tier1" },
+        { "name": "Nashik",      "tier": "tier2" },
+        { "name": "Aurangabad",  "tier": "tier2" },
+        { "name": "Kolhapur",    "tier": "tier2" },
+        { "name": "Solapur",     "tier": "tier2" },
+        { "name": "Amravati",    "tier": "tier2" },
+        { "name": "Vasai-Virar", "tier": "tier2" },
+        { "name": "Bhiwandi",    "tier": "tier3" },
+        { "name": "Latur",       "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Manipur", "code": "MN",
+      "gold_premium_pct": 0.5, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Imphal", "tier": "tier2" }
+      ]
+    },
+    {
+      "name": "Meghalaya", "code": "ML",
+      "gold_premium_pct": 0.5, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Shillong", "tier": "tier2" }
+      ]
+    },
+    {
+      "name": "Mizoram", "code": "MZ",
+      "gold_premium_pct": 0.5, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Aizawl", "tier": "tier2" }
+      ]
+    },
+    {
+      "name": "Nagaland", "code": "NL",
+      "gold_premium_pct": 0.5, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Dimapur",  "tier": "tier2" },
+        { "name": "Kohima",   "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Odisha", "code": "OR",
+      "gold_premium_pct": 0.1, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Bhubaneswar", "tier": "tier1" },
+        { "name": "Cuttack",     "tier": "tier2" },
+        { "name": "Rourkela",    "tier": "tier2" },
+        { "name": "Brahmapur",   "tier": "tier3" },
+        { "name": "Sambalpur",   "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Punjab", "code": "PB",
+      "gold_premium_pct": 0.1, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Ludhiana",  "tier": "tier1" },
+        { "name": "Amritsar",  "tier": "tier1" },
+        { "name": "Jalandhar", "tier": "tier1" },
+        { "name": "Patiala",   "tier": "tier2" },
+        { "name": "Bathinda",  "tier": "tier2" },
+        { "name": "Mohali",    "tier": "tier2" },
+        { "name": "Pathankot", "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Rajasthan", "code": "RJ",
+      "gold_premium_pct": 0.1, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Jaipur",  "tier": "tier1" },
+        { "name": "Jodhpur", "tier": "tier1" },
+        { "name": "Kota",    "tier": "tier1" },
+        { "name": "Bikaner", "tier": "tier2" },
+        { "name": "Ajmer",   "tier": "tier2" },
+        { "name": "Udaipur", "tier": "tier2" },
+        { "name": "Alwar",   "tier": "tier2" },
+        { "name": "Bhilwara","tier": "tier3" },
+        { "name": "Sikar",   "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Sikkim", "code": "SK",
+      "gold_premium_pct": 0.3, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Gangtok", "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Tamil Nadu", "code": "TN",
+      "gold_premium_pct": 0.3, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Chennai",        "tier": "metro" },
+        { "name": "Coimbatore",     "tier": "tier1" },
+        { "name": "Madurai",        "tier": "tier1" },
+        { "name": "Tiruchirappalli","tier": "tier1" },
+        { "name": "Salem",          "tier": "tier2" },
+        { "name": "Tirunelveli",    "tier": "tier2" },
+        { "name": "Vellore",        "tier": "tier2" },
+        { "name": "Erode",          "tier": "tier2" },
+        { "name": "Tiruppur",       "tier": "tier2" },
+        { "name": "Thoothukudi",    "tier": "tier2" },
+        { "name": "Thanjavur",      "tier": "tier2" },
+        { "name": "Dindigul",       "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Telangana", "code": "TS",
+      "gold_premium_pct": 0.2, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Hyderabad",    "tier": "metro" },
+        { "name": "Secunderabad", "tier": "metro" },
+        { "name": "Warangal",     "tier": "tier2" },
+        { "name": "Karimnagar",   "tier": "tier2" },
+        { "name": "Nizamabad",    "tier": "tier2" },
+        { "name": "Khammam",      "tier": "tier2" },
+        { "name": "Mahbubnagar",  "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Tripura", "code": "TR",
+      "gold_premium_pct": 0.4, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Agartala", "tier": "tier2" }
+      ]
+    },
+    {
+      "name": "Uttar Pradesh", "code": "UP",
+      "gold_premium_pct": 0.1, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Lucknow",     "tier": "tier1" },
+        { "name": "Kanpur",      "tier": "tier1" },
+        { "name": "Ghaziabad",   "tier": "tier1" },
+        { "name": "Agra",        "tier": "tier1" },
+        { "name": "Noida",       "tier": "tier1" },
+        { "name": "Varanasi",    "tier": "tier1" },
+        { "name": "Meerut",      "tier": "tier2" },
+        { "name": "Prayagraj",   "tier": "tier2" },
+        { "name": "Bareilly",    "tier": "tier2" },
+        { "name": "Aligarh",     "tier": "tier2" },
+        { "name": "Moradabad",   "tier": "tier2" },
+        { "name": "Gorakhpur",   "tier": "tier2" },
+        { "name": "Saharanpur",  "tier": "tier3" },
+        { "name": "Mathura",     "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Uttarakhand", "code": "UK",
+      "gold_premium_pct": 0.2, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Dehradun",  "tier": "tier1" },
+        { "name": "Haridwar",  "tier": "tier2" },
+        { "name": "Roorkee",   "tier": "tier2" },
+        { "name": "Haldwani",  "tier": "tier2" },
+        { "name": "Nainital",  "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "West Bengal", "code": "WB",
+      "gold_premium_pct": 0.2, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Kolkata",     "tier": "metro" },
+        { "name": "Howrah",      "tier": "tier1" },
+        { "name": "Durgapur",    "tier": "tier2" },
+        { "name": "Asansol",     "tier": "tier2" },
+        { "name": "Siliguri",    "tier": "tier2" },
+        { "name": "Bardhaman",   "tier": "tier2" },
+        { "name": "Malda",       "tier": "tier3" },
+        { "name": "Kharagpur",   "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Andaman & Nicobar Islands", "code": "AN",
+      "gold_premium_pct": 1.0, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Port Blair", "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Chandigarh", "code": "CH",
+      "gold_premium_pct": 0.0, "stamp_duty_flat_inr": 0, "default_tier": "tier1",
+      "cities": [
+        { "name": "Chandigarh", "tier": "tier1" }
+      ]
+    },
+    {
+      "name": "Dadra & Nagar Haveli and Daman & Diu", "code": "DN",
+      "gold_premium_pct": 0.0, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Daman",    "tier": "tier3" },
+        { "name": "Silvassa", "tier": "tier3" }
+      ]
+    },
+    {
+      "name": "Delhi", "code": "DL",
+      "gold_premium_pct": 0.0, "stamp_duty_flat_inr": 0, "default_tier": "metro",
+      "cities": [
+        { "name": "New Delhi",    "tier": "metro" },
+        { "name": "South Delhi",  "tier": "metro" },
+        { "name": "East Delhi",   "tier": "metro" },
+        { "name": "North Delhi",  "tier": "metro" },
+        { "name": "West Delhi",   "tier": "metro" },
+        { "name": "Dwarka",       "tier": "metro" },
+        { "name": "Rohini",       "tier": "tier1" }
+      ]
+    },
+    {
+      "name": "Jammu & Kashmir", "code": "JK",
+      "gold_premium_pct": 0.3, "stamp_duty_flat_inr": 0, "default_tier": "tier3",
+      "cities": [
+        { "name": "Srinagar", "tier": "tier2" },
+        { "name": "Jammu",    "tier": "tier2" }
+      ]
+    },
+    {
+      "name": "Ladakh", "code": "LA",
+      "gold_premium_pct": 0.5, "stamp_duty_flat_inr": 0, "default_tier": "rural",
+      "cities": [
+        { "name": "Leh",     "tier": "tier3" },
+        { "name": "Kargil",  "tier": "rural" }
+      ]
+    },
+    {
+      "name": "Lakshadweep", "code": "LD",
+      "gold_premium_pct": 1.5, "stamp_duty_flat_inr": 0, "default_tier": "rural",
+      "cities": [
+        { "name": "Kavaratti", "tier": "rural" }
+      ]
+    },
+    {
+      "name": "Puducherry", "code": "PY",
+      "gold_premium_pct": 0.2, "stamp_duty_flat_inr": 0, "default_tier": "tier2",
+      "cities": [
+        { "name": "Puducherry", "tier": "tier2" },
+        { "name": "Karaikal",   "tier": "tier3" }
+      ]
+    }
+  ]
+}

@@ -26,7 +26,7 @@ if _groq_key and _groq_key not in GEMINI_API_KEYS:
 
 GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 # Gemini API Configuration
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1/models/{GEMINI_MODEL}:generateContent"
 
 # Shared session to avoid socket exhaustion and 'instant' failures
@@ -413,24 +413,18 @@ Respond with JSON:
             ]
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
-                if resp.status != 200:
-                    return {"decision": None, "error": f"http_{resp.status}"}
+        data, success = await _gemini_request(payload, timeout=30)
+        if not success:
+            return {"decision": None, "error": data.get("error", "api_failed")}
 
-                data = await resp.json()
-                text_response = data["candidates"][0]["content"]["parts"][0]["text"]
-                text_response = text_response.strip()
-                if text_response.startswith("```json"):
-                    text_response = text_response[7:]
-                if text_response.endswith("```"):
-                    text_response = text_response[:-3]
+        text_response = data["candidates"][0]["content"]["parts"][0]["text"]
+        text_response = text_response.strip()
+        if text_response.startswith("```json"):
+            text_response = text_response[7:]
+        if text_response.endswith("```"):
+            text_response = text_response[:-3]
 
-                return json.loads(text_response.strip())
+        return json.loads(text_response.strip())
 
     except Exception as e:
         logger.exception(f"Gemini decision error: {e}")

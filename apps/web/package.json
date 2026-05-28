@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@daily-co/daily-js": "^0.90.0",
     "@splinetool/react-spline": "^4.1.0",
     "@splinetool/runtime": "^1.12.91",
     "clsx": "^2.1.1",

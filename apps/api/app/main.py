@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -24,6 +25,13 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.frame_eval import router as frame_eval_router
 from app.routes.otp import router as otp_router
 from app.routes.prices import router as prices_router
+from app.routes.poonawalla_deals import router as deals_router
+from app.routes.gold_price_regional import router as regional_price_router
+from app.routes.certificate_ocr import router as certificate_ocr_router
+from app.routes.guided_session import router as guided_session_router
+from app.routes.live_session import router as live_session_router
+from app.routes.video_eval import router as video_eval_router
+from app.routes.audio_eval import router as audio_eval_router
 from app.decision.ibja import price_metadata, _refresh_async
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -88,12 +96,19 @@ async def add_trace_id(request: Request, call_next):
 
 
 # ─── Routes ────────────────────────────────────────────────────────────────────
-app.include_router(session_router, prefix="/session", tags=["Session"])
-app.include_router(assess_router, prefix="/api", tags=["Assessment"])
-app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"])
-app.include_router(frame_eval_router, tags=["FrameEval"])
-app.include_router(otp_router, tags=["OTP"])
-app.include_router(prices_router, prefix="/api", tags=["Assessment"])
+app.include_router(session_router,        prefix="/session",       tags=["Session"])
+app.include_router(assess_router,         prefix="/api",           tags=["Assessment"])
+app.include_router(dashboard_router,      prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(frame_eval_router,                              tags=["FrameEval"])
+app.include_router(otp_router,                                     tags=["OTP"])
+app.include_router(prices_router,         prefix="/api",           tags=["Assessment"])
+app.include_router(deals_router,          prefix="/api",           tags=["Deals"])
+app.include_router(regional_price_router, prefix="/api",           tags=["Prices"])
+app.include_router(certificate_ocr_router,prefix="/api",           tags=["OCR"])
+app.include_router(guided_session_router, prefix="/api",           tags=["GuidedSession"])
+app.include_router(live_session_router,   prefix="/api",           tags=["LiveSession"])
+app.include_router(video_eval_router,     prefix="/api",           tags=["VideoEval"])
+app.include_router(audio_eval_router,     prefix="/api",           tags=["AudioEval"])
 
 
 @app.get("/health", tags=["Infra"])
@@ -152,3 +167,20 @@ async def model_health():
         "audio_cnn": audio_mod._ONNX_SESSION is not None,
         "catalog_phashes_count": catalog_count,
     }
+
+
+# ── Serve React PWA (must be last — catches all non-API routes) ───────────────
+_WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "..", "..", "apps", "web", "dist")
+_WEB_DIST = os.path.normpath(_WEB_DIST)
+
+if os.path.isdir(_WEB_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_WEB_DIST, "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Serve specific files (sw.js, manifest, etc.) directly
+        candidate = os.path.join(_WEB_DIST, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        # All other routes → index.html (React Router handles it)
+        return FileResponse(os.path.join(_WEB_DIST, "index.html"))
