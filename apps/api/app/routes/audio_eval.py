@@ -28,7 +28,7 @@ import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.data.gemini import _gemini_request
+from app.data.gemini import GEMINI_MODEL, _gemini_request, extract_gemini_text, parse_json_response
 
 logger = logging.getLogger("goldeye.audio_eval")
 router = APIRouter()
@@ -530,27 +530,39 @@ async def audio_eval(req: AudioEvalRequest):
             ]}],
             "generationConfig": {
                 "temperature": 0.10,
-                "maxOutputTokens": 400,
+                "maxOutputTokens": 800,
                 "responseMimeType": "application/json",
+                "responseSchema": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "score": {"type": "INTEGER"},
+                        "label": {"type": "STRING"},
+                        "reasoning": {"type": "STRING"},
+                    },
+                    "required": ["score", "label", "reasoning"],
+                },
             },
         }
 
         data, success = await _gemini_request(payload, timeout=50)
         if success and "candidates" in data:
-            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if raw.startswith("```json"): raw = raw[7:]
-            if raw.startswith("```"):     raw = raw[3:]
-            if raw.endswith("```"):       raw = raw[:-3]
-            g = json.loads(raw.strip())
+            raw = extract_gemini_text(data)
+            g = parse_json_response(raw)
             gemini_score    = max(0, min(100, int(g.get("score", 50))))
             gemini_reasoning = str(g.get("reasoning", ""))
             logger.info(
-                f"audio_eval ok: gemini={gemini_score} algo={metrics['score']} "
+                f"audio_eval ok: model={GEMINI_MODEL} gemini={gemini_score} algo={metrics['score']} "
                 f"decay={metrics['decay_ms']}ms centroid={metrics['centroid']}Hz "
                 f"R²={metrics['decay_r2']:.2f} SNR={metrics['snr_db']:.0f}dB"
             )
+        else:
+            err = data.get("error", "empty_response" if success else "api_failed")
+            logger.warning(f"Gemini audio skipped: API keys exhausted or rate-limited ({err})")
     except Exception as e:
-        logger.warning(f"Gemini audio skipped: {e}")
+        logger.warning(
+            f"Gemini audio skipped using {GEMINI_MODEL}: {e}. "
+            f"Raw response: {raw if 'raw' in locals() else 'None'}"
+        )
 
     # Acoustic scoring is primarily deterministic; Gemini only gives a cautious
     # second opinion because delicate jewellery often lacks a textbook ring.

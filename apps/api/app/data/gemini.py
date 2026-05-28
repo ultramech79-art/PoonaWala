@@ -7,6 +7,7 @@ Used for:
 """
 import os
 import json
+import re
 import logging
 import asyncio
 from typing import Optional
@@ -24,10 +25,86 @@ _groq_key = os.getenv("GROQ_API_KEY", "").strip()
 if _groq_key and _groq_key not in GEMINI_API_KEYS:
     GEMINI_API_KEYS.append(_groq_key)
 
+_groq_key_2 = os.getenv("GROQ_API_KEY_2", "").strip()
+if _groq_key_2 and _groq_key_2 not in GEMINI_API_KEYS:
+    GEMINI_API_KEYS.append(_groq_key_2)
+
 GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
-# Gemini API Configuration
-GEMINI_MODEL = "gemini-3.5-flash"
-GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1/models/{GEMINI_MODEL}:generateContent"
+# Gemini API Configuration. Keep this env-driven so local and Render deployments
+# can pin a released multimodal model without code changes.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1beta").strip() or "v1beta"
+GEMINI_THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "minimal").strip() or "minimal"
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
+
+
+class GeminiResponseError(ValueError):
+    """Raised when Gemini returns HTTP 200 without usable text content."""
+
+
+def extract_gemini_text(data: dict) -> str:
+    """Return concatenated Gemini text parts or raise with useful diagnostics."""
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise GeminiResponseError(f"Gemini returned no candidates: {json.dumps(data)[:500]}")
+
+    cand = candidates[0] or {}
+    finish_reason = cand.get("finishReason")
+    safety = cand.get("safetyRatings")
+    parts = ((cand.get("content") or {}).get("parts") or [])
+    texts = [str(part.get("text", "")) for part in parts if part.get("text")]
+    text = "\n".join(t.strip() for t in texts if t and t.strip()).strip()
+    if text:
+        return text
+
+    raise GeminiResponseError(
+        "Gemini returned an empty text response "
+        f"(model={GEMINI_MODEL}, finishReason={finish_reason}, safety={safety})"
+    )
+
+
+def parse_json_response(text: str) -> dict:
+    """Robustly extracts and parses JSON from LLM conversational text."""
+    text = text.strip()
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strip standard markdown fences if present
+    cleaned = text
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    cleaned = cleaned.strip()
+    
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: extract the JSON object using regex search
+    match = re.search(r'(\{.*\})', cleaned, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Extreme fallback: try cleaning trailing commas
+    cleaned_fuzzy = re.sub(r',\s*([\]\}])', r'\1', cleaned)
+    match_fuzzy = re.search(r'(\{.*\})', cleaned_fuzzy, re.DOTALL)
+    if match_fuzzy:
+        try:
+            return json.loads(match_fuzzy.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    raise json.JSONDecodeError("Could not extract or parse valid JSON from LLM response", text, 0)
 
 # Shared session to avoid socket exhaustion and 'instant' failures
 _session: Optional[aiohttp.ClientSession] = None
@@ -50,6 +127,64 @@ async def _gemini_request(payload: dict, timeout: int = 45, attempt: int = 0, re
         return {"error": "all_keys_failed"}, False
 
     current_key = GEMINI_API_KEYS[attempt]
+    
+    # REST v1 accepts proto-style snake_case; v1beta accepts camelCase.
+    # Normalize in one place so route code can use the familiar Gemini SDK names.
+    gc = payload.get("generationConfig") or payload.get("generation_config")
+    if gc:
+        gc = dict(gc)
+        schema = gc.get("responseSchema") or gc.get("response_schema")
+        max_tokens = gc.get("maxOutputTokens") or gc.get("max_output_tokens")
+        response_mime = gc.get("responseMimeType") or gc.get("response_mime_type")
+        thinking = gc.get("thinkingConfig") or gc.get("thinking_config")
+        if not thinking and GEMINI_MODEL.startswith("gemini-3"):
+            thinking = {"thinkingLevel": GEMINI_THINKING_LEVEL}
+
+        if GEMINI_API_VERSION == "v1":
+            normalized_gc = {}
+            if "temperature" in gc:
+                normalized_gc["temperature"] = gc["temperature"]
+            if max_tokens:
+                normalized_gc["max_output_tokens"] = max_tokens
+            # The public v1 REST endpoint currently rejects response_mime_type
+            # and response_schema for this model. Keep JSON enforcement in the
+            # prompt and parser for v1; use strict fields only on v1beta.
+            if thinking:
+                level = thinking.get("thinkingLevel") or thinking.get("thinking_level")
+                budget = thinking.get("thinkingBudget") or thinking.get("thinking_budget")
+                normalized_thinking = {}
+                if level:
+                    normalized_thinking["thinking_level"] = level
+                if budget is not None:
+                    normalized_thinking["thinking_budget"] = budget
+                if normalized_thinking:
+                    normalized_gc["thinking_config"] = normalized_thinking
+            payload["generation_config"] = normalized_gc
+            if "generationConfig" in payload:
+                del payload["generationConfig"]
+        else:
+            normalized_gc = {}
+            if "temperature" in gc:
+                normalized_gc["temperature"] = gc["temperature"]
+            if max_tokens:
+                normalized_gc["maxOutputTokens"] = max_tokens
+            if response_mime:
+                normalized_gc["responseMimeType"] = response_mime
+            if schema:
+                normalized_gc["responseSchema"] = schema
+            if thinking:
+                level = thinking.get("thinkingLevel") or thinking.get("thinking_level")
+                budget = thinking.get("thinkingBudget") or thinking.get("thinking_budget")
+                normalized_thinking = {}
+                if level:
+                    normalized_thinking["thinkingLevel"] = level
+                if budget is not None:
+                    normalized_thinking["thinkingBudget"] = budget
+                if normalized_thinking:
+                    normalized_gc["thinkingConfig"] = normalized_thinking
+            payload["generationConfig"] = normalized_gc
+            if "generation_config" in payload:
+                del payload["generation_config"]
     
     # Automatic provider detection based on key format
     if current_key.startswith("gsk_"):
@@ -218,15 +353,8 @@ Return ONLY valid JSON:
                 "reason": "empty_gemini_response"
             }
 
-        text_response = data["candidates"][0]["content"]["parts"][0]["text"]
-        # Extract JSON from response
-        text_response = text_response.strip()
-        if text_response.startswith("```json"):
-            text_response = text_response[7:]
-        if text_response.endswith("```"):
-            text_response = text_response[:-3]
-
-        result = json.loads(text_response.strip())
+        text_response = extract_gemini_text(data)
+        result = parse_json_response(text_response)
         return result
 
     except asyncio.TimeoutError:
@@ -356,14 +484,8 @@ Return JSON:
         if "candidates" not in data or not data["candidates"]:
             return {"error": "empty_response", "confidence": 0.0}
 
-        text_response = data["candidates"][0]["content"]["parts"][0]["text"]
-        text_response = text_response.strip()
-        if text_response.startswith("```json"):
-            text_response = text_response[7:]
-        if text_response.endswith("```"):
-            text_response = text_response[:-3]
-
-        result = json.loads(text_response.strip())
+        text_response = extract_gemini_text(data)
+        result = parse_json_response(text_response)
         result["gemini_analyzed"] = True
         return result
 
@@ -463,7 +585,7 @@ Respond with JSON:
 }}"""
 
     payload = {
-        "model": "llama-3.2-90b-vision-preview",
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
         "messages": [
             {
                 "role": "user",
@@ -779,13 +901,20 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         data, success = await _gemini_request(payload, timeout=45)
 
         if not success:
-            logger.error(f"Gemini/Groq evaluation failed after all retries: {data.get('error', 'unknown')}")
-            # FALLBACK POLICY: If AI fails, prompt for a retake by mentioning quality issues.
+            err = data.get("error", "unknown")
+            logger.error(f"Gemini/Groq evaluation failed after all retries: {err}")
+            # FALLBACK POLICY: If AI is busy/rate-limited or offline, don't mislead the user about blurriness
+            feedback = "Image is blurry. Please try again."
+            issues = ["blurry_image"]
+            if err == "all_keys_failed":
+                feedback = "Evaluation service is temporarily busy. Please try again in a few moments."
+                issues = ["service_busy"]
+
             return {
                 "approved": False,
                 "quality_score": 0.0,
-                "feedback": "Image is blurry. Please try again.",
-                "issues": ["blurry_image"],
+                "feedback": feedback,
+                "issues": issues,
                 "detected": {"gold_jewelry_present": None}
             }
 

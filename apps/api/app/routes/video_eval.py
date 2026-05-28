@@ -50,7 +50,7 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.data.gemini import _gemini_request
+from app.data.gemini import GEMINI_MODEL, _gemini_request, extract_gemini_text, parse_json_response
 
 logger = logging.getLogger("goldeye.video_eval")
 router = APIRouter()
@@ -177,8 +177,34 @@ Return ONLY valid JSON:
         "contents": [{"parts": parts}],
         "generationConfig": {
             "temperature": 0.10,
-            "maxOutputTokens": 900,
+            "maxOutputTokens": 1600,
             "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "wear_score": {"type": "INTEGER"},
+                    "edge_substrate_score": {"type": "INTEGER"},
+                    "luster_score": {"type": "INTEGER"},
+                    "surface_originality_score": {"type": "INTEGER"},
+                    "hue_score": {"type": "INTEGER"},
+                    "video_score": {"type": "INTEGER"},
+                    "wear_observation": {"type": "STRING"},
+                    "edge_observation": {"type": "STRING"},
+                    "luster_observation": {"type": "STRING"},
+                    "surface_observation": {"type": "STRING"},
+                    "red_flags": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "positive_signals": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "purity_estimate": {"type": "STRING", "nullable": True},
+                    "guidance": {"type": "STRING"},
+                },
+                "required": [
+                    "wear_score", "edge_substrate_score", "luster_score",
+                    "surface_originality_score", "hue_score", "video_score",
+                    "wear_observation", "edge_observation", "luster_observation",
+                    "surface_observation", "red_flags", "positive_signals",
+                    "purity_estimate", "guidance"
+                ],
+            },
         },
     }
 
@@ -186,13 +212,13 @@ Return ONLY valid JSON:
         data, success = await _gemini_request(payload, timeout=60)
         if not success:
             raise ValueError(data.get("error", "api_failed"))
-        raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        if raw.startswith("```json"): raw = raw[7:]
-        if raw.startswith("```"):     raw = raw[3:]
-        if raw.endswith("```"):       raw = raw[:-3]
-        res = json.loads(raw.strip())
+        raw = extract_gemini_text(data)
+        res = parse_json_response(raw)
     except Exception as e:
-        logger.error(f"video_eval error: {e}")
+        logger.error(
+            f"video_eval error using {GEMINI_MODEL}: {e}. "
+            f"Raw response: {raw if 'raw' in locals() else 'None'}"
+        )
         return _error(str(e), req.language)
 
     wear_score               = _clamp(res.get("wear_score", 50))
