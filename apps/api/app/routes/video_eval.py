@@ -51,9 +51,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.data.gemini import GEMINI_MODEL, _gemini_request, extract_gemini_text, parse_json_response
+from app.data.groq_client import GROQ_MODEL, call_groq_vision
 
 logger = logging.getLogger("goldeye.video_eval")
 router = APIRouter()
+GROQ_VIDEO_FALLBACK_API_KEY = os.getenv("GROQ_VIDEO_FALLBACK_API_KEY") or os.getenv("GROQ_API_KEY", "")
 
 
 class VideoEvalRequest(BaseModel):
@@ -215,11 +217,15 @@ Return ONLY valid JSON:
         raw = extract_gemini_text(data)
         res = parse_json_response(raw)
     except Exception as e:
-        logger.error(
-            f"video_eval error using {GEMINI_MODEL}: {e}. "
+        logger.warning(
+            f"video_eval Gemini failed using {GEMINI_MODEL}: {e}. "
             f"Raw response: {raw if 'raw' in locals() else 'None'}"
         )
-        return _error(str(e), req.language)
+        try:
+            res = await _groq_video_fallback(prompt, req.frames_b64[:n_frames])
+        except Exception as groq_error:
+            logger.error(f"video_eval Groq fallback failed using {GROQ_MODEL}: {groq_error}")
+            return _error(str(e), req.language)
 
     wear_score               = _clamp(res.get("wear_score", 50))
     edge_substrate_score     = _clamp(res.get("edge_substrate_score", 50))
@@ -288,6 +294,36 @@ Return ONLY valid JSON:
 def _clamp(v) -> int:
     try: return max(0, min(100, int(v)))
     except (TypeError, ValueError): return 50
+
+
+async def _groq_video_fallback(prompt: str, frames_b64: list[str]) -> dict:
+    if not GROQ_VIDEO_FALLBACK_API_KEY:
+        raise ValueError("groq_video_fallback_key_missing")
+    if not frames_b64:
+        raise ValueError("groq_video_fallback_no_frame")
+
+    mid = len(frames_b64) // 2
+    groq_prompt = (
+        prompt
+        + "\n\nFallback note: Gemini video analysis failed. You are seeing one representative "
+          "frame from the rotation video. Be conservative about claims requiring motion or "
+          "multiple angles. Do not infer purity from color; set purity_estimate to null unless "
+          "a hallmark/fineness stamp is clearly readable in this image. Return the exact "
+          "requested JSON object only."
+    )
+    data, success = await call_groq_vision(
+        groq_prompt,
+        frames_b64[mid],
+        GROQ_VIDEO_FALLBACK_API_KEY,
+        "image/jpeg",
+        timeout=45,
+    )
+    if not success:
+        raise ValueError(data.get("error", "groq_video_fallback_failed"))
+    raw = extract_gemini_text(data)
+    result = parse_json_response(raw)
+    logger.info(f"video_eval Groq fallback ok using {GROQ_MODEL}")
+    return result
 
 
 def _error(msg: str, lang: str) -> VideoEvalResponse:

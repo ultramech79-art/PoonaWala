@@ -21,6 +21,7 @@ import base64
 import io
 import json
 import logging
+import os
 import struct
 from typing import Optional
 
@@ -29,9 +30,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.data.gemini import GEMINI_MODEL, _gemini_request, extract_gemini_text, parse_json_response
+from app.data.groq_client import GROQ_TEXT_MODEL, call_groq_json
 
 logger = logging.getLogger("goldeye.audio_eval")
 router = APIRouter()
+GROQ_AUDIO_FALLBACK_API_KEY = os.getenv("GROQ_AUDIO_FALLBACK_API_KEY") or os.getenv("GROQ_API_KEY", "")
 
 
 class AudioEvalRequest(BaseModel):
@@ -558,11 +561,28 @@ async def audio_eval(req: AudioEvalRequest):
         else:
             err = data.get("error", "empty_response" if success else "api_failed")
             logger.warning(f"Gemini audio skipped: API keys exhausted or rate-limited ({err})")
+            g = await _groq_audio_fallback(prompt)
+            gemini_score = max(0, min(100, int(g.get("score", 50))))
+            gemini_reasoning = str(g.get("reasoning", ""))
+            logger.info(
+                f"audio_eval Groq fallback ok: model={GROQ_TEXT_MODEL} "
+                f"groq={gemini_score} algo={metrics['score']}"
+            )
     except Exception as e:
         logger.warning(
             f"Gemini audio skipped using {GEMINI_MODEL}: {e}. "
             f"Raw response: {raw if 'raw' in locals() else 'None'}"
         )
+        try:
+            g = await _groq_audio_fallback(prompt)
+            gemini_score = max(0, min(100, int(g.get("score", 50))))
+            gemini_reasoning = str(g.get("reasoning", ""))
+            logger.info(
+                f"audio_eval Groq fallback ok: model={GROQ_TEXT_MODEL} "
+                f"groq={gemini_score} algo={metrics['score']}"
+            )
+        except Exception as groq_error:
+            logger.warning(f"Groq audio fallback skipped using {GROQ_TEXT_MODEL}: {groq_error}")
 
     # Acoustic scoring is primarily deterministic; Gemini only gives a cautious
     # second opinion because delicate jewellery often lacks a textbook ring.
@@ -599,3 +619,20 @@ def _invalid(reason: str, lang: str, snr_db: float = 0.0, test_mode: str = "auto
         attack_ms=0, event_count=0, test_mode=test_mode,
         reasoning=reason,
     )
+
+
+async def _groq_audio_fallback(prompt: str) -> dict:
+    if not GROQ_AUDIO_FALLBACK_API_KEY:
+        raise ValueError("groq_audio_fallback_key_missing")
+
+    groq_prompt = (
+        prompt
+        + "\n\nFallback note: Gemini raw-audio analysis failed. Groq cannot inspect the raw "
+          "tap audio here, so base your answer only on the measured FFT/envelope parameters "
+          "provided above. Return the exact requested JSON object only."
+    )
+    data, success = await call_groq_json(groq_prompt, GROQ_AUDIO_FALLBACK_API_KEY, timeout=45)
+    if not success:
+        raise ValueError(data.get("error", "groq_audio_fallback_failed"))
+    raw = extract_gemini_text(data)
+    return parse_json_response(raw)

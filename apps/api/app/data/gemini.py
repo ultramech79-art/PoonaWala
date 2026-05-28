@@ -12,22 +12,12 @@ import logging
 import asyncio
 from typing import Optional
 import aiohttp
-from app.data.groq_client import call_groq_vision
 
 logger = logging.getLogger("goldeye.gemini")
 
 # Support multiple API keys for failover (comma-separated)
 _api_keys_raw = os.getenv("GEMINI_API_KEY", "")
 GEMINI_API_KEYS = [k.strip() for k in _api_keys_raw.split(",") if k.strip()]
-
-# Also include the dedicated GROQ_API_KEY if provided separately
-_groq_key = os.getenv("GROQ_API_KEY", "").strip()
-if _groq_key and _groq_key not in GEMINI_API_KEYS:
-    GEMINI_API_KEYS.append(_groq_key)
-
-_groq_key_2 = os.getenv("GROQ_API_KEY_2", "").strip()
-if _groq_key_2 and _groq_key_2 not in GEMINI_API_KEYS:
-    GEMINI_API_KEYS.append(_groq_key_2)
 
 GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 # Gemini API Configuration. Keep this env-driven so local and Render deployments
@@ -186,26 +176,6 @@ async def _gemini_request(payload: dict, timeout: int = 45, attempt: int = 0, re
             if "generation_config" in payload:
                 del payload["generation_config"]
     
-    # Automatic provider detection based on key format
-    if current_key.startswith("gsk_"):
-        logger.info(f"Using Groq (key #{attempt+1}) as provider")
-        try:
-            parts = payload["contents"][0]["parts"]
-            text_prompt = next(p["text"] for p in parts if "text" in p)
-            image_part = next(p["inlineData"] for p in parts if "inlineData" in p)
-            image_base64 = image_part["data"]
-            mime_type = image_part["mimeType"]
-            
-            data, success = await call_groq_vision(text_prompt, image_base64, current_key, mime_type, timeout)
-            if success:
-                return data, True
-            else:
-                logger.warning(f"Groq provider (key #{attempt+1}) failed, moving to next key")
-                return await _gemini_request(payload, timeout, attempt + 1, 0)
-        except Exception as e:
-            logger.error(f"Failed to prepare Groq request: {e}")
-            return await _gemini_request(payload, timeout, attempt + 1, 0)
-
     try:
         session = await _get_session()
         async with session.post(

@@ -1,4 +1,3 @@
-import os
 import logging
 import asyncio
 import aiohttp
@@ -10,6 +9,7 @@ logger = logging.getLogger("goldeye.groq")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Using Llama 4 Scout (17B Active/109B Total MoE) for state-of-the-art vision assessment
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+GROQ_TEXT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 async def call_groq_vision(
     text_prompt: str,
@@ -79,4 +79,56 @@ async def call_groq_vision(
         return {"error": "groq_timeout"}, False
     except Exception as e:
         logger.error(f"Groq request exception: {e}")
+        return {"error": str(e)}, False
+
+
+async def call_groq_json(
+    text_prompt: str,
+    api_key: str,
+    timeout: int = 45,
+    retry_count: int = 0,
+) -> Tuple[dict, bool]:
+    """
+    Calls Groq's OpenAI-compatible chat API for JSON-only text reasoning.
+    Used for audio fallback over measured FFT/acoustic metrics, not raw audio.
+    """
+    payload = {
+        "model": GROQ_TEXT_MODEL,
+        "messages": [{"role": "user", "content": text_prompt}],
+        "temperature": 0.1,
+        "response_format": {"type": "json_object"},
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                GROQ_API_URL,
+                json=payload,
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=aiohttp.ClientTimeout(total=timeout),
+            ) as resp:
+                if resp.status == 200:
+                    res_json = await resp.json()
+                    content_text = res_json["choices"][0]["message"]["content"]
+                    return {
+                        "candidates": [{
+                            "content": {"parts": [{"text": content_text}]}
+                        }]
+                    }, True
+
+                if resp.status in (429, 503) and retry_count < 2:
+                    wait_time = 1.5 * (retry_count + 1)
+                    logger.warning(f"Groq text API {resp.status}, retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    return await call_groq_json(text_prompt, api_key, timeout, retry_count + 1)
+
+                body = await resp.text()
+                logger.error(f"Groq text API error {resp.status}: {body[:300]}")
+                return {"error": f"groq_http_{resp.status}", "details": body[:200]}, False
+
+    except asyncio.TimeoutError:
+        logger.error("Groq text API request timed out")
+        return {"error": "groq_timeout"}, False
+    except Exception as e:
+        logger.error(f"Groq text request exception: {e}")
         return {"error": str(e)}, False
