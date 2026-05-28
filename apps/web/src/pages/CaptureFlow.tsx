@@ -249,27 +249,6 @@ export function CaptureFlow() {
         </button>
       </div>
 
-      {/* AI Live Capture banner */}
-      {stepIdx === 0 && (
-        <div className="px-5 pb-3 pt-1">
-          <button
-            onClick={() => navigate('/live-capture')}
-            className="w-full flex items-center justify-between bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl px-4 py-3 shadow-lg shadow-amber-500/25"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                <span className="text-lg">✨</span>
-              </div>
-              <div className="text-left">
-                <p className="text-white font-bold text-sm leading-none">Try AI Live Capture</p>
-                <p className="text-white/75 text-[11px] mt-0.5">Auto-scan with Gemini — Hindi & English</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-white/80 flex-shrink-0" />
-          </button>
-        </div>
-      )}
-
       {/* Demo Button */}
       {step.demoUrl && (
         <div className="px-5 pb-2">
