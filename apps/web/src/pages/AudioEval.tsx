@@ -21,6 +21,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 type Phase = 'intro' | 'recording' | 'analyzing' | 'result'
+type TestMode = 'tap' | 'drop' | 'rattle'
 
 interface TapResult {
   score: number
@@ -34,7 +35,51 @@ interface TapResult {
   gold_band_ratio: number
   decay_r2: number
   snr_db: number
+  attack_ms?: number
+  event_count?: number
+  test_mode?: TestMode
   reasoning: string
+}
+
+const ORNAMENTS = [
+  { id: 'ring',     label: 'Ring' },
+  { id: 'bangle',   label: 'Bangle' },
+  { id: 'chain',    label: 'Chain' },
+  { id: 'necklace', label: 'Necklace' },
+  { id: 'pendant',  label: 'Pendant' },
+  { id: 'earring',  label: 'Earring' },
+  { id: 'coin',     label: 'Coin/Bar' },
+]
+
+const TEST_MODES: Array<{ id: TestMode; label: string; hint: string }> = [
+  { id: 'tap', label: 'Tap', hint: 'Recommended for most jewellery' },
+  { id: 'drop', label: 'Short Drop', hint: 'Only sturdy rings, bangles, coins' },
+  { id: 'rattle', label: 'Link Rattle', hint: 'Chains and necklaces' },
+]
+
+function modeInstructions(mode: TestMode) {
+  if (mode === 'drop') {
+    return [
+      { step: 'Use only for sturdy rings, bangles, coins, or bars', note: 'Do not drop necklaces, earrings, stones, or delicate pieces' },
+      { step: 'Drop from only 2-3 cm onto marble, tile, or glass', note: 'Higher drops clip the mic and add surface noise' },
+      { step: 'Keep phone microphone close, around 10-20 cm', note: 'One or two short drops are enough' },
+      { step: 'If it fails, switch to Tap mode', note: 'Tap mode accepts softer impulse signatures' },
+    ]
+  }
+  if (mode === 'rattle') {
+    return [
+      { step: 'Hold the chain or necklace near the microphone', note: 'Do not drop it' },
+      { step: 'Gently tap or shake the links 3-5 times', note: 'Multiple small contact sounds are expected' },
+      { step: 'Use a hard table or tray if possible', note: 'Avoid cloth, carpet, or your palm' },
+      { step: 'Keep the room quiet', note: 'Voice and traffic reduce confidence' },
+    ]
+  }
+  return [
+    { step: 'Place or hold the ornament near a hard surface', note: 'Table, tile, marble, or glass works best' },
+    { step: 'Tap 3-5 times with fingernail, coin edge, or knuckle', note: 'This is safer for necklaces and earrings' },
+    { step: 'Keep phone microphone close, around 10-20 cm', note: 'A clear tap matters more than force' },
+    { step: 'Avoid cloth, carpet, sofa, or your palm', note: 'Soft surfaces remove the resonance' },
+  ]
 }
 
 export function AudioEval() {
@@ -48,6 +93,7 @@ export function AudioEval() {
   const sampleRateRef  = useRef(44100)
 
   const [ornamentType, setOrnamentType] = useState('unknown')
+  const [testMode, setTestMode]         = useState<TestMode>('tap')
   const [phase, setPhase]             = useState<Phase>('intro')
   const [secondsLeft, setSecondsLeft] = useState(0)
   const [result, setResult]           = useState<TapResult | null>(null)
@@ -114,7 +160,13 @@ export function AudioEval() {
       const res = await fetch(`${apiBase}/api/audio-eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ samples_b64: samplesB64, sample_rate: sampleRateRef.current, language: lang, ornament_type: ornamentType }),
+        body: JSON.stringify({
+          samples_b64: samplesB64,
+          sample_rate: sampleRateRef.current,
+          language: lang,
+          ornament_type: ornamentType,
+          test_mode: testMode,
+        }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data: TapResult = await res.json()
@@ -128,6 +180,8 @@ export function AudioEval() {
 
   const scoreColor = (s: number) => s >= 70 ? 'text-emerald-600' : s >= 45 ? 'text-amber-500' : 'text-red-500'
   const barColor   = (s: number) => s >= 70 ? 'bg-emerald-500' : s >= 45 ? 'bg-amber-400' : 'bg-red-400'
+  const instructions = modeInstructions(testMode)
+  const activeModeLabel = TEST_MODES.find(m => m.id === testMode)?.label ?? 'Tap'
 
   return (
     <div className="page bg-gradient-to-b from-stone-50 to-white overflow-y-auto">
@@ -158,9 +212,9 @@ export function AudioEval() {
                 <Mic className="w-8 h-8 text-white" />
               </div>
               <div className="text-center">
-                <p className="font-bold text-stone-900 text-lg">Drop Test — 10 Seconds</p>
+                <p className="font-bold text-stone-900 text-lg">Acoustic Test — 10 Seconds</p>
                 <p className="text-stone-600 text-sm mt-1 leading-relaxed">
-                  Drop the gold ornament from <strong>10–15 cm</strong> onto a hard surface. The drop creates the clearest resonance signature for solid gold authentication.
+                  Use a safe tap for necklaces, chains, and earrings. Use a short drop only for sturdy rings, bangles, coins, or bars.
                 </p>
               </div>
             </div>
@@ -169,15 +223,7 @@ export function AudioEval() {
             <div className="bg-white border border-stone-200 rounded-2xl p-4">
               <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">What ornament are you testing?</p>
               <div className="flex flex-wrap gap-2">
-                {[
-                  { id: 'ring',     label: 'Ring' },
-                  { id: 'bangle',   label: 'Bangle' },
-                  { id: 'chain',    label: 'Chain' },
-                  { id: 'necklace', label: 'Necklace' },
-                  { id: 'pendant',  label: 'Pendant' },
-                  { id: 'earring',  label: 'Earring' },
-                  { id: 'coin',     label: 'Coin/Bar' },
-                ].map(({ id, label }) => (
+                {ORNAMENTS.map(({ id, label }) => (
                   <button
                     key={id}
                     onClick={() => setOrnamentType(id)}
@@ -199,13 +245,31 @@ export function AudioEval() {
               )}
             </div>
 
+            <div className="bg-white border border-stone-200 rounded-2xl p-4">
+              <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">How will you excite the sound?</p>
+              <div className="grid grid-cols-3 gap-2">
+                {TEST_MODES.map(mode => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setTestMode(mode.id)}
+                    className={clsx(
+                      'min-h-[68px] rounded-2xl text-xs font-semibold border px-2 py-2 transition-all',
+                      testMode === mode.id
+                        ? 'bg-blue-600 border-blue-600 text-white'
+                        : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                    )}
+                  >
+                    <span className="block">{mode.label}</span>
+                    <span className={clsx('block text-[10px] leading-snug mt-1 font-medium', testMode === mode.id ? 'text-blue-100' : 'text-stone-400')}>
+                      {mode.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2.5">
-              {[
-                { step: 'Use marble, tile, or glass floor — must be hard', note: 'Carpet or cloth will muffle the ring' },
-                { step: 'Drop from 10–15 cm above the surface', note: 'Hold ornament by fingertips, let it fall naturally' },
-                { step: 'Works for rings, bangles, chains, earrings — any ornament', note: 'Larger pieces ring lower; smaller pieces ring higher' },
-                { step: 'Keep phone close (15–20 cm) and environment quiet', note: 'One clear drop is enough — can drop 2–3 times' },
-              ].map(({ step, note }, i) => (
+              {instructions.map(({ step, note }, i) => (
                 <div key={i} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
                   <div>
@@ -230,7 +294,7 @@ export function AudioEval() {
               onClick={() => navigate('/weight')}
               className="w-full btn-secondary text-sm flex items-center justify-center gap-2"
             >
-              <SkipForward className="w-4 h-4" /> Skip Drop Test — Continue
+              <SkipForward className="w-4 h-4" /> Skip Acoustic Test — Continue
             </button>
           </div>
         )}
@@ -247,7 +311,13 @@ export function AudioEval() {
             </div>
             <div className="text-center">
               <p className="text-stone-900 font-black text-4xl tabular-nums">{secondsLeft}s</p>
-              <p className="text-stone-500 text-sm mt-1.5">Drop the ornament on a hard surface now…</p>
+              <p className="text-stone-500 text-sm mt-1.5">
+                {testMode === 'drop'
+                  ? 'Use a short 2-3 cm drop now...'
+                  : testMode === 'rattle'
+                  ? 'Gently tap or rattle the links now...'
+                  : 'Tap the ornament 3-5 times now...'}
+              </p>
             </div>
             <div className="w-56 bg-stone-100 rounded-full h-2.5">
               <div
@@ -280,19 +350,19 @@ export function AudioEval() {
                   <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center">
                     <AlertCircle className="w-6 h-6 text-red-500" />
                   </div>
-                  <p className="font-bold text-red-800 text-base">Not a valid metal drop</p>
+                  <p className="font-bold text-red-800 text-base">Recording not usable</p>
                   <p className="text-sm text-red-700 leading-relaxed">{result.reject_reason}</p>
                 </div>
                 <button onClick={() => { setResult(null); setError(''); setPhase('intro') }} className="w-full btn-primary">
                   <Mic className="w-5 h-5" /> Try Again
                 </button>
                 <button onClick={() => navigate('/weight')} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
-                  <SkipForward className="w-4 h-4" /> Skip — Continue Without Drop Test
+                  <SkipForward className="w-4 h-4" /> Skip — Continue Without Acoustic Test
                 </button>
               </div>
             ) : result ? (
               <div className="bg-white border border-stone-200 rounded-3xl p-5 space-y-4">
-                <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold">Drop Test Result</p>
+                <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold">{activeModeLabel} Test Result</p>
 
                 <div className="flex items-center gap-4">
                   <div className="text-center">
@@ -311,9 +381,10 @@ export function AudioEval() {
                   {[
                     { label: 'Decay time',        value: `${result.decay_ms.toFixed(0)} ms`,                                          ref: '80–400 ms = gold' },
                     { label: 'Spectral centroid',  value: `${result.spectral_centroid_hz?.toFixed(0) ?? '—'} Hz`,                      ref: '300–800 Hz = gold' },
-                    { label: 'Gold-band energy',  value: result.gold_band_ratio != null ? `${(result.gold_band_ratio * 100).toFixed(0)}%` : '—', ref: '>40% = dense' },
+                    { label: 'Reference-band energy', value: result.gold_band_ratio != null ? `${(result.gold_band_ratio * 100).toFixed(0)}%` : '—', ref: 'higher = clearer' },
                     { label: 'Decay quality R²',  value: result.decay_r2 != null ? result.decay_r2.toFixed(2) : '—',                  ref: '>0.85 = clean ring' },
                     { label: 'Recording SNR',     value: result.snr_db != null ? `${result.snr_db.toFixed(0)} dB` : '—',              ref: '>15 dB = clear' },
+                    { label: 'Tap events',        value: result.event_count != null ? `${result.event_count}` : '—',                  ref: '2+ helps delicate pieces' },
                   ].map(({ label, value, ref }) => (
                     <div key={label} className="flex items-center justify-between text-xs">
                       <span className="text-stone-500">{label}</span>
@@ -337,7 +408,7 @@ export function AudioEval() {
               <>
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5">
                   <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <p className="text-xs font-semibold text-emerald-700">Drop test complete — next: Weight entry</p>
+                  <p className="text-xs font-semibold text-emerald-700">Acoustic test complete — next: Weight entry</p>
                 </div>
                 <button onClick={() => navigate('/weight')} className="w-full btn-primary">
                   Continue to Weight Entry <ChevronRight className="w-5 h-5" />

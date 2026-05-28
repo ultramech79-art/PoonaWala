@@ -18,6 +18,7 @@ import pickle
 from typing import Any, Optional
 
 import numpy as np
+from app.data.gold_physics import density_band_for_karat_range, density_for_karat
 
 logger = logging.getLogger("goldeye.workers.fusion")
 
@@ -126,9 +127,23 @@ def extract_features(signals: dict[str, Any]) -> dict[str, float]:
     }
 
 
+def extract_weight_context(signals: dict[str, Any]) -> dict[str, float]:
+    """Return deterministic non-model weight data used after karat is fused."""
+    s6 = signals.get("s6", {})
+    return {
+        "estimated_weight_low_g": float(s6.get("band_low_g", 0.0)),
+        "estimated_weight_high_g": float(s6.get("band_high_g", 0.0)),
+        "estimated_volume_cm3": float(s6.get("volume_cm3", 0.0)),
+        "volume_low_cm3": float(s6.get("volume_low_cm3", 0.0)),
+        "volume_high_cm3": float(s6.get("volume_high_cm3", 0.0)),
+        "weight_geometry_confidence": float(signals.get("s6_conf", 0.0)),
+    }
+
+
 def fuse(
     features: dict[str, float],
     manual_weight_g: Optional[float] = None,
+    weight_context: Optional[dict[str, float]] = None,
 ) -> dict[str, Any]:
     """
     Fuse features → karat + weight + value bands.
@@ -137,11 +152,18 @@ def fuse(
     _load_models()
 
     est_weight = features["estimated_weight_g"]
+    weight_context = weight_context or {
+        "estimated_weight_low_g": features.get("estimated_weight_low_g", 0.0),
+        "estimated_weight_high_g": features.get("estimated_weight_high_g", 0.0),
+        "estimated_volume_cm3": features.get("estimated_volume_cm3", 0.0),
+        "volume_low_cm3": features.get("volume_low_cm3", 0.0),
+        "volume_high_cm3": features.get("volume_high_cm3", 0.0),
+    }
     huid_verified = features["huid_verified"] > 0.5
 
     if _lgbm_model is not None and _mapie_model is not None:
-        return _lgbm_mapie_fuse(features, est_weight, huid_verified, manual_weight_g)
-    return _heuristic_fuse(features, est_weight, huid_verified, manual_weight_g)
+        return _lgbm_mapie_fuse(features, est_weight, huid_verified, manual_weight_g, weight_context)
+    return _heuristic_fuse(features, est_weight, huid_verified, manual_weight_g, weight_context)
 
 
 def _lgbm_mapie_fuse(
@@ -149,6 +171,7 @@ def _lgbm_mapie_fuse(
     est_weight: float,
     huid_verified: bool,
     manual_weight_g: Optional[float],
+    weight_context: Optional[dict] = None,
 ) -> dict:
     try:
         import pandas as pd
@@ -168,10 +191,11 @@ def _lgbm_mapie_fuse(
             manual_weight_g=manual_weight_g,
             huid_verified=huid_verified,
             calibration_method="split_conformal",
+            weight_context=weight_context,
         )
     except Exception as e:
         logger.warning(f"LGBM/MAPIE fuse failed: {e} — falling back to heuristic")
-        return _heuristic_fuse(features, est_weight, huid_verified, manual_weight_g)
+        return _heuristic_fuse(features, est_weight, huid_verified, manual_weight_g, weight_context)
 
 
 def _heuristic_fuse(
@@ -179,6 +203,7 @@ def _heuristic_fuse(
     est_weight: float,
     huid_verified: bool,
     manual_weight_g: Optional[float],
+    weight_context: Optional[dict] = None,
 ) -> dict:
     vlm_karat_mid   = features["vlm_karat_mid"]
     color_karat_mid = features.get("color_karat_mid", vlm_karat_mid)
@@ -211,6 +236,7 @@ def _heuristic_fuse(
         manual_weight_g=manual_weight_g,
         huid_verified=huid_verified,
         calibration_method="none",
+        weight_context=weight_context,
     )
 
 
@@ -222,10 +248,38 @@ def _build_result(
     manual_weight_g: Optional[float],
     huid_verified: bool,
     calibration_method: str,
+    weight_context: Optional[dict] = None,
 ) -> dict:
-    final_weight = (manual_weight_g * 0.7 + est_weight * 0.3) if manual_weight_g else est_weight
-    weight_lo = final_weight * 0.92
-    weight_hi = final_weight * 1.10
+    weight_context = weight_context or {}
+    density_point = density_for_karat(point_karat)
+    density_band = density_band_for_karat_range(karat_lo, karat_hi)
+
+    volume_mid = float(weight_context.get("estimated_volume_cm3") or 0.0)
+    volume_low = float(weight_context.get("volume_low_cm3") or 0.0)
+    volume_high = float(weight_context.get("volume_high_cm3") or 0.0)
+    if volume_mid > 0:
+        est_weight = volume_mid * density_point.mid
+        vision_lo = (volume_low or volume_mid * 0.75) * density_band.low
+        vision_hi = (volume_high or volume_mid * 1.35) * density_band.high
+    else:
+        vision_lo = float(weight_context.get("estimated_weight_low_g") or est_weight * 0.78)
+        vision_hi = float(weight_context.get("estimated_weight_high_g") or est_weight * 1.30)
+
+    if manual_weight_g:
+        final_weight = manual_weight_g * 0.70 + est_weight * 0.30
+        manual_lo = manual_weight_g * 0.96
+        manual_hi = manual_weight_g * 1.04
+        weight_lo = manual_lo * 0.70 + vision_lo * 0.30
+        weight_hi = manual_hi * 0.70 + vision_hi * 0.30
+    else:
+        final_weight = est_weight
+        weight_lo = vision_lo
+        weight_hi = vision_hi
+
+    weight_lo = min(weight_lo, final_weight * 0.985)
+    weight_hi = max(weight_hi, final_weight * 1.015)
+    weight_lo = max(0.2, weight_lo)
+    weight_hi = min(5000.0, weight_hi)
 
     purity_ratio = point_karat / 24
     value_per_g = GOLD_24K_PER_G * purity_ratio
@@ -245,4 +299,8 @@ def _build_result(
         "value_hi_inr": value_hi,
         "calibration_method": calibration_method,
         "huid_verified": huid_verified,
+        "density_g_cm3": round(density_point.mid, 3),
+        "density_lo_g_cm3": round(density_band.low, 3),
+        "density_hi_g_cm3": round(density_band.high, 3),
+        "volume_cm3": round(volume_mid, 4) if volume_mid > 0 else None,
     }

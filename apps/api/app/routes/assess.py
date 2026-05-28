@@ -39,7 +39,7 @@ from app.workers.s10_telemetry import run as run_s10
 from app.workers.s11_audio import run as run_s11
 from app.workers.s12_graph import run as run_s12
 from app.workers.s13_liveness import run as run_s13
-from app.workers.fusion import extract_features, fuse
+from app.workers.fusion import extract_features, extract_weight_context, fuse
 from app.xai.shap_explainer import explain
 from app.xai.text_generator import generate_reasoning, generate_counterfactual
 from app.xai.gradcam import generate_gradcam_url
@@ -71,7 +71,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         return s1, s2
 
     async def chain_seg_dimensions():
-        s5 = await run_s5(req.session_id, frames=req.frames)
+        s5 = await run_s5(req.session_id, frames=req.frames, reference_object=req.reference_object)
         s6 = await run_s6(req.session_id, frames=req.frames, weight_g=req.weight_g,
                           s5_payload=s5.payload)
         return s5, s6
@@ -112,7 +112,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         "s13": s13.payload if not s13.error else {}, "s13_conf": s13.confidence if not s13.error else 0.5,
     }
     features = extract_features(signals_dict)
-    fused = fuse(features, manual_weight_g=req.weight_g)
+    fused = fuse(features, manual_weight_g=req.weight_g, weight_context=extract_weight_context(signals_dict))
 
     huid_verified  = fused["huid_verified"]
     point_karat    = fused["point_karat"]

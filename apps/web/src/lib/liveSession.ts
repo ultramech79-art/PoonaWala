@@ -18,8 +18,18 @@ export interface AnalyzeResult {
 export interface TapTestResult {
   score: number
   label: string
+  valid?: boolean
+  reject_reason?: string | null
   decay_ms: number
   dominant_freq_hz: number
+  spectral_centroid_hz?: number
+  q_factor?: number
+  gold_band_ratio?: number
+  decay_r2?: number
+  snr_db?: number
+  attack_ms?: number
+  event_count?: number
+  test_mode?: string
   reasoning: string
 }
 
@@ -46,11 +56,23 @@ export async function analyzeFrame(
   return res.json()
 }
 
-export async function sendTapTest(samplesB64: string, sampleRate: number, language: 'en' | 'hi'): Promise<TapTestResult> {
-  const res = await fetch(`${apiBase}/api/live-session/tap-test`, {
+export async function sendTapTest(
+  samplesB64: string,
+  sampleRate: number,
+  language: 'en' | 'hi',
+  ornamentType = 'unknown',
+  testMode = 'tap',
+): Promise<TapTestResult> {
+  const res = await fetch(`${apiBase}/api/audio-eval`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ samples_b64: samplesB64, sample_rate: sampleRate, language }),
+    body: JSON.stringify({
+      samples_b64: samplesB64,
+      sample_rate: sampleRate,
+      language,
+      ornament_type: ornamentType,
+      test_mode: testMode,
+    }),
   })
   if (!res.ok) throw new Error('Tap test failed')
   return res.json()

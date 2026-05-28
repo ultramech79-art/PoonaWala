@@ -2,24 +2,64 @@
 Image utilities for GoldEye signal workers.
 
 fetch_image_bytes  — download or decode a frame URL to raw bytes
-detect_coin_hough  — OpenCV Hough circles to find a ₹10 coin (27mm reference)
-estimate_weight_from_bbox — volume→weight via density heuristic
+detect_coin_hough  — OpenCV Hough/contour detection for ₹10/₹20 scale coins
+estimate_weight_from_bbox — legacy volume→weight fallback
+estimate_volume_from_measurement — coin-anchored jewellery volume band
 """
 import base64
 import logging
 import math
-from io import BytesIO
 from typing import Optional
 
 import httpx
 import numpy as np
 
+from app.data.gold_physics import density_for_karat
+
 logger = logging.getLogger("goldeye.ml.image_utils")
 
-# ₹10 coin physical diameter in mm
-COIN_DIAMETER_MM = 27.0
-# 18–22K gold density range (g/cm³)
-GOLD_DENSITY_G_CM3 = 15.5
+# RBI/SPMCIL and Finance Ministry specifications. Both current ₹10 and ₹20
+# circulation coins are 27 mm across, so either can be used as the scale anchor.
+COIN_SPECS = {
+    "rs10_coin": {
+        "label": "Indian Rs 10 coin",
+        "diameter_mm": 27.0,
+        "weight_g": 7.71,
+        "shape": "circular",
+    },
+    "rs20_coin": {
+        "label": "Indian Rs 20 coin",
+        "diameter_mm": 27.0,
+        "weight_g": 8.54,
+        "shape": "dodecagonal",
+    },
+    "auto_coin": {
+        "label": "Indian Rs 10/Rs 20 coin",
+        "diameter_mm": 27.0,
+        "weight_g": None,
+        "shape": "circular_or_dodecagonal",
+    },
+}
+
+REFERENCE_OBJECT_ALIASES = {
+    "10": "rs10_coin",
+    "10rs": "rs10_coin",
+    "10_rupee": "rs10_coin",
+    "10_rupees": "rs10_coin",
+    "rs10": "rs10_coin",
+    "rs10_coin": "rs10_coin",
+    "rupee10_coin": "rs10_coin",
+    "20": "rs20_coin",
+    "20rs": "rs20_coin",
+    "20_rupee": "rs20_coin",
+    "20_rupees": "rs20_coin",
+    "rs20": "rs20_coin",
+    "rs20_coin": "rs20_coin",
+    "rupee20_coin": "rs20_coin",
+}
+
+# 22K default density is only used before purity fusion has run.
+GOLD_DENSITY_G_CM3 = density_for_karat(22).mid
 
 
 async def fetch_image_bytes(url: str) -> Optional[bytes]:
@@ -47,12 +87,22 @@ async def fetch_image_bytes(url: str) -> Optional[bytes]:
     return None
 
 
-def detect_coin_hough(img_bgr: np.ndarray) -> Optional[dict]:
-    """
-    Detect a circular coin in the image using Hough circle transform.
-    Returns {"radius_px": float, "center": (x, y), "px_per_mm": float} or None.
+def coin_spec(reference_object: str | None = None) -> dict:
+    key = REFERENCE_OBJECT_ALIASES.get((reference_object or "").strip().lower(), "auto_coin")
+    return {"key": key, **COIN_SPECS[key]}
 
-    Coin assumed to be the most prominent circle with reasonable size constraints.
+
+def detect_coin_hough(
+    img_bgr: np.ndarray,
+    reference_object: str | None = "rs10_coin",
+) -> Optional[dict]:
+    """
+    Detect a scale coin in the image.
+    Returns radius/center/px-per-mm metadata or None.
+
+    ₹10 is circular and ₹20 is a 12-edged polygon, but both are treated as a
+    27 mm outside diameter reference. Hough circles are tried first; contour
+    detection handles tilted or dodecagonal ₹20 coins.
     """
     try:
         import cv2
@@ -60,12 +110,15 @@ def detect_coin_hough(img_bgr: np.ndarray) -> Optional[dict]:
         logger.warning("opencv not available — skipping coin detection")
         return None
 
+    spec = coin_spec(reference_object)
+    diameter_mm = float(spec["diameter_mm"])
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     gray = cv2.medianBlur(gray, 5)
 
     h, w = gray.shape
     min_r = int(min(h, w) * 0.04)
     max_r = int(min(h, w) * 0.40)
+    candidates: list[dict] = []
 
     circles = cv2.HoughCircles(
         gray,
@@ -78,15 +131,79 @@ def detect_coin_hough(img_bgr: np.ndarray) -> Optional[dict]:
         maxRadius=max_r,
     )
 
-    if circles is None:
+    if circles is not None:
+        for c in np.round(circles[0]).astype(int):
+            cx, cy, r = int(c[0]), int(c[1]), int(c[2])
+            if r <= 0:
+                continue
+            candidates.append({
+                "center": (cx, cy),
+                "radius_px": float(r),
+                "diameter_px": float(r * 2),
+                "tilt_ratio": 1.0,
+                "method": "hough",
+                "confidence": 0.78,
+            })
+
+    # Contour fallback/validator. This is useful for the ₹20 dodecagon and for
+    # coins photographed at mild perspective where a circle appears elliptical.
+    edges = cv2.Canny(gray, 60, 160)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    img_area = float(h * w)
+    for cnt in contours:
+        area = float(cv2.contourArea(cnt))
+        if area < img_area * 0.003 or area > img_area * 0.35:
+            continue
+        perimeter = float(cv2.arcLength(cnt, True))
+        if perimeter <= 0:
+            continue
+        circularity = 4.0 * math.pi * area / (perimeter * perimeter)
+        if circularity < 0.52:
+            continue
+        (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+        if radius < min_r or radius > max_r:
+            continue
+
+        tilt_ratio = 1.0
+        diameter_px = radius * 2.0
+        if len(cnt) >= 5:
+            (_, _), (axis_a, axis_b), _ = cv2.fitEllipse(cnt)
+            major = max(float(axis_a), float(axis_b))
+            minor = max(1.0, min(float(axis_a), float(axis_b)))
+            tilt_ratio = max(0.45, min(1.0, minor / major))
+            # Use major axis: a tilted circular coin preserves real diameter
+            # along the direction least affected by foreshortening.
+            diameter_px = major
+        confidence = max(0.55, min(0.90, 0.42 + circularity * 0.45 + tilt_ratio * 0.10))
+        candidates.append({
+            "center": (int(round(cx)), int(round(cy))),
+            "radius_px": float(diameter_px / 2.0),
+            "diameter_px": float(diameter_px),
+            "tilt_ratio": float(tilt_ratio),
+            "method": "contour",
+            "confidence": float(confidence),
+        })
+
+    if not candidates:
         return None
 
-    circles = np.round(circles[0]).astype(int)
-    # Pick the circle with the highest radius (most likely the coin, not a stone)
-    best = sorted(circles, key=lambda c: c[2], reverse=True)[0]
-    cx, cy, r = best
-    px_per_mm = (r * 2) / COIN_DIAMETER_MM
-    return {"radius_px": float(r), "center": (int(cx), int(cy)), "px_per_mm": px_per_mm}
+    # Prefer large, confident candidates: stones/ring holes are usually smaller.
+    best = sorted(candidates, key=lambda c: (c["confidence"], c["radius_px"]), reverse=True)[0]
+    px_per_mm = best["diameter_px"] / diameter_mm
+    return {
+        "reference_object": spec["key"],
+        "reference_label": spec["label"],
+        "coin_diameter_mm": diameter_mm,
+        "coin_weight_g": spec["weight_g"],
+        "shape": spec["shape"],
+        "radius_px": round(float(best["radius_px"]), 3),
+        "diameter_px": round(float(best["diameter_px"]), 3),
+        "center": (int(best["center"][0]), int(best["center"][1])),
+        "px_per_mm": px_per_mm,
+        "tilt_ratio": round(float(best["tilt_ratio"]), 3),
+        "detection_method": best["method"],
+        "confidence": round(float(best["confidence"]), 3),
+    }
 
 
 def estimate_jewelry_bbox_px(
@@ -95,7 +212,7 @@ def estimate_jewelry_bbox_px(
 ) -> Optional[dict]:
     """
     Estimate jewelry bounding box using simple thresholding / contour detection.
-    Returns {"width_px", "height_px", "area_px2"} or None.
+    Returns geometry metadata or None.
     """
     try:
         import cv2
@@ -103,18 +220,211 @@ def estimate_jewelry_bbox_px(
         return None
 
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+
+    # Warm-metal mask catches yellow jewellery when lighting allows it. The Otsu
+    # branch below is kept for grayscale/synthetic/demo frames.
+    gold_mask = cv2.inRange(hsv, np.array([5, 35, 35]), np.array([45, 255, 255]))
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # Invert if background is dark
     if np.mean(thresh) > 127:
         thresh = cv2.bitwise_not(thresh)
+    mask = cv2.bitwise_or(thresh, gold_mask)
 
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if coin_result:
+        cx, cy = coin_result["center"]
+        radius = int(max(coin_result["radius_px"] * 1.15, 3))
+        cv2.circle(mask, (int(cx), int(cy)), radius, 0, -1)
+
+    kernel = np.ones((3, 3), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         return None
 
-    largest = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(largest)
-    return {"width_px": w, "height_px": h, "area_px2": w * h}
+    h_img, w_img = gray.shape
+    img_area = float(h_img * w_img)
+    kept = []
+    for cnt in contours:
+        area = float(cv2.contourArea(cnt))
+        if area < img_area * 0.001:
+            continue
+        if coin_result:
+            m = cv2.moments(cnt)
+            if m["m00"]:
+                cx = m["m10"] / m["m00"]
+                cy = m["m01"] / m["m00"]
+                ccx, ccy = coin_result["center"]
+                dist = math.hypot(cx - ccx, cy - ccy)
+                if dist < coin_result["radius_px"] * 1.20:
+                    continue
+        kept.append(cnt)
+
+    if not kept:
+        return None
+
+    all_points = np.vstack(kept)
+    x, y, w, h = cv2.boundingRect(all_points)
+    rect = cv2.minAreaRect(all_points)
+    (_, _), (rw, rh), angle = rect
+    major_px = float(max(rw, rh, w, h))
+    minor_px = float(max(1.0, min(max(rw, 1.0), max(rh, 1.0), max(w, 1.0), max(h, 1.0))))
+
+    component_area_px2 = float(sum(cv2.contourArea(c) for c in kept))
+    mask_area_px2 = float(cv2.countNonZero(mask[y:y + h, x:x + w]))
+    bbox_area_px2 = float(max(1, w * h))
+    fill_ratio = max(0.0, min(1.0, mask_area_px2 / bbox_area_px2))
+    external_area = max(component_area_px2, mask_area_px2, 1.0)
+    hollow_ratio = max(0.0, min(1.0, 1.0 - (mask_area_px2 / external_area)))
+
+    return {
+        "x_px": int(x),
+        "y_px": int(y),
+        "width_px": int(w),
+        "height_px": int(h),
+        "area_px2": int(round(mask_area_px2)),
+        "contour_area_px2": round(component_area_px2, 2),
+        "bbox_area_px2": int(round(bbox_area_px2)),
+        "major_axis_px": round(major_px, 3),
+        "minor_axis_px": round(minor_px, 3),
+        "rotated_rect_angle_deg": round(float(angle), 3),
+        "fill_ratio": round(fill_ratio, 4),
+        "hollow_ratio": round(hollow_ratio, 4),
+        "component_count": len(kept),
+    }
+
+
+def classify_jewelry_geometry(measurement: dict, px_per_mm: Optional[float]) -> str:
+    if not measurement:
+        return "unknown"
+    width = float(measurement.get("width_px", 0))
+    height = float(measurement.get("height_px", 0))
+    major = float(measurement.get("major_axis_px", max(width, height, 1.0)))
+    minor = float(measurement.get("minor_axis_px", max(1.0, min(width, height))))
+    aspect = major / max(minor, 1.0)
+    fill = float(measurement.get("fill_ratio", 0.5))
+    components = int(measurement.get("component_count", 1))
+
+    if components >= 4 or aspect >= 3.4:
+        return "chain_like"
+    if fill <= 0.42 and aspect <= 2.2:
+        return "ring_or_bangle"
+    if px_per_mm:
+        major_mm = major / px_per_mm
+        minor_mm = minor / px_per_mm
+        if major_mm >= 45 and minor_mm >= 18 and fill <= 0.62:
+            return "bangle_like"
+    return "compact_or_pendant"
+
+
+def estimate_volume_from_measurement(
+    measurement: Optional[dict],
+    px_per_mm: Optional[float],
+    coin_result: Optional[dict] = None,
+) -> dict:
+    """
+    Estimate jewellery volume from a top-view mask and coin scale.
+
+    The output is a volume band independent of karat. Fusion later applies
+    density for the estimated purity band.
+    """
+    if not measurement or px_per_mm is None or px_per_mm <= 0:
+        volume = 7.9 / GOLD_DENSITY_G_CM3
+        return {
+            "volume_cm3": round(volume, 4),
+            "volume_low_cm3": round(volume * 0.55, 4),
+            "volume_high_cm3": round(volume * 1.90, 4),
+            "method": "population_mean_volume",
+            "geometry_class": "unknown",
+            "confidence": 0.25,
+            "scale_uncertainty_pct": 0.35,
+        }
+
+    area_px2 = float(measurement.get("area_px2", 0.0))
+    major_px = float(measurement.get("major_axis_px", measurement.get("width_px", 0.0)))
+    minor_px = float(measurement.get("minor_axis_px", measurement.get("height_px", 0.0)))
+    if area_px2 <= 0 or major_px <= 0 or minor_px <= 0:
+        return estimate_volume_from_measurement(None, None)
+
+    area_mm2 = area_px2 / (px_per_mm * px_per_mm)
+    major_mm = major_px / px_per_mm
+    minor_mm = minor_px / px_per_mm
+    avg_visible_width_mm = area_mm2 / max(major_mm, 1.0)
+    geometry_class = classify_jewelry_geometry(measurement, px_per_mm)
+
+    if geometry_class == "chain_like":
+        thickness_mid = max(0.7, min(4.0, avg_visible_width_mm * 0.62))
+        thickness_low = max(0.4, thickness_mid * 0.55)
+        thickness_high = max(thickness_mid * 1.75, min(6.5, avg_visible_width_mm * 1.15))
+        form_low, form_mid, form_high = 0.45, 0.62, 0.78
+    elif geometry_class in ("ring_or_bangle", "bangle_like"):
+        thickness_mid = max(0.9, min(8.0, avg_visible_width_mm * 0.82))
+        thickness_low = max(0.55, thickness_mid * 0.62)
+        thickness_high = max(thickness_mid * 1.45, min(10.0, avg_visible_width_mm * 1.35))
+        form_low, form_mid, form_high = 0.62, 0.76, 0.90
+    else:
+        thickness_mid = max(0.6, min(5.5, min(minor_mm * 0.33, avg_visible_width_mm * 0.95)))
+        thickness_low = max(0.35, thickness_mid * 0.58)
+        thickness_high = max(thickness_mid * 1.60, min(7.5, avg_visible_width_mm * 1.50))
+        form_low, form_mid, form_high = 0.58, 0.74, 0.96
+
+    # Convert mm^3 to cm^3 by dividing by 1000.
+    volume_mid = area_mm2 * thickness_mid * form_mid / 1000.0
+    volume_low = area_mm2 * thickness_low * form_low / 1000.0
+    volume_high = area_mm2 * thickness_high * form_high / 1000.0
+
+    tilt = float((coin_result or {}).get("tilt_ratio", 1.0))
+    coin_conf = float((coin_result or {}).get("confidence", 0.72))
+    scale_uncertainty = 0.08
+    if tilt < 0.85:
+        scale_uncertainty += 0.07
+    if coin_conf < 0.65:
+        scale_uncertainty += 0.06
+
+    volume_low *= max(0.55, 1.0 - scale_uncertainty)
+    volume_high *= 1.0 + scale_uncertainty
+    confidence = max(0.35, min(0.86, 0.90 - scale_uncertainty - (0.08 if geometry_class == "unknown" else 0.0)))
+
+    return {
+        "volume_cm3": round(volume_mid, 4),
+        "volume_low_cm3": round(min(volume_low, volume_mid), 4),
+        "volume_high_cm3": round(max(volume_high, volume_mid), 4),
+        "top_area_mm2": round(area_mm2, 3),
+        "major_mm": round(major_mm, 3),
+        "minor_mm": round(minor_mm, 3),
+        "avg_visible_width_mm": round(avg_visible_width_mm, 3),
+        "thickness_mm": round(thickness_mid, 3),
+        "thickness_low_mm": round(thickness_low, 3),
+        "thickness_high_mm": round(thickness_high, 3),
+        "form_factor": form_mid,
+        "form_factor_low": form_low,
+        "form_factor_high": form_high,
+        "geometry_class": geometry_class,
+        "method": "coin_scaled_mask_volume",
+        "confidence": round(confidence, 3),
+        "scale_uncertainty_pct": round(scale_uncertainty, 3),
+    }
+
+
+def estimate_weight_range_from_volume(volume: dict, karat: float | int = 22) -> dict:
+    """Apply karat-aware density to a volume estimate."""
+    density = density_for_karat(karat)
+    mid_volume = float(volume.get("volume_cm3", 7.9 / GOLD_DENSITY_G_CM3))
+    low_volume = float(volume.get("volume_low_cm3", mid_volume * 0.65))
+    high_volume = float(volume.get("volume_high_cm3", mid_volume * 1.45))
+    estimate = mid_volume * density.mid
+    low = min(estimate, low_volume * density.low)
+    high = max(estimate, high_volume * density.high)
+    return {
+        "estimated_weight_g": round(estimate, 2),
+        "band_low_g": round(max(0.2, low), 2),
+        "band_high_g": round(min(5000.0, high), 2),
+        "density_g_cm3": density.mid,
+        "density_low_g_cm3": density.low,
+        "density_high_g_cm3": density.high,
+        "karat_for_density": float(karat),
+    }
 
 
 def estimate_weight_from_bbox(
@@ -129,9 +439,12 @@ def estimate_weight_from_bbox(
     if px_per_mm is None or px_per_mm <= 0:
         return 7.9  # population mean for Indian bangles (PRD §4.2)
 
+    if "area_px2" in bbox and "major_axis_px" in bbox:
+        volume = estimate_volume_from_measurement(bbox, px_per_mm)
+        return estimate_weight_range_from_volume(volume, karat=22)["estimated_weight_g"]
+
     w_mm = bbox["width_px"] / px_per_mm
     h_mm = bbox["height_px"] / px_per_mm
-    # Approximate solid volume as elliptical cross-section × thickness
     volume_cm3 = math.pi * (w_mm / 20) * (h_mm / 20) * (thickness_mm / 10)
     weight_g = volume_cm3 * GOLD_DENSITY_G_CM3
     # Clamp to plausible jewelry range
