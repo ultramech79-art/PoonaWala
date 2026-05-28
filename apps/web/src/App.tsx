@@ -17,7 +17,8 @@ import { Dashboard } from './pages/Dashboard'
 import { DashboardDetail } from './pages/DashboardDetail'
 import { FieldAgent } from './pages/FieldAgent'
 import { Confirmation } from './pages/Confirmation'
-import { VideoAudioEval } from './pages/VideoAudioEval'
+import { VideoEval } from './pages/VideoEval'
+import { AudioEval } from './pages/AudioEval'
 import { useSessionStore } from './store/session'
 
 function App() {
@@ -34,7 +35,8 @@ function App() {
           <Route path="/capture" element={<CaptureFlow />} />
           <Route path="/live-capture" element={<LiveCapture />} />
           <Route path="/certificate-scan" element={<CertificateScan />} />
-          <Route path="/video-eval" element={<VideoAudioEval />} />
+          <Route path="/video-eval" element={<VideoEval />} />
+          <Route path="/audio-eval" element={<AudioEval />} />
           <Route path="/weight" element={<WeightEntry />} />
           <Route path="/processing" element={<Processing />} />
           <Route path="/result" element={<Result />} />

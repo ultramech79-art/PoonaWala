@@ -7,10 +7,10 @@ import { Scale, ChevronRight, ArrowRight, AlertCircle, CheckCircle } from 'lucid
 export function WeightEntry() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { setWeight, setHuid } = useSessionStore()
+  const { state, setWeight, setHuid } = useSessionStore()
 
-  const [value, setValue] = useState('')
-  const [huid, setHuidValue] = useState('')
+  const [value, setValue] = useState(state.weightG?.toString() ?? state.certificateData?.weightG?.toString() ?? '')
+  const [huid, setHuidValue] = useState(state.huidCode ?? state.certificateData?.huid ?? '')
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [skipped, setSkipped] = useState(false)
 
@@ -33,7 +33,7 @@ export function WeightEntry() {
     <div className="page animate-slide-up">
       {/* Header */}
       <div className="page-header">
-        <button id="weight-back" onClick={() => navigate('/capture')} className="btn-icon">
+        <button id="weight-back" onClick={() => navigate('/video-eval')} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
         <span className="text-sm font-semibold text-stone-700">Weight Entry</span>
@@ -85,6 +85,7 @@ export function WeightEntry() {
             <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1.5">
               <CheckCircle className="w-3.5 h-3.5" />
               {grams}g entered — this improves accuracy significantly
+              {state.certificateData?.weightG === grams && <span className="ml-1">(from document)</span>}
             </p>
           )}
         </div>

@@ -23,22 +23,24 @@ const TUTORIAL_HINTS: Record<string, string> = {
 }
 
 export function TutorialOverlay({ stepType, onDismiss }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoRef   = useRef<HTMLVideoElement>(null)
+  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
   const [videoError, setVideoError] = useState(false)
   const [autoTimer, setAutoTimer] = useState(4)
 
-  // Placeholder video path — replace with real tutorial videos when ready
   const videoSrc = `/assets/tutorial/${stepType}.mp4`
 
-  // Auto-dismiss after 4 seconds (or when video ends)
+  const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } }
+
+  // Auto-dismiss after 4 seconds — cleared when video ends early
   useEffect(() => {
-    const iv = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setAutoTimer(t => {
-        if (t <= 1) { clearInterval(iv); onDismiss(); return 0 }
+        if (t <= 1) { clearTimer(); onDismiss(); return 0 }
         return t - 1
       })
     }, 1000)
-    return () => clearInterval(iv)
+    return clearTimer
   }, [onDismiss])
 
   return (
@@ -70,7 +72,7 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
               muted
               playsInline
               loop={false}
-              onEnded={onDismiss}
+              onEnded={() => { clearTimer(); onDismiss() }}
               onError={() => setVideoError(true)}
             />
           ) : (

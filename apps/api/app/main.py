@@ -29,6 +29,9 @@ from app.routes.poonawalla_deals import router as deals_router
 from app.routes.gold_price_regional import router as regional_price_router
 from app.routes.certificate_ocr import router as certificate_ocr_router
 from app.routes.guided_session import router as guided_session_router
+from app.routes.live_session import router as live_session_router
+from app.routes.video_eval import router as video_eval_router
+from app.routes.audio_eval import router as audio_eval_router
 from app.decision.ibja import price_metadata, _refresh_async
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -93,16 +96,19 @@ async def add_trace_id(request: Request, call_next):
 
 
 # ─── Routes ────────────────────────────────────────────────────────────────────
-app.include_router(session_router, prefix="/session", tags=["Session"])
-app.include_router(assess_router, prefix="/api", tags=["Assessment"])
-app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"])
-app.include_router(frame_eval_router, tags=["FrameEval"])
-app.include_router(otp_router, tags=["OTP"])
-app.include_router(prices_router, prefix="/api", tags=["Assessment"])
-app.include_router(deals_router, prefix="/api", tags=["Deals"])
-app.include_router(regional_price_router, prefix="/api", tags=["Prices"])
-app.include_router(certificate_ocr_router, prefix="/api", tags=["OCR"])
-app.include_router(guided_session_router, prefix="/api", tags=["GuidedSession"])
+app.include_router(session_router,        prefix="/session",       tags=["Session"])
+app.include_router(assess_router,         prefix="/api",           tags=["Assessment"])
+app.include_router(dashboard_router,      prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(frame_eval_router,                              tags=["FrameEval"])
+app.include_router(otp_router,                                     tags=["OTP"])
+app.include_router(prices_router,         prefix="/api",           tags=["Assessment"])
+app.include_router(deals_router,          prefix="/api",           tags=["Deals"])
+app.include_router(regional_price_router, prefix="/api",           tags=["Prices"])
+app.include_router(certificate_ocr_router,prefix="/api",           tags=["OCR"])
+app.include_router(guided_session_router, prefix="/api",           tags=["GuidedSession"])
+app.include_router(live_session_router,   prefix="/api",           tags=["LiveSession"])
+app.include_router(video_eval_router,     prefix="/api",           tags=["VideoEval"])
+app.include_router(audio_eval_router,     prefix="/api",           tags=["AudioEval"])
 
 
 @app.get("/health", tags=["Infra"])
