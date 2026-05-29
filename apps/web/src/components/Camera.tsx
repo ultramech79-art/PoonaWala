@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { clsx } from 'clsx'
-import { Camera as CameraIcon, Video, Mic, RotateCcw, Music, CheckCircle } from 'lucide-react'
+import { Camera as CameraIcon, Video, RotateCcw, Music, CheckCircle } from 'lucide-react'
 import type { CaptureType } from '../store/session'
 
 type MotionSample = { x: number; y: number; z: number; t: number }
@@ -58,16 +58,6 @@ function quickQualityCheck(canvas: HTMLCanvasElement): QualityResult {
   return { ok: reasons.length === 0, reasons, score }
 }
 
-// Browser TTS helper for live guidance
-function speak(text: string) {
-  if (!('speechSynthesis' in window)) return
-  window.speechSynthesis.cancel()
-  const u = new SpeechSynthesisUtterance(text)
-  u.lang = localStorage.getItem('goldeye_lang') === 'hi' ? 'hi-IN' : 'en-US'
-  u.rate = 1.05
-  u.pitch = 1.0
-  window.speechSynthesis.speak(u)
-}
 
 interface CameraProps {
   type: CaptureType
@@ -92,10 +82,6 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const qualityRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [guidanceText, setGuidanceText] = useState<string>('Point camera at jewelry…')
-
-  const liveWsRef = useRef<WebSocket | null>(null)
-  const lastGuidanceRef = useRef<number>(0)
   const hasAutoStarted = useRef(false)
 
   const startCamera = useCallback(async () => {
@@ -115,51 +101,15 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
       await new Promise(r => setTimeout(r, 50))
       try { await video.play() } catch (_) {}
 
-      // Start Live Guidance WebSocket
       if (!isVideo && !isAudio) {
-        const originUrl = (import.meta.env.VITE_API_URL as string) || window.location.origin
-        const wsUrl = new URL(originUrl)
-        wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-        wsUrl.pathname = '/api/ws/live-guidance'
-        
-        const ws = new WebSocket(wsUrl.toString())
-        ws.onmessage = (e) => {
-          try {
-            const data = JSON.parse(e.data)
-            if (data.text) {
-              setGuidanceText(data.text)
-              speak(data.text)
-            }
-          } catch {
-            // binary audio data — ignore for now
-          }
-        }
-        liveWsRef.current = ws
-
         qualityRef.current = setInterval(() => {
           const v = videoRef.current
           const c = canvasRef.current
-          const ws = liveWsRef.current
           if (!v || !c || v.videoWidth <= 0) return
-          
           c.width = v.videoWidth
           c.height = v.videoHeight
-          const ctx = c.getContext('2d')!
-          ctx.drawImage(v, 0, 0)
-          
-          const q = quickQualityCheck(c)
-          setQuality(q)
-
-          // Send to Poonawala AI for Live Guidance every 2s
-          if (ws && ws.readyState === WebSocket.OPEN && Date.now() - lastGuidanceRef.current > 2000) {
-            lastGuidanceRef.current = Date.now()
-            // Send smaller frame for guidance to save bandwidth
-            const thumb = document.createElement('canvas')
-            thumb.width = 320; thumb.height = 240
-            thumb.getContext('2d')!.drawImage(c, 0, 0, 320, 240)
-            const b64 = thumb.toDataURL('image/jpeg', 0.5).split(',')[1]
-            ws.send(JSON.stringify({ image_b64: b64 }))
-          }
+          c.getContext('2d')!.drawImage(v, 0, 0)
+          setQuality(quickQualityCheck(c))
         }, 500)
       }
     } catch (e: any) {
@@ -170,10 +120,6 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
 
   const stopCamera = useCallback(() => {
     if (qualityRef.current) clearInterval(qualityRef.current)
-    if (liveWsRef.current) {
-      liveWsRef.current.close()
-      liveWsRef.current = null
-    }
     mediaRef.current?.getTracks().forEach(t => t.stop())
     mediaRef.current = null
   }, [])
@@ -409,14 +355,6 @@ export function Camera({ type, onCapture, onError, facingMode = 'environment', i
               </div>
             )}
           </div>
-
-          {/* Poonawala AI Guidance */}
-          {!isVideo && !isAudio && (
-            <div className="absolute -bottom-1 left-4 right-4 py-2.5 px-4 rounded-b-2xl flex items-center gap-2 text-xs font-bold bg-black/70 text-white border border-white/20 backdrop-blur-md">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-              <span className="truncate">{guidanceText}</span>
-            </div>
-          )}
 
           {/* Capture / Record button */}
           <div className="flex flex-col items-center gap-3 mt-6">
