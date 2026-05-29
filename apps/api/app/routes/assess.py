@@ -39,6 +39,7 @@ from app.workers.s10_telemetry import run as run_s10
 from app.workers.s11_audio import run as run_s11
 from app.workers.s12_graph import run as run_s12
 from app.workers.s13_liveness import run as run_s13
+from app.workers.s14_item_consistency import run as run_s14
 from app.workers.fusion import extract_features, extract_weight_context, fuse
 from app.xai.shap_explainer import explain
 from app.xai.text_generator import generate_reasoning, generate_counterfactual
@@ -77,7 +78,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         return s5, s6
 
     # Fan-out: all 13 signals in parallel (mini-chains preserve ordering within them)
-    (s1, s2), (s5, s6), s3, s4, s7, s8, s9, s10, s11, s13 = await asyncio.gather(
+    (s1, s2), (s5, s6), s3, s4, s7, s8, s9, s10, s11, s13, s14 = await asyncio.gather(
         chain_huid_hallmark(),
         chain_seg_dimensions(),
         run_s3(req.session_id, frames=req.frames),
@@ -88,6 +89,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         run_s10(req.session_id, device_metadata=req.device_metadata),
         run_s11(req.session_id, audio_url=req.audio),
         run_s13(req.session_id, selfie_url=req.selfie),
+        run_s14(req.session_id, frames=req.frames),
         return_exceptions=False,
     )
 
@@ -110,6 +112,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         "s11": s11.payload if not s11.error else {}, "s11_conf": s11.confidence if not s11.error else 0.0,
         "s12": s12.payload if not s12.error else {}, "s12_conf": s12.confidence if not s12.error else 0.0,
         "s13": s13.payload if not s13.error else {}, "s13_conf": s13.confidence if not s13.error else 0.5,
+        "s14": s14.payload if not s14.error else {}, "s14_conf": s14.confidence if not s14.error else 0.0,
     }
     features = extract_features(signals_dict)
     fused = fuse(features, manual_weight_g=req.weight_g, weight_context=extract_weight_context(signals_dict))
@@ -146,6 +149,8 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
     catalog_match = features["catalog_match_score"]
     graph_anomaly = features["graph_anomaly_score"]
     specular_score = features["specular_metal_score"]
+    item_mismatch_score = float((s14.payload if not s14.error else {}).get("item_mismatch_score", 0.0))
+    same_item_mismatch = bool((s14.payload if not s14.error else {}).get("same_item_mismatch", False))
 
     # Gemini signals (S7 + S11) weighted higher as they directly detect fake/plated gold
     fraud_score = min(1.0, max(0.0,
@@ -156,6 +161,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         tele_anomaly        * 0.05  +  # S10: Weak signal (down from 0.20)
         graph_anomaly       * 0.05     # S12: Edge case (down from 0.15)
     ))
+    fraud_score = min(1.0, max(fraud_score, item_mismatch_score * 0.85 if same_item_mismatch else fraud_score))
 
     fraud_triggers = []
     if solid_prob < 0.5:    fraud_triggers.append("plated_metal_suspected")
@@ -163,6 +169,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
     if specular_score < 0.35: fraud_triggers.append("non_gold_specular_signature")
     if catalog_match >= 0.85: fraud_triggers.append("catalog_stock_photo_match")
     if graph_anomaly >= 0.4:  fraud_triggers.append("cross_session_reuse_detected")
+    if same_item_mismatch:     fraud_triggers.append("same_item_mismatch")
 
     # ── Improved Base Confidence (Weighted by Signal Importance) ──────────────────
     s1_conf = s1.confidence if not s1.error else 0.3

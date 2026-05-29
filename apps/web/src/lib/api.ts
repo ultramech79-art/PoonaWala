@@ -95,10 +95,27 @@ export interface FrameEvalResult {
   feedback: string
   issues: string[]
   detected: Record<string, unknown>
+  same_item?: {
+    same_item: boolean | null
+    verdict: 'same' | 'different' | 'inconclusive'
+    same_item_score: number
+    confidence: number
+    method: string
+    matching_signals: string[]
+    mismatch_reasons: string[]
+  } | null
+  asset?: Record<string, unknown> | null
+}
+
+export interface EvaluateFrameOptions {
+  sessionId?: string | null
+  referenceFrameType?: string
+  referenceImageDataUrl?: string | null
+  referenceImageUrl?: string | null
 }
 
 // WebSocket-based evaluation (primary — avoids HTTP proxy timeouts)
-function evaluateFrameWS(frameType: string, imageDataUrl: string): Promise<FrameEvalResult> {
+function evaluateFrameWS(frameType: string, imageDataUrl: string, options: EvaluateFrameOptions = {}): Promise<FrameEvalResult> {
   return new Promise((resolve, reject) => {
     const originUrl = BASE ? BASE : window.location.origin
     const wsUrl = new URL(originUrl)
@@ -113,7 +130,14 @@ function evaluateFrameWS(frameType: string, imageDataUrl: string): Promise<Frame
     }, 30000) // Increased to 30s as requested
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ frame_type: frameType, image_data_url: imageDataUrl }))
+      ws.send(JSON.stringify({
+        frame_type: frameType,
+        image_data_url: imageDataUrl,
+        session_id: options.sessionId ?? undefined,
+        reference_frame_type: options.referenceFrameType ?? 'top',
+        reference_image_data_url: options.referenceImageDataUrl ?? undefined,
+        reference_image_url: options.referenceImageUrl ?? undefined,
+      }))
     }
 
     ws.onmessage = (event) => {
@@ -139,20 +163,24 @@ function evaluateFrameWS(frameType: string, imageDataUrl: string): Promise<Frame
 }
 
 // HTTP POST fallback (works everywhere, slightly slower)
-function evaluateFrameHTTP(frameType: string, imageDataUrl: string, timeoutMs = 45000): Promise<FrameEvalResult> {
+function evaluateFrameHTTP(frameType: string, imageDataUrl: string, timeoutMs = 45000, options: EvaluateFrameOptions = {}): Promise<FrameEvalResult> {
   return post('/api/evaluate-frame', {
     frame_type: frameType,
     image_data_url: imageDataUrl,
+    session_id: options.sessionId ?? undefined,
+    reference_frame_type: options.referenceFrameType ?? 'top',
+    reference_image_data_url: options.referenceImageDataUrl ?? undefined,
+    reference_image_url: options.referenceImageUrl ?? undefined,
   }, timeoutMs)
 }
 
 // Primary export: tries WS, falls back to HTTP
-export async function evaluateFrameAPI(frameType: string, imageDataUrl: string, timeoutMs = 45000): Promise<FrameEvalResult> {
+export async function evaluateFrameAPI(frameType: string, imageDataUrl: string, timeoutMs = 45000, options: EvaluateFrameOptions = {}): Promise<FrameEvalResult> {
   try {
-    return await evaluateFrameWS(frameType, imageDataUrl)
+    return await evaluateFrameWS(frameType, imageDataUrl, options)
   } catch {
     console.warn('[evaluateFrame] WebSocket failed, falling back to HTTP POST')
-    return evaluateFrameHTTP(frameType, imageDataUrl, timeoutMs)
+    return evaluateFrameHTTP(frameType, imageDataUrl, timeoutMs, options)
   }
 }
 

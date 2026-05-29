@@ -84,7 +84,7 @@ class AssessmentResult(BaseModel):
 
 class AssessRequest(BaseModel):
     session_id: str = Field(..., min_length=1)
-    frames: list[str] = Field(..., min_length=1, max_length=20)  # Signed R2/MinIO URLs or data URIs
+    frames: list[str] = Field(..., min_items=1, max_items=20)  # Signed R2/MinIO URLs or data URIs
     video: Optional[str] = None
     audio: Optional[str] = None
     selfie: Optional[str] = None

@@ -41,7 +41,7 @@ function speak(text: string) {
 export function CaptureFlow() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { addCapture, state, setScannedKarat, setHuid } = useSessionStore()
+  const { addCapture, state, setScannedKarat, setHuid, initSession } = useSessionStore()
 
   const STEPS: Step[] = [
     {
@@ -102,6 +102,7 @@ export function CaptureFlow() {
   const step = STEPS[stepIdx]
   const currentEval = evals[stepIdx]
   const evalState = currentEval?.state ?? 'idle'
+  const sameItemMismatch = currentEval?.result?.issues?.includes('same_item_mismatch') ?? false
 
   useEffect(() => {
     if (spokenStep.current === stepIdx) return
@@ -130,14 +131,25 @@ export function CaptureFlow() {
     try {
       const optimizedDataUrl = await resizeDataUrl(dataUrl, 1024, 0.8)
       
+      const sessionId = state.sessionId || initSession()
+      const referenceImageDataUrl =
+        step.type === 'top'
+          ? undefined
+          : (state.captures.top?.dataUrl || evals[0]?.dataUrl)
+      const evalOptions = {
+        sessionId,
+        referenceFrameType: 'top',
+        referenceImageDataUrl,
+      }
+
       let result;
       try {
-        result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000)
+        result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000, evalOptions)
       } catch (e) {
         console.warn('[CaptureFlow] First evaluation attempt failed, retrying...', e)
         // Automatic retry once after 2 seconds
         await new Promise(r => setTimeout(r, 2000))
-        result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000)
+        result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000, evalOptions)
       }
 
       if (step.type === 'macro' && result.detected?.karat_numeric && typeof result.detected.karat_numeric === 'number') {
@@ -159,7 +171,7 @@ export function CaptureFlow() {
       }))
       speak(fallback)
     }
-  }, [step, stepIdx, addCapture, setScannedKarat])
+  }, [step, stepIdx, addCapture, setScannedKarat, state.sessionId, state.captures.top, evals, initSession])
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
@@ -203,8 +215,8 @@ export function CaptureFlow() {
 
   const skip = () => { if (step.optional) { speak(t('speak_skip')); next() } }
 
-  const hasManualHuidOverride = step.type === 'macro' && !!manualHuid
-  const canProceed = evalState === 'approved' || step.optional || (evalState === 'rejected' && hasManualHuidOverride)
+  const hasManualHuidOverride = step.type === 'macro' && !!manualHuid && !sameItemMismatch
+  const canProceed = !sameItemMismatch && (evalState === 'approved' || step.optional || (evalState === 'rejected' && hasManualHuidOverride))
 
   return (
     <div className="page animate-fade-in overflow-y-auto relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">

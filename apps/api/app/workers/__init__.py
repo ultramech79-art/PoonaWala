@@ -11,6 +11,7 @@ from .s7_plated_solid import run as s7_plated_solid
 from .s8_vlm import run as s8_vlm
 from .s10_telemetry import run as s10_telemetry
 from .s11_audio import run as s11_audio
+from .s14_item_consistency import run as s14_item_consistency
 
 ACTIVE_WORKERS = {
     "s1_huid_ocr":       s1_huid,
@@ -21,6 +22,7 @@ ACTIVE_WORKERS = {
     "s8_vlm_holistic":   s8_vlm,
     "s10_telemetry":     s10_telemetry,
     "s11_audio_pingcoin": s11_audio,
+    "s14_item_consistency": s14_item_consistency,
 }
 
 __all__ = list(ACTIVE_WORKERS.keys()) + ["ACTIVE_WORKERS"]

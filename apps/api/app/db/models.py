@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, BigInteger
+from sqlalchemy import Column, Integer, String, DateTime, func, BigInteger, Float, LargeBinary
 from .database import Base
 
 class HuidNode(Base):
@@ -18,6 +18,36 @@ class PhashNode(Base):
     # Python ints can be larger than 64-bit, but pHashes are exactly 64-bit uints.
     # String is safer across DBs if signedness is an issue.
     phash = Column(String, index=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ImageAsset(Base):
+    __tablename__ = "image_assets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String, index=True, nullable=False)
+    frame_type = Column(String, index=True, nullable=False)
+    storage_path = Column(String, nullable=True)
+    public_url = Column(String, nullable=True)
+    content_sha256 = Column(String, index=True, nullable=False)
+    phash = Column(String, index=True, nullable=True)
+    width_px = Column(Integer, nullable=True)
+    height_px = Column(Integer, nullable=True)
+    same_item_score = Column(Float, nullable=True)
+    same_item_verdict = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ImageBlob(Base):
+    __tablename__ = "image_blobs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    asset_id = Column(Integer, index=True, nullable=True)
+    session_id = Column(String, index=True, nullable=False)
+    frame_type = Column(String, index=True, nullable=False)
+    content_type = Column(String, default="image/jpeg")
+    size_bytes = Column(Integer, nullable=False)
+    image_bytes = Column(LargeBinary, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

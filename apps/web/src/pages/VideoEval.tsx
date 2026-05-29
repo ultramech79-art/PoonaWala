@@ -45,11 +45,17 @@ interface VideoResult {
   video_signals: string[]
   purity_estimate: string | null
   guidance: string
+  same_item?: {
+    verdict: 'same' | 'different' | 'inconclusive'
+    confidence: number
+    same_item_score: number
+    mismatch_reasons: string[]
+  } | null
 }
 
 export function VideoEval() {
   const navigate = useNavigate()
-  const { setLiveAuthResult, addCapture } = useSessionStore()
+  const { setLiveAuthResult, addCapture, state } = useSessionStore()
   const lang = (localStorage.getItem('goldeye_lang') ?? 'en') as 'en' | 'hi'
 
   const videoRef  = useRef<HTMLVideoElement>(null)
@@ -120,7 +126,13 @@ export function VideoEval() {
       const res = await fetch(`${apiBase}/api/video-eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frames_b64: framesRef.current, language: lang }),
+        body: JSON.stringify({
+          frames_b64: framesRef.current,
+          language: lang,
+          session_id: state.sessionId ?? undefined,
+          reference_image_data_url: state.captures.top?.dataUrl ?? null,
+          reference_frame_type: 'top',
+        }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data = await res.json()

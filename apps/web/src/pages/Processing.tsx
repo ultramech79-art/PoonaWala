@@ -307,7 +307,8 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const sessionId = state.sessionId ?? 'demo'
   const weightG = state.certificateData?.weightG ?? state.weightG
   const captureTypes = Object.keys(state.captures) as (keyof typeof state.captures)[]
-  const photoTypes = captureTypes.filter(k => k !== 'audio' && k !== 'video' && k !== 'selfie' && k !== 'certificate')
+  const orderedPhotoTypes = ['top', '45deg', 'side', 'macro'] as const
+  const photoTypes = orderedPhotoTypes.filter(k => Boolean(state.captures[k]))
   const frames = await Promise.all(photoTypes.map(async k => {
     const cap = state.captures[k as keyof typeof state.captures]
     const url = cap?.dataUrl
@@ -345,6 +346,7 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
         lang: state.lang ?? 'en',
         device_metadata: {
           capture_count: captureTypes.length,
+          frame_types: [...photoTypes, ...videoFrames.map((_, i) => `video_${i}`)],
           ua: navigator.userAgent,
           manual_huid: state.huidCode ?? state.certificateData?.huid ?? undefined,
           certificate_karat: state.certificateData?.karat ?? undefined,

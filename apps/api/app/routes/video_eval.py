@@ -58,6 +58,8 @@ from app.data.gemini import (
     parse_json_response,
 )
 from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
+from app.data.capture_assets import store_capture_asset
+from app.data.item_match import compare_item_images, is_blocking_mismatch
 
 logger = logging.getLogger("goldeye.video_eval")
 router = APIRouter()
@@ -66,6 +68,9 @@ router = APIRouter()
 class VideoEvalRequest(BaseModel):
     frames_b64: list[str]
     language: str = "en"
+    session_id: Optional[str] = None
+    reference_image_data_url: Optional[str] = None
+    reference_frame_type: str = "top"
 
 
 class VideoEvalResponse(BaseModel):
@@ -79,6 +84,7 @@ class VideoEvalResponse(BaseModel):
     video_signals: list[str]
     purity_estimate: Optional[str]
     guidance: str
+    same_item: Optional[dict] = None
 
 
 @router.post("/video-eval", response_model=VideoEvalResponse)
@@ -265,6 +271,38 @@ Return ONLY valid JSON:
     if red_flags: signals.append("⚠ " + "; ".join(red_flags))
     if pos_sigs:  signals.append("✓ " + "; ".join(pos_sigs))
 
+    same_item_summary = None
+    if req.reference_image_data_url:
+        comparisons = []
+        for b64 in req.frames_b64[:2]:
+            item_result = await compare_item_images(
+                req.reference_image_data_url,
+                f"data:image/jpeg;base64,{b64}",
+                reference_frame_type=req.reference_frame_type,
+                candidate_frame_type="video",
+            )
+            comparisons.append(item_result)
+        mismatches = [item for item in comparisons if is_blocking_mismatch(item)]
+        if mismatches:
+            strongest = sorted(mismatches, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
+            same_item_summary = strongest
+            video_score = min(video_score, 35)
+            signals.insert(0, "Different jewelry item detected compared with the top-view photo")
+        elif comparisons:
+            same_item_summary = sorted(comparisons, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
+
+    if req.session_id:
+        for idx, b64 in enumerate(req.frames_b64[:3]):
+            try:
+                await store_capture_asset(
+                    req.session_id,
+                    f"video_{idx}",
+                    f"data:image/jpeg;base64,{b64}",
+                    same_item=same_item_summary,
+                )
+            except Exception as exc:
+                logger.warning(f"video_eval asset store failed: {exc}")
+
     verdict = (
         "Likely solid gold"                          if video_score >= 70 else
         "Uncertain — further verification advised"   if video_score >= 50 else
@@ -276,6 +314,8 @@ Return ONLY valid JSON:
             "अनिश्चित"              if video_score >= 50 else
             "संभवतः गोल्ड-प्लेटेड"
         )
+    if same_item_summary and same_item_summary.get("verdict") == "different":
+        verdict = "Different jewelry item detected" if req.language == "en" else "अलग गहना मिला"
 
     logger.info(
         f"video_eval score={video_score} wear={wear_score} edge={edge_substrate_score} "
@@ -293,6 +333,7 @@ Return ONLY valid JSON:
         video_signals=signals,
         purity_estimate=res.get("purity_estimate") or None,
         guidance=str(res.get("guidance", "")),
+        same_item=same_item_summary,
     )
 
 
@@ -338,4 +379,5 @@ def _error(msg: str, lang: str) -> VideoEvalResponse:
         surface_originality_score=0, hue_score=0,
         video_signals=[msg], purity_estimate=None,
         guidance="Please try again." if lang == "en" else "कृपया पुनः प्रयास करें।",
+        same_item=None,
     )

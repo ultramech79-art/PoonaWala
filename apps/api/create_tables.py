@@ -1,6 +1,6 @@
 import asyncio
 from app.db.database import engine, Base
-from app.db.models import HuidNode, PhashNode
+from app.db.models import HuidNode, PhashNode, ImageAsset, ImageBlob
 
 async def create_tables():
     async with engine.begin() as conn:

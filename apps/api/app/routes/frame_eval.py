@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from app.data.gemini import evaluate_frame, evaluate_live_guidance_frame
 from app.data.image_utils import fetch_image_bytes
+from app.data.capture_assets import store_capture_asset
+from app.data.item_match import COMPARE_FRAME_TYPES, compare_item_images, is_blocking_mismatch
 
 router = APIRouter()
 logger = logging.getLogger("goldeye.frame_eval")
@@ -21,6 +23,10 @@ class FrameEvalRequest(BaseModel):
     frame_type: str
     image_data_url: Optional[str] = None
     image_url: Optional[str] = None
+    session_id: Optional[str] = None
+    reference_frame_type: str = "top"
+    reference_image_data_url: Optional[str] = None
+    reference_image_url: Optional[str] = None
 
 
 class FrameEvalResponse(BaseModel):
@@ -29,6 +35,8 @@ class FrameEvalResponse(BaseModel):
     feedback: str
     issues: list
     detected: dict
+    same_item: Optional[dict] = None
+    asset: Optional[dict] = None
 
 
 def _extract_data_url_b64(image_data_url: Optional[str]) -> Optional[str]:
@@ -37,6 +45,66 @@ def _extract_data_url_b64(image_data_url: Optional[str]) -> Optional[str]:
     if "," in image_data_url:
         return image_data_url.split(",", 1)[1]
     return image_data_url
+
+
+def _candidate_data_url(image_b64: str) -> str:
+    return f"data:image/jpeg;base64,{image_b64}"
+
+
+async def _evaluate_compare_store(
+    *,
+    frame_type: str,
+    image_b64: str,
+    image_source: str,
+    session_id: Optional[str],
+    reference_frame_type: str = "top",
+    reference_image_data_url: Optional[str] = None,
+    reference_image_url: Optional[str] = None,
+) -> FrameEvalResponse:
+    result = await evaluate_frame(image_b64, frame_type)
+    detected = result.get("detected", {}) or {}
+    issues = list(result.get("issues", []) or [])
+    approved = bool(result.get("approved", True))
+    feedback = result.get("feedback", "Image captured")
+    quality_score = float(result.get("quality_score", 0.5))
+
+    same_item = None
+    reference_source = reference_image_data_url or reference_image_url
+    if reference_source and frame_type in COMPARE_FRAME_TYPES:
+        same_item = await compare_item_images(
+            reference_source,
+            image_source,
+            reference_frame_type=reference_frame_type or "top",
+            candidate_frame_type=frame_type,
+        )
+        detected["same_item"] = same_item
+        if is_blocking_mismatch(same_item):
+            approved = False
+            quality_score = min(quality_score, 0.35)
+            if "same_item_mismatch" not in issues:
+                issues.append("same_item_mismatch")
+            reasons = same_item.get("mismatch_reasons") or []
+            reason_text = f" ({'; '.join(reasons[:2])})" if reasons else ""
+            feedback = (
+                "This does not look like the same jewelry item as the top-view photo. "
+                f"Please retake using the same item{reason_text}."
+            )
+
+    asset = None
+    try:
+        asset = await store_capture_asset(session_id, frame_type, image_source, same_item=same_item)
+    except Exception as exc:
+        logger.warning(f"Could not store capture asset: {exc}")
+
+    return FrameEvalResponse(
+        approved=approved,
+        quality_score=quality_score,
+        feedback=feedback,
+        issues=issues,
+        detected=detected,
+        same_item=same_item,
+        asset=asset,
+    )
 
 
 @router.post("/api/evaluate-frame", response_model=FrameEvalResponse)
@@ -60,13 +128,14 @@ async def evaluate_frame_endpoint(req: FrameEvalRequest):
             detected={},
         )
 
-    result = await evaluate_frame(image_b64, req.frame_type)
-    return FrameEvalResponse(
-        approved=result.get("approved", True),
-        quality_score=float(result.get("quality_score", 0.5)),
-        feedback=result.get("feedback", "Image captured"),
-        issues=result.get("issues", []),
-        detected=result.get("detected", {}),
+    return await _evaluate_compare_store(
+        frame_type=req.frame_type,
+        image_b64=image_b64,
+        image_source=req.image_data_url or _candidate_data_url(image_b64),
+        session_id=req.session_id,
+        reference_frame_type=req.reference_frame_type,
+        reference_image_data_url=req.reference_image_data_url,
+        reference_image_url=req.reference_image_url,
     )
 
 
@@ -92,19 +161,21 @@ async def evaluate_frame_ws(websocket: WebSocket):
                 })
                 continue
 
-            result = await evaluate_frame(image_b64, frame_type)
+            response = await _evaluate_compare_store(
+                frame_type=frame_type,
+                image_b64=image_b64,
+                image_source=req.get("image_data_url") or _candidate_data_url(image_b64),
+                session_id=req.get("session_id"),
+                reference_frame_type=req.get("reference_frame_type", "top"),
+                reference_image_data_url=req.get("reference_image_data_url"),
+                reference_image_url=req.get("reference_image_url"),
+            )
             logger.info(
-                f"WS eval [{frame_type}]: approved={result.get('approved')}, "
-                f"score={result.get('quality_score')}"
+                f"WS eval [{frame_type}]: approved={response.approved}, "
+                f"score={response.quality_score}"
             )
 
-            await websocket.send_json({
-                "approved": result.get("approved", True),
-                "quality_score": float(result.get("quality_score", 0.5)),
-                "feedback": result.get("feedback", "Image captured"),
-                "issues": result.get("issues", []),
-                "detected": result.get("detected", {}),
-            })
+            await websocket.send_json(response.dict())
     except WebSocketDisconnect:
         logger.info("Client disconnected from evaluation websocket")
     except Exception as e:
