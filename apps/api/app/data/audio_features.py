@@ -253,12 +253,31 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
 
 # ── MFCC feature extraction ───────────────────────────────────────────────────
 
+_LIBROSA_AVAILABLE: Optional[bool] = None  # None = not checked yet
+
+def _check_librosa() -> bool:
+    global _LIBROSA_AVAILABLE
+    if _LIBROSA_AVAILABLE is None:
+        try:
+            import librosa  # noqa: F401
+            _LIBROSA_AVAILABLE = True
+        except ImportError:
+            logger.warning("librosa not installed — MFCC features unavailable, using physics-only mode")
+            _LIBROSA_AVAILABLE = False
+    return _LIBROSA_AVAILABLE
+
+MFCC_DIM = N_MFCC * 3  # 120
+
+
 def extract_mfcc_features(arr: np.ndarray, sr: int) -> np.ndarray:
     """
-    Returns 120-dim vector: 40 MFCC + 40 delta + 40 delta-delta, each mean-aggregated.
+    Returns 120-dim vector: 40 MFCC + 40 delta + 40 delta-delta, mean-aggregated.
+    Returns zeros if librosa is not installed (physics-only fallback).
     """
+    if not _check_librosa():
+        return np.zeros(MFCC_DIM, dtype=np.float32)
+
     import librosa
-    # Resample to target SR for consistent features across devices
     if sr != SR_TARGET:
         arr = librosa.resample(arr.astype(np.float32), orig_sr=sr, target_sr=SR_TARGET)
         sr = SR_TARGET
@@ -299,11 +318,14 @@ def build_feature_vector(
         return None, {}, val
 
     physics = extract_physics_features(arr, sr, val, item_type)
-    mfcc_vec = extract_mfcc_features(arr, sr)
 
-    # Mode as binary (drop=1, tap=0)
-    mode_bin = np.array([1.0 if mode == "drop" else 0.0], dtype=np.float32)
+    try:
+        mfcc_vec = extract_mfcc_features(arr, sr)
+    except Exception as e:
+        logger.warning("MFCC extraction failed, using zeros: %s", e)
+        mfcc_vec = np.zeros(MFCC_DIM, dtype=np.float32)
 
+    mode_bin    = np.array([1.0 if mode == "drop" else 0.0], dtype=np.float32)
     physics_vec = np.array([physics[k] for k in PHYSICS_KEYS], dtype=np.float32)
     feature_vec = np.concatenate([physics_vec, mfcc_vec, mode_bin])
 
