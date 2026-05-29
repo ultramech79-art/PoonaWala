@@ -20,7 +20,7 @@ class TTSRequest(BaseModel):
     speaker: str = "vidya"
     pace: float = 0.85
     pitch: float = 0.0
-    loudness: float = 1.5
+    loudness: float = 2.2
     language_code: str = "hi-IN"
 
 
