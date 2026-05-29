@@ -437,14 +437,17 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
 
         {/* Zoom slider */}
         {zoomSupported && !isVideo && !isAudio && (
-          <div className="mt-2 px-1 flex items-center gap-2">
-            <span className="text-[10px] text-stone-400 font-semibold w-8">{zoom.toFixed(1)}×</span>
+          <div className="mt-3 px-1 space-y-1">
+            <div className="flex items-center justify-between px-0.5">
+              <span className="text-[10px] font-semibold tracking-widest uppercase text-stone-400">Zoom</span>
+              <span className="text-[11px] font-bold tabular-nums text-brand-500">{zoom.toFixed(1)}×</span>
+            </div>
             <input
               type="range" min={zoomMin} max={zoomMax} step="0.1" value={zoom}
               onChange={e => applyZoom(Number(e.target.value))}
-              className="flex-1 accent-brand-600 h-1"
+              className="zoom-slider"
+              style={{ '--zoom-fill': `${((zoom - zoomMin) / (zoomMax - zoomMin)) * 100}%` } as React.CSSProperties}
             />
-            <span className="text-[10px] text-stone-400 w-8 text-right">{zoomMax.toFixed(0)}×</span>
           </div>
         )}
 

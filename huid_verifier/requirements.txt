@@ -1,0 +1,19 @@
+# ── Web framework ──────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+
+# ── Pydantic v2 + settings ─────────────────────────────────────────────────────
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+
+# ── Appium / Selenium ──────────────────────────────────────────────────────────
+Appium-Python-Client>=3.1.0
+selenium>=4.20.0
+
+# ── Testing ────────────────────────────────────────────────────────────────────
+pytest>=8.2.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0          # for async FastAPI test client
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
