@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
-import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield } from 'lucide-react'
+import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown } from 'lucide-react'
 import { clsx } from 'clsx'
 import { evaluateFrameAPI, verifyHuidAPI, type FrameEvalResult, type HuidVerificationResult } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
@@ -97,6 +97,7 @@ export function CaptureFlow() {
   const [manualHuid, setManualHuid] = useState(state.huidCode || '')
   const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat || null)
   const [activeTab, setActiveTab] = useState<'scan' | 'manual'>('scan')
+  const [showHallmarkGuide, setShowHallmarkGuide] = useState(false)
   const [huidVerifying, setHuidVerifying] = useState(false)
   const [huidVerifyResult, setHuidVerifyResult] = useState<HuidVerificationResult | null>(state.huidVerification ?? null)
   const spokenStep = useRef(-1)
@@ -132,7 +133,7 @@ export function CaptureFlow() {
 
     try {
       const optimizedDataUrl = await resizeDataUrl(dataUrl, 1024, 0.8)
-      
+
       const sessionId = state.sessionId || initSession()
       const referenceImageDataUrl =
         step.type === 'top'
@@ -236,6 +237,18 @@ export function CaptureFlow() {
 
   const skip = () => { if (step.optional) { speak(t('speak_skip')); next() } }
 
+  // ── Hallmark confidence score ─────────────────────────────────────────────
+  const hallmarkConfidence = step.type === 'macro' ? (() => {
+    if (huidVerifyResult?.status === 'VERIFIED') return 98
+    if (evalState === 'approved' && selectedKarat) return 85
+    if (evalState === 'approved') return 80
+    if (huidVerifyResult?.status === 'NEEDS_MANUAL_REVIEW') return 60
+    if (selectedKarat && manualHuid) return 60
+    if (selectedKarat) return 60
+    if (manualHuid) return 60
+    return 0
+  })() : 0
+
   const hasManualHuidOverride = step.type === 'macro' && !!manualHuid && !sameItemMismatch
   const hasSelectedPurity = step.type === 'macro' && !!selectedKarat && !sameItemMismatch
   const photoKaratVisible = step.type === 'macro' && !!selectedKarat && evalState === 'approved'
@@ -271,461 +284,524 @@ export function CaptureFlow() {
         <div className="absolute top-3/5 left-1/2 w-9 h-9 rounded-full bg-gradient-to-br from-brand-300 to-amber-400 animate-pop-pulse" style={{ animationDelay: '1.2s' }} />
       </div>
       <div className="relative z-10">
-      {/* Header */}
-      <div className="page-header">
-        <button
-          id="capture-back"
-          onClick={() => stepIdx > 0 ? setStepIdx(i => i - 1) : navigate('/setup')}
-          className="btn-icon"
-        >
-          <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
-        </button>
-        <div className="flex flex-col items-center">
-          <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">
-            Step {stepIdx + 1} of {STEPS.length}
-          </span>
-          <span className="text-sm font-semibold text-stone-900 mt-0.5">{STEP_LABELS[stepIdx]}</span>
-        </div>
-        <button
-          id="capture-voice"
-          onClick={() => speak(step.voiceGuide)}
-          className="btn-icon"
-          title="Replay instructions"
-        >
-          <Volume2 className="w-4 h-4 text-stone-500" />
-        </button>
-      </div>
-
-      {/* Demo Button */}
-      {step.demoUrl && (
-        <div className="px-5 pb-2">
+        {/* Header */}
+        <div className="page-header">
           <button
-            onClick={() => setShowDemo(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-100 transition-colors font-medium"
+            id="capture-back"
+            onClick={() => stepIdx > 0 ? setStepIdx(i => i - 1) : navigate('/setup')}
+            className="btn-icon"
           >
-            <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
-            Enter Example Demo
+            <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
+          </button>
+          <div className="flex flex-col items-center">
+            <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">
+              Step {stepIdx + 1} of {STEPS.length}
+            </span>
+            <span className="text-sm font-semibold text-stone-900 mt-0.5">{STEP_LABELS[stepIdx]}</span>
+          </div>
+          <button
+            id="capture-voice"
+            onClick={() => speak(step.voiceGuide)}
+            className="btn-icon"
+            title="Replay instructions"
+          >
+            <Volume2 className="w-4 h-4 text-stone-500" />
           </button>
         </div>
-      )}
 
-      {/* Progress dots */}
-      <div className="flex items-center justify-center gap-1.5 px-5 py-3">
-        {STEPS.map((s, i) => (
-          <div
-            key={s.type}
-            className={clsx(
-              'transition-all duration-300 rounded-full',
-              i === stepIdx ? 'step-dot-active' :
-              captured.has(i) ? 'step-dot-done' :
-              'step-dot'
-            )}
+        {/* Demo Button */}
+        {step.demoUrl && (
+          <div className="px-5 pb-2">
+            <button
+              onClick={() => setShowDemo(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-100 transition-colors font-medium"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
+              Enter Example Demo
+            </button>
+          </div>
+        )}
+
+        {/* Progress dots */}
+        <div className="flex items-center justify-center gap-1.5 px-5 py-3">
+          {STEPS.map((s, i) => (
+            <div
+              key={s.type}
+              className={clsx(
+                'transition-all duration-300 rounded-full',
+                i === stepIdx ? 'step-dot-active' :
+                  captured.has(i) ? 'step-dot-done' :
+                    'step-dot'
+              )}
+            />
+          ))}
+        </div>
+
+        {/* Step hint */}
+        <div className="px-5 pb-3">
+          <p className="text-sm font-semibold text-stone-800 leading-relaxed">
+            {t(step.hintKey)}
+            {step.optional && <span className="ml-2 text-xs text-stone-500">(optional)</span>}
+          </p>
+        </div>
+
+        {/* Camera */}
+        <div className="px-5 pb-3">
+          <Camera
+            key={`${cameraKey}-${stepIdx}`}
+            type={step.type}
+            onCapture={handleCapture}
+            facingMode={step.facingMode || 'environment'}
+            isVideo={step.isVideo}
+            isAudio={step.isAudio}
+            capturedDataUrl={currentEval?.dataUrl}
           />
-        ))}
-      </div>
 
-      {/* Step hint */}
-      <div className="px-5 pb-3">
-        <p className="text-sm font-semibold text-stone-800 leading-relaxed">
-          {t(step.hintKey)}
-          {step.optional && <span className="ml-2 text-xs text-stone-500">(optional)</span>}
-        </p>
-      </div>
+          {/* Hallmark Analysis & Manual Override Widget */}
+          {step.type === 'macro' && (
+            <div className="mt-4 animate-slide-up space-y-3">
 
-      {/* Camera */}
-      <div className="px-5 pb-3">
-        <Camera
-          key={`${cameraKey}-${stepIdx}`}
-          type={step.type}
-          onCapture={handleCapture}
-          facingMode={step.facingMode || 'environment'}
-          isVideo={step.isVideo}
-          isAudio={step.isAudio}
-          capturedDataUrl={currentEval?.dataUrl}
-        />
+              {/* Confidence Score */}
+              {hallmarkConfidence > 0 && (
+                <div className="bg-white border border-stone-200 rounded-2xl p-3 shadow-card">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-bold text-stone-600">Hallmark Confidence</span>
+                    <span className={clsx('text-sm font-black', hallmarkConfidence >= 80 ? 'text-emerald-600' : hallmarkConfidence >= 55 ? 'text-amber-600' : 'text-red-500')}>
+                      {hallmarkConfidence}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-stone-100 rounded-full h-2">
+                    <div className={clsx('h-2 rounded-full transition-all duration-500', hallmarkConfidence >= 80 ? 'bg-emerald-500' : hallmarkConfidence >= 55 ? 'bg-amber-500' : 'bg-red-400')}
+                      style={{ width: `${hallmarkConfidence}%` }} />
+                  </div>
+                  <p className="text-[10px] text-stone-400 mt-1">
+                    {huidVerifyResult?.status === 'VERIFIED' ? 'BIS CARE verified — highest confidence' :
+                      evalState === 'approved' && selectedKarat ? 'Photo + purity detected' :
+                        evalState === 'approved' ? 'Photo quality approved' :
+                          selectedKarat && manualHuid ? 'Manual purity + HUID entered' :
+                            selectedKarat ? 'Manual purity only — lower confidence' :
+                              'Enter purity or verify HUID to increase confidence'}
+                  </p>
+                </div>
+              )}
 
-        {/* Hallmark Analysis & Manual Override Widget */}
-        {step.type === 'macro' && (
-          <div className="mt-4 animate-slide-up">
-            <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-card">
-              {/* Tabs */}
-              <div className="flex border-b border-stone-200">
+              {/* Hallmark Symbol Guide */}
+              <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-card">
                 <button
-                  onClick={() => setActiveTab('scan')}
-                  className={clsx(
-                    'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
-                    activeTab === 'scan' ? 'bg-brand-50 text-brand-600 border-b-2 border-brand-600' : 'text-stone-400 hover:text-stone-600'
-                  )}
+                  onClick={() => setShowHallmarkGuide(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left"
                 >
-                  Scan Result
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-brand-500" />
+                    <span className="text-xs font-bold text-stone-700">What do hallmark symbols mean?</span>
+                  </div>
+                  <ChevronDown className={clsx('w-4 h-4 text-stone-400 transition-transform', showHallmarkGuide && 'rotate-180')} />
                 </button>
-                <button
-                  onClick={() => setActiveTab('manual')}
-                  className={clsx(
-                    'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
-                    activeTab === 'manual' ? 'bg-brand-50 text-brand-600 border-b-2 border-brand-600' : 'text-stone-400 hover:text-stone-600'
-                  )}
-                >
-                  Manual Entry
-                </button>
-              </div>
-
-              <div className="p-4">
-                {activeTab === 'scan' ? (
-                  <div className="min-h-[100px] flex flex-col justify-center">
-                    {evalState === 'idle' ? (
-                      <p className="text-center text-xs text-stone-400 italic">Capture an image to see hallmark details</p>
-                    ) : evalState === 'evaluating' ? (
-                      <div className="flex items-center justify-center gap-3">
-                        <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
-                        <span className="text-xs text-brand-600">Scanning for markings...</span>
+                {showHallmarkGuide && (
+                  <div className="px-4 pb-4 space-y-2 border-t border-stone-100">
+                    <p className="text-[10px] text-stone-400 pt-2 mb-2">Look for these marks stamped on the gold piece:</p>
+                    {[
+                      { mark: '916 / 22K', meaning: '22 Karat gold — 91.6% pure (most common in India)' },
+                      { mark: '750 / 18K', meaning: '18 Karat gold — 75% pure' },
+                      { mark: '958 / 23K', meaning: '23 Karat gold — 95.8% pure' },
+                      { mark: '875 / 21K', meaning: '21 Karat gold — 87.5% pure' },
+                      { mark: '585 / 14K', meaning: '14 Karat gold — 58.5% pure' },
+                      { mark: '375 / 9K', meaning: '9 Karat gold — 37.5% pure' },
+                      { mark: '999 / 24K', meaning: '24 Karat — 99.9% pure gold bar/coin' },
+                      { mark: 'BIS ▲', meaning: 'Bureau of Indian Standards certified mark' },
+                      { mark: 'HUID', meaning: '6-digit unique ID — verifiable on BIS Care app' },
+                      { mark: 'DM', meaning: "Dealer's Mark — jeweller's own identification code" },
+                      { mark: 'AHC mark', meaning: 'Assaying & Hallmarking Centre seal' },
+                      { mark: 'KDM', meaning: 'Old cadmium solder mark — now banned by BIS' },
+                    ].map(({ mark, meaning }) => (
+                      <div key={mark} className="flex gap-2 items-start">
+                        <span className="font-mono text-[10px] font-bold text-brand-600 bg-brand-50 border border-brand-100 rounded px-1.5 py-0.5 flex-shrink-0 mt-0.5">{mark}</span>
+                        <span className="text-[11px] text-stone-600 leading-snug">{meaning}</span>
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-stone-500">Detected Purity</span>
-                          <span className="text-sm font-bold text-emerald-600">{selectedKarat ? `${selectedKarat}K` : 'Not Detected'}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-stone-500">HUID</span>
-                          <span className="text-sm font-mono font-bold text-stone-700">
-                            {(currentEval?.result?.detected?.huid_code as string) || manualHuid || '—'}
-                          </span>
-                        </div>
-                        {/* Verify HUID via BIS when detected */}
-                        {((currentEval?.result?.detected?.huid_code as string) || manualHuid) && !huidVerifyResult && (
-                          <button
-                            onClick={() => handleVerifyHuid((currentEval?.result?.detected?.huid_code as string) || manualHuid)}
-                            disabled={huidVerifying}
-                            className="w-full py-2 rounded-xl text-xs font-bold bg-brand-600 text-white disabled:opacity-50"
-                          >
-                            {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Verify HUID with BIS CARE →'}
-                          </button>
-                        )}
-                        {/* BIS result inline */}
-                        {huidVerifyResult && (
-                          <div className={clsx(
-                            'rounded-xl border p-3 space-y-1.5',
-                            huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
-                            huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
-                            'bg-amber-50 border-amber-200'
-                          )}>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-bold text-stone-600">BIS CARE</span>
-                              <span className={clsx(
-                                'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                                huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
-                                huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
-                                'bg-amber-100 text-amber-700'
-                              )}>
-                                {huidVerifyResult.status.replace('_', ' ')}
-                              </span>
-                            </div>
-                            {huidVerifyResult.error ? (
-                              <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
-                            ) : (
-                              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                                {huidVerifyResult.purity && <><span className="text-stone-500">Purity</span><span className="font-semibold">{huidVerifyResult.purity}</span></>}
-                                {huidVerifyResult.jeweller_name && <><span className="text-stone-500">Jeweller</span><span className="font-semibold">{huidVerifyResult.jeweller_name}</span></>}
-                                {huidVerifyResult.hallmark_date && <><span className="text-stone-500">Date</span><span className="font-semibold">{huidVerifyResult.hallmark_date}</span></>}
-                                {huidVerifyResult.article_type && <><span className="text-stone-500">Article</span><span className="font-semibold capitalize">{huidVerifyResult.article_type}</span></>}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <p className="text-[11px] text-stone-600 leading-relaxed italic border-t border-stone-200 pt-2">
-                          {currentEval?.result?.feedback || 'Take a clear photo of the Hallmark stamp for automatic extraction.'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="label mb-2 block">HUID Alphanumeric Code</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={manualHuid}
-                          onChange={e => {
-                            const val = e.target.value.toUpperCase();
-                            setManualHuid(val);
-                            setHuid(val || null);
-                            setHuidVerifyResult(null);
-                          }}
-                          placeholder="e.g., A3F2K1"
-                          className="input-field font-mono flex-1"
-                          maxLength={6}
-                        />
-                        <button
-                          onClick={() => handleVerifyHuid(manualHuid)}
-                          disabled={manualHuid.length !== 6 || huidVerifying}
-                          className={clsx(
-                            'px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap',
-                            manualHuid.length === 6 && !huidVerifying
-                              ? 'bg-brand-600 border-brand-600 text-white'
-                              : 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
-                          )}
-                        >
-                          {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify BIS'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* BIS Verification Result */}
-                    {huidVerifyResult && (
-                      <div className={clsx(
-                        'rounded-2xl border p-3 space-y-2',
-                        huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
-                        huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
-                        'bg-amber-50 border-amber-200'
-                      )}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-stone-700">BIS CARE Result</span>
-                          <span className={clsx(
-                            'text-[10px] font-bold px-2 py-0.5 rounded-full',
-                            huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
-                            huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
-                            'bg-amber-100 text-amber-700'
-                          )}>
-                            {huidVerifyResult.status.replace('_', ' ')}
-                          </span>
-                        </div>
-                        {huidVerifyResult.error ? (
-                          <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                            {huidVerifyResult.purity && (
-                              <>
-                                <span className="text-stone-500">Purity</span>
-                                <span className="font-semibold text-stone-800">{huidVerifyResult.purity}</span>
-                              </>
-                            )}
-                            {huidVerifyResult.article_type && (
-                              <>
-                                <span className="text-stone-500">Article</span>
-                                <span className="font-semibold text-stone-800 capitalize">{huidVerifyResult.article_type}</span>
-                              </>
-                            )}
-                            {huidVerifyResult.jeweller_name && (
-                              <>
-                                <span className="text-stone-500">Jeweller</span>
-                                <span className="font-semibold text-stone-800">{huidVerifyResult.jeweller_name}</span>
-                              </>
-                            )}
-                            {huidVerifyResult.hallmark_date && (
-                              <>
-                                <span className="text-stone-500">Hallmark Date</span>
-                                <span className="font-semibold text-stone-800">{huidVerifyResult.hallmark_date}</span>
-                              </>
-                            )}
-                            <span className="text-stone-500">Confidence</span>
-                            <span className="font-semibold text-stone-800">{huidVerifyResult.confidence}%</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="label mb-2 block">Purity / Karat</label>
-                      <div className="flex gap-2">
-                        {[18, 22, 24].map(k => (
-                          <button
-                            key={k}
-                            onClick={() => {
-                              setSelectedKarat(k);
-                              setScannedKarat(k);
-                            }}
-                            className={clsx(
-                              'flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border',
-                              selectedKarat === k
-                                ? 'bg-brand-600 border-brand-600 text-white shadow-brand-sm'
-                                : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                            )}
-                          >
-                            {k}K
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <p className="text-[10px] text-brand-600 flex items-center gap-1.5 pt-1 font-medium">
-                      <Shield className="w-3 h-3" />
-                      Settings saved instantly to your assessment.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Feedback */}
-        {evalState === 'evaluating' && (
-          <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl bg-brand-50 border border-brand-200">
-            <Loader2 className="w-5 h-5 text-brand-600 animate-spin flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-brand-700">Analysing image…</p>
-              <p className="text-xs text-brand-600/70 mt-0.5">Checking image quality…</p>
-            </div>
-          </div>
-        )}
-
-        {evalState === 'approved' && currentEval?.result && (
-          <div className="mt-3 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-emerald-700">{currentEval.result.feedback}</p>
-                {currentEval.result.quality_score > 0 && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{ width: `${Math.round(currentEval.result.quality_score * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-stone-400">{Math.round(currentEval.result.quality_score * 100)}%</span>
-                  </div>
-                )}
-              </div>
-              <button onClick={() => speak(currentEval.result!.feedback)} className="opacity-50 hover:opacity-80 flex-shrink-0">
-                <Volume2 className="w-4 h-4 text-emerald-600" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {evalState === 'rejected' && currentEval?.result && (
-          <div className="mt-3 px-4 py-3 rounded-2xl bg-red-50 border border-red-200">
-            <div className="flex items-start gap-3">
-              <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-red-700">{currentEval.result.feedback}</p>
-                {currentEval.result.issues.length > 0 && (
-                  <ul className="mt-1.5 space-y-0.5">
-                    {currentEval.result.issues.map((issue, i) => (
-                      <li key={i} className="text-xs text-red-600/70">• {issue}</li>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* Captured thumbnails */}
-        {Object.keys(state.captures).length > 0 && (
-          <div className="mt-3">
-            <p className="label mb-2">Captured</p>
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              {(Object.entries(state.captures) as [CaptureType, any][]).map(([ctype, asset]) => (
-                <div key={ctype} className="relative flex-shrink-0">
-                  {ctype === 'audio' ? (
-                    <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-300 flex items-center justify-center">
-                      <Music className="w-5 h-5 text-brand-600" />
-                    </div>
-                  ) : ctype === 'video' ? (
-                    <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-300 flex items-center justify-center">
-                      <Video className="w-5 h-5 text-brand-600" />
+              <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-card">
+                {/* Tabs */}
+                <div className="flex border-b border-stone-200">
+                  <button
+                    onClick={() => setActiveTab('scan')}
+                    className={clsx(
+                      'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
+                      activeTab === 'scan' ? 'bg-brand-50 text-brand-600 border-b-2 border-brand-600' : 'text-stone-400 hover:text-stone-600'
+                    )}
+                  >
+                    Scan Result
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('manual')}
+                    className={clsx(
+                      'flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors',
+                      activeTab === 'manual' ? 'bg-brand-50 text-brand-600 border-b-2 border-brand-600' : 'text-stone-400 hover:text-stone-600'
+                    )}
+                  >
+                    Manual Entry
+                  </button>
+                </div>
+
+                <div className="p-4">
+                  {activeTab === 'scan' ? (
+                    <div className="min-h-[100px] flex flex-col justify-center">
+                      {evalState === 'idle' ? (
+                        <p className="text-center text-xs text-stone-400 italic">Capture an image to see hallmark details</p>
+                      ) : evalState === 'evaluating' ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
+                          <span className="text-xs text-brand-600">Scanning for markings...</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-stone-500">Detected Purity</span>
+                            <span className="text-sm font-bold text-emerald-600">{selectedKarat ? `${selectedKarat}K` : 'Not Detected'}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-stone-500">HUID</span>
+                            <span className="text-sm font-mono font-bold text-stone-700">
+                              {(currentEval?.result?.detected?.huid_code as string) || manualHuid || '—'}
+                            </span>
+                          </div>
+                          {/* Verify HUID via BIS when detected */}
+                          {((currentEval?.result?.detected?.huid_code as string) || manualHuid) && !huidVerifyResult && (
+                            <button
+                              onClick={() => handleVerifyHuid((currentEval?.result?.detected?.huid_code as string) || manualHuid)}
+                              disabled={huidVerifying}
+                              className="w-full py-2 rounded-xl text-xs font-bold bg-brand-600 text-white disabled:opacity-50"
+                            >
+                              {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Verify HUID with BIS CARE →'}
+                            </button>
+                          )}
+                          {/* BIS result inline */}
+                          {huidVerifyResult && (
+                            <div className={clsx(
+                              'rounded-xl border p-3 space-y-1.5',
+                              huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
+                                huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
+                                  'bg-amber-50 border-amber-200'
+                            )}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-bold text-stone-600">BIS CARE</span>
+                                <span className={clsx(
+                                  'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                                  huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
+                                    huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
+                                      'bg-amber-100 text-amber-700'
+                                )}>
+                                  {huidVerifyResult.status.replace('_', ' ')}
+                                </span>
+                              </div>
+                              {huidVerifyResult.error ? (
+                                <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
+                              ) : (
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                  {huidVerifyResult.purity && <><span className="text-stone-500">Purity</span><span className="font-semibold">{huidVerifyResult.purity}</span></>}
+                                  {huidVerifyResult.jeweller_name && <><span className="text-stone-500">Jeweller</span><span className="font-semibold">{huidVerifyResult.jeweller_name}</span></>}
+                                  {huidVerifyResult.hallmark_date && <><span className="text-stone-500">Date</span><span className="font-semibold">{huidVerifyResult.hallmark_date}</span></>}
+                                  {huidVerifyResult.article_type && <><span className="text-stone-500">Article</span><span className="font-semibold capitalize">{huidVerifyResult.article_type}</span></>}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <p className="text-[11px] text-stone-600 leading-relaxed italic border-t border-stone-200 pt-2">
+                            {currentEval?.result?.feedback || 'Take a clear photo of the Hallmark stamp for automatic extraction.'}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <img src={asset.dataUrl} className="w-14 h-14 rounded-2xl object-cover border border-stone-300" alt={ctype} />
+                    <div className="space-y-4">
+                      <div>
+                        <label className="label mb-2 block">HUID Alphanumeric Code</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={manualHuid}
+                            onChange={e => {
+                              const val = e.target.value.toUpperCase();
+                              setManualHuid(val);
+                              setHuid(val || null);
+                              setHuidVerifyResult(null);
+                            }}
+                            placeholder="e.g., A3F2K1"
+                            className="input-field font-mono flex-1"
+                            maxLength={6}
+                          />
+                          <button
+                            onClick={() => handleVerifyHuid(manualHuid)}
+                            disabled={manualHuid.length !== 6 || huidVerifying}
+                            className={clsx(
+                              'px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap',
+                              manualHuid.length === 6 && !huidVerifying
+                                ? 'bg-brand-600 border-brand-600 text-white'
+                                : 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
+                            )}
+                          >
+                            {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify BIS'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* BIS Verification Result */}
+                      {huidVerifyResult && (
+                        <div className={clsx(
+                          'rounded-2xl border p-3 space-y-2',
+                          huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
+                            huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
+                              'bg-amber-50 border-amber-200'
+                        )}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-stone-700">BIS CARE Result</span>
+                            <span className={clsx(
+                              'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                              huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
+                                huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
+                                  'bg-amber-100 text-amber-700'
+                            )}>
+                              {huidVerifyResult.status.replace('_', ' ')}
+                            </span>
+                          </div>
+                          {huidVerifyResult.error ? (
+                            <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                              {huidVerifyResult.purity && (
+                                <>
+                                  <span className="text-stone-500">Purity</span>
+                                  <span className="font-semibold text-stone-800">{huidVerifyResult.purity}</span>
+                                </>
+                              )}
+                              {huidVerifyResult.article_type && (
+                                <>
+                                  <span className="text-stone-500">Article</span>
+                                  <span className="font-semibold text-stone-800 capitalize">{huidVerifyResult.article_type}</span>
+                                </>
+                              )}
+                              {huidVerifyResult.jeweller_name && (
+                                <>
+                                  <span className="text-stone-500">Jeweller</span>
+                                  <span className="font-semibold text-stone-800">{huidVerifyResult.jeweller_name}</span>
+                                </>
+                              )}
+                              {huidVerifyResult.hallmark_date && (
+                                <>
+                                  <span className="text-stone-500">Hallmark Date</span>
+                                  <span className="font-semibold text-stone-800">{huidVerifyResult.hallmark_date}</span>
+                                </>
+                              )}
+                              <span className="text-stone-500">Confidence</span>
+                              <span className="font-semibold text-stone-800">{huidVerifyResult.confidence}%</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="label mb-2 block">Purity / Karat</label>
+                        <div className="flex gap-2">
+                          {[18, 22, 24].map(k => (
+                            <button
+                              key={k}
+                              onClick={() => {
+                                setSelectedKarat(k);
+                                setScannedKarat(k);
+                              }}
+                              className={clsx(
+                                'flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border',
+                                selectedKarat === k
+                                  ? 'bg-brand-600 border-brand-600 text-white shadow-brand-sm'
+                                  : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                              )}
+                            >
+                              {k}K
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-brand-600 flex items-center gap-1.5 pt-1 font-medium">
+                        <Shield className="w-3 h-3" />
+                        Settings saved instantly to your assessment.
+                      </p>
+                    </div>
                   )}
-                  <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
-                    <CheckCircle className="w-3 h-3 text-white" strokeWidth={3} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Feedback */}
+          {evalState === 'evaluating' && (
+            <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl bg-brand-50 border border-brand-200">
+              <Loader2 className="w-5 h-5 text-brand-600 animate-spin flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-brand-700">Analysing image…</p>
+                <p className="text-xs text-brand-600/70 mt-0.5">Checking image quality…</p>
+              </div>
+            </div>
+          )}
+
+          {evalState === 'approved' && currentEval?.result && (
+            <div className="mt-3 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-emerald-700">{currentEval.result.feedback}</p>
+                  {currentEval.result.quality_score > 0 && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex-1 progress-bar">
+                        <div
+                          className="progress-fill"
+                          style={{ width: `${Math.round(currentEval.result.quality_score * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-stone-400">{Math.round(currentEval.result.quality_score * 100)}%</span>
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => speak(currentEval.result!.feedback)} className="opacity-50 hover:opacity-80 flex-shrink-0">
+                  <Volume2 className="w-4 h-4 text-emerald-600" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {evalState === 'rejected' && currentEval?.result && (
+            <div className="mt-3 px-4 py-3 rounded-2xl bg-red-50 border border-red-200">
+              <div className="flex items-start gap-3">
+                <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-red-700">{currentEval.result.feedback}</p>
+                  {currentEval.result.issues.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {currentEval.result.issues.map((issue, i) => (
+                        <li key={i} className="text-xs text-red-600/70">• {issue}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Captured thumbnails */}
+          {Object.keys(state.captures).length > 0 && (
+            <div className="mt-3">
+              <p className="label mb-2">Captured</p>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                {(Object.entries(state.captures) as [CaptureType, any][]).map(([ctype, asset]) => (
+                  <div key={ctype} className="relative flex-shrink-0">
+                    {ctype === 'audio' ? (
+                      <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-300 flex items-center justify-center">
+                        <Music className="w-5 h-5 text-brand-600" />
+                      </div>
+                    ) : ctype === 'video' ? (
+                      <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-300 flex items-center justify-center">
+                        <Video className="w-5 h-5 text-brand-600" />
+                      </div>
+                    ) : (
+                      <img src={asset.dataUrl} className="w-14 h-14 rounded-2xl object-cover border border-stone-300" alt={ctype} />
+                    )}
+                    <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                      <CheckCircle className="w-3 h-3 text-white" strokeWidth={3} />
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Bottom actions */}
-      <div className="px-5 pb-6 pt-3 border-t border-stone-200 space-y-2 sticky bottom-0 bg-white/95 backdrop-blur-sm">
-        {evalState === 'rejected' && !hasManualHuidOverride && !hasSelectedPurity && !huidVerifyResult ? (
-          <button onClick={handleRetake} className="w-full btn-primary">
-            <RotateCcw className="w-5 h-5" />
-            Retake Photo
-          </button>
-        ) : (
-          <>
-            <button
-              id={`capture-next-${step.type}`}
-              onClick={next}
-              disabled={!canProceed || evalState === 'evaluating'}
-              className={clsx('w-full', (canProceed && evalState !== 'evaluating') ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed')}
-            >
-              {evalState === 'evaluating' ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Analysing…</>
-              ) : stepIdx === STEPS.length - 1 ? 'Continue' : t('capture_accept')}
-              {evalState !== 'evaluating' && <ChevronRight className="w-5 h-5" />}
+        {/* Bottom actions */}
+        <div className="px-5 pb-6 pt-3 border-t border-stone-200 space-y-2 sticky bottom-0 bg-white/95 backdrop-blur-sm">
+          {evalState === 'rejected' && !hasManualHuidOverride && !hasSelectedPurity && !huidVerifyResult ? (
+            <button onClick={handleRetake} className="w-full btn-primary">
+              <RotateCcw className="w-5 h-5" />
+              Retake Photo
             </button>
-            {evalState === 'rejected' && hasManualHuidOverride && (
-              <button onClick={handleRetake} className="btn-secondary w-full text-sm mt-2">
-                <RotateCcw className="w-4 h-4 mr-2 inline" /> Retake Photo Instead
+          ) : (
+            <>
+              <button
+                id={`capture-next-${step.type}`}
+                onClick={next}
+                disabled={!canProceed || evalState === 'evaluating'}
+                className={clsx('w-full', (canProceed && evalState !== 'evaluating') ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed')}
+              >
+                {evalState === 'evaluating' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Analysing…</>
+                ) : stepIdx === STEPS.length - 1 ? 'Continue' : t('capture_accept')}
+                {evalState !== 'evaluating' && <ChevronRight className="w-5 h-5" />}
               </button>
-            )}
-          </>
-        )}
-        {step.optional && evalState !== 'evaluating' && (
-          <button id={`capture-skip-${step.type}`} onClick={skip} className="btn-secondary w-full text-sm">
-            {t('capture_skip')}
-          </button>
-        )}
-      </div>
-      {/* Tutorial Overlay — auto-shows on each new step */}
-      {showTutorial && !step.isVideo && !step.isAudio && (
-        <TutorialOverlay
-          stepType={step.type}
-          onDismiss={() => setShowTutorial(false)}
-        />
-      )}
-
-      {/* Demo Overlay */}
-      {showDemo && step.demoUrl && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-md p-6 animate-fade-in">
-          <div className="relative w-full max-w-sm flex flex-col items-center">
-            <button
-              onClick={() => setShowDemo(false)}
-              className="absolute -top-12 right-0 p-2 rounded-full bg-stone-200 text-stone-600 hover:bg-stone-300 transition-colors"
-            >
-              <XCircle className="w-6 h-6" />
-            </button>
-            <div className="w-full aspect-[3/4] rounded-3xl overflow-hidden border-2 border-stone-300 shadow-2xl bg-stone-100 flex items-center justify-center">
-              {step.isVideo ? (
-                <video src={step.demoUrl} className="w-full h-full object-cover" controls autoPlay loop muted playsInline />
-              ) : step.isAudio ? (
-                <div className="flex flex-col items-center gap-4">
-                  <Music className="w-16 h-16 text-brand-600 animate-bounce" />
-                  <audio src={step.demoUrl} controls className="w-4/5" />
-                </div>
-              ) : (
-                <img src={step.demoUrl} className="w-full h-full object-cover" alt="Example demo" />
+              {evalState === 'rejected' && hasManualHuidOverride && (
+                <button onClick={handleRetake} className="btn-secondary w-full text-sm mt-2">
+                  <RotateCcw className="w-4 h-4 mr-2 inline" /> Retake Photo Instead
+                </button>
               )}
-            </div>
-            <p className="mt-6 text-black font-semibold text-center">Reference: {STEP_LABELS[stepIdx]}</p>
-            <p className="mt-2 text-stone-700 text-xs text-center px-6">
-              This is how your photo should look. Ensure the gold is clear and well-lit.
-            </p>
-            <div className="mt-8 flex gap-3 w-full px-2">
+            </>
+          )}
+          {step.optional && evalState !== 'evaluating' && (
+            <button id={`capture-skip-${step.type}`} onClick={skip} className="btn-secondary w-full text-sm">
+              {t('capture_skip')}
+            </button>
+          )}
+        </div>
+        {/* Tutorial Overlay — auto-shows on each new step */}
+        {showTutorial && !step.isVideo && !step.isAudio && (
+          <TutorialOverlay
+            stepType={step.type}
+            onDismiss={() => setShowTutorial(false)}
+          />
+        )}
+
+        {/* Demo Overlay */}
+        {showDemo && step.demoUrl && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-md p-6 animate-fade-in">
+            <div className="relative w-full max-w-sm flex flex-col items-center">
+              <button
+                onClick={() => setShowDemo(false)}
+                className="absolute -top-12 right-0 p-2 rounded-full bg-stone-200 text-stone-600 hover:bg-stone-300 transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+              <div className="w-full aspect-[3/4] rounded-3xl overflow-hidden border-2 border-stone-300 shadow-2xl bg-stone-100 flex items-center justify-center">
+                {step.isVideo ? (
+                  <video src={step.demoUrl} className="w-full h-full object-cover" controls autoPlay loop muted playsInline />
+                ) : step.isAudio ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <Music className="w-16 h-16 text-brand-600 animate-bounce" />
+                    <audio src={step.demoUrl} controls className="w-4/5" />
+                  </div>
+                ) : (
+                  <img src={step.demoUrl} className="w-full h-full object-cover" alt="Example demo" />
+                )}
+              </div>
+              <p className="mt-6 text-black font-semibold text-center">Reference: {STEP_LABELS[stepIdx]}</p>
+              <p className="mt-2 text-stone-700 text-xs text-center px-6">
+                This is how your photo should look. Ensure the gold is clear and well-lit.
+              </p>
+              <div className="mt-8 flex gap-3 w-full px-2">
                 <button
                   onClick={handleEnterDemo}
                   className="flex-1 px-6 py-3 rounded-full bg-brand-600 text-white font-semibold text-sm shadow-brand active:scale-95 transition-transform hover:bg-brand-700"
                 >
-                Enter Demo
-              </button>
-              <button
-                onClick={() => setShowDemo(false)}
-                className="flex-1 px-6 py-3 rounded-full bg-white text-stone-700 font-semibold text-sm border border-stone-300 active:scale-95 transition-transform hover:bg-stone-50"
-              >
-                View Only
-              </button>
+                  Enter Demo
+                </button>
+                <button
+                  onClick={() => setShowDemo(false)}
+                  className="flex-1 px-6 py-3 rounded-full bg-white text-stone-700 font-semibold text-sm border border-stone-300 active:scale-95 transition-transform hover:bg-stone-50"
+                >
+                  View Only
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   )
