@@ -237,7 +237,21 @@ export function CaptureFlow() {
   const skip = () => { if (step.optional) { speak(t('speak_skip')); next() } }
 
   const hasManualHuidOverride = step.type === 'macro' && !!manualHuid && !sameItemMismatch
-  const canProceed = !sameItemMismatch && (evalState === 'approved' || step.optional || (evalState === 'rejected' && hasManualHuidOverride))
+  const hasSelectedPurity = step.type === 'macro' && !!selectedKarat && !sameItemMismatch
+  const photoKaratVisible = step.type === 'macro' && !!selectedKarat && evalState === 'approved'
+  // Macro step: proceed if photo approved, OR purity selected/manual HUID entered (photo optional), OR BIS verified
+  const macroCanProceed = step.type === 'macro' && !sameItemMismatch && (
+    evalState === 'approved' ||
+    hasSelectedPurity ||
+    hasManualHuidOverride ||
+    !!huidVerifyResult
+  )
+  const canProceed = !sameItemMismatch && (
+    macroCanProceed ||
+    evalState === 'approved' ||
+    step.optional ||
+    (evalState === 'rejected' && hasManualHuidOverride)
+  )
 
   return (
     <div className="page animate-fade-in overflow-y-auto relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
@@ -630,7 +644,7 @@ export function CaptureFlow() {
 
       {/* Bottom actions */}
       <div className="px-5 pb-6 pt-3 border-t border-stone-200 space-y-2 sticky bottom-0 bg-white/95 backdrop-blur-sm">
-        {evalState === 'rejected' && !hasManualHuidOverride ? (
+        {evalState === 'rejected' && !hasManualHuidOverride && !hasSelectedPurity && !huidVerifyResult ? (
           <button onClick={handleRetake} className="w-full btn-primary">
             <RotateCcw className="w-5 h-5" />
             Retake Photo
