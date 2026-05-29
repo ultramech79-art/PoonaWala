@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: huid-verifier
+    runtime: docker
+    dockerfilePath: ./huid_verifier/Dockerfile.render
+    dockerContext: ./huid_verifier
+    envVars:
+      - key: APPIUM_URL
+        sync: false
+      - key: DEVICE_UDID
+        value: emulator-5554
+      - key: DEVICE_NAME
+        value: Android Emulator
+      - key: PLATFORM_VERSION
+        value: "17"
+      - key: BIS_PACKAGE
+        value: com.bis.bisapp
+      - key: BIS_ACTIVITY
+        value: .SplashScreenActivity
+      - key: SAVE_DEBUG_ARTIFACTS
+        value: "false"
+      - key: INCLUDE_RAW_TEXT
+        value: "false"
+      - key: ELEMENT_WAIT_TIMEOUT
+        value: "10"
+      - key: RESULT_WAIT_TIMEOUT
+        value: "12"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ALLOWED_ORIGINS
+        value: "*"
