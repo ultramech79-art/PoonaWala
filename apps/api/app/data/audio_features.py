@@ -78,14 +78,56 @@ def spectral_flatness(spectrum: np.ndarray) -> float:
 
 
 def detect_impacts(arr: np.ndarray, sr: int) -> list:
+    """
+    Detect metallic impact events using spectral flux (primary) with amplitude fallback.
+
+    Spectral flux measures frame-to-frame spectral change — works on poor/quiet mics
+    because a metallic tap causes a distinctive frequency shift even at low amplitude.
+    Amplitude-only thresholds fail when the mic is far away or gain is low.
+    """
+    # ── Primary: spectral flux onset detection (librosa) ──────────────────────
+    if _check_librosa():
+        try:
+            import librosa
+            y = librosa.resample(arr.astype(np.float32), orig_sr=sr, target_sr=SR_TARGET) if sr != SR_TARGET else arr
+            # onset_detect uses spectral flux by default — robust to quiet mics
+            onset_frames = librosa.onset.onset_detect(
+                y=y, sr=SR_TARGET,
+                hop_length=HOP_LEN,
+                backtrack=True,          # snap to actual attack, not flux peak
+                pre_max=3, post_max=3,   # local max window
+                pre_avg=5, post_avg=5,
+                delta=0.04,              # low delta = catch quiet impacts too
+                wait=4,
+            )
+            if len(onset_frames) > 0:
+                onset_samples = librosa.frames_to_samples(onset_frames, hop_length=HOP_LEN)
+                # Scale sample indices back to original sr if resampled
+                if sr != SR_TARGET:
+                    onset_samples = (onset_samples * sr / SR_TARGET).astype(int)
+                onset_samples = np.clip(onset_samples, 0, len(arr) - 1)
+                envelope = smooth_abs(arr, sr, 4.0)
+                events = []
+                for s in onset_samples:
+                    e = min(len(arr) - 1, s + int(sr * 0.5))
+                    pi = s + int(np.argmax(envelope[s:e + 1]))
+                    pi = min(pi, len(envelope) - 1)
+                    events.append({"start": int(s), "end": int(e), "peak_idx": int(pi), "peak": float(envelope[pi])})
+                events.sort(key=lambda x: x["peak"], reverse=True)
+                return events[:8]
+        except Exception as e:
+            logger.warning("librosa onset detection failed, falling back: %s", e)
+
+    # ── Fallback: amplitude envelope threshold ─────────────────────────────────
     envelope = smooth_abs(arr, sr, 4.0)
     if not len(envelope):
         return []
     peak = float(np.max(envelope))
-    if peak < 1e-4:
+    if peak < 1e-5:
         return []
-    baseline = float(np.percentile(envelope, 35))
-    threshold = max(baseline * 5.0, peak * 0.10, 1e-4)
+    baseline = float(np.percentile(envelope, 30))
+    # Adaptive threshold: 3× local baseline (was 5×) — catches quieter impacts
+    threshold = max(baseline * 3.0, peak * 0.06, 1e-5)
     above = np.where(envelope >= threshold)[0]
     if not len(above):
         return []
@@ -164,10 +206,8 @@ def validate_recording(arr: np.ndarray, sr: int, item_type: str = "unknown", mod
     best = events[0]
     peak_idx = int(best["peak_idx"])
     atk = attack_ms(abs_arr, peak_idx, float(max(best["peak"], peak)), sr)
-
-    if mode == "drop" and atk > thr["attack_max_ms"]:
-        return {"valid": False, "snr_db": snr_db,
-                "reason": "No sharp drop impact detected."}
+    # Attack time is kept as a feature for scoring but NOT used as a hard reject.
+    # Drop recordings on a phone vary too much by surface, mic distance, and device.
 
     seg_len = min(int(sr * 2.0), len(arr) - peak_idx)
     seg_len = max(seg_len, 1024)
