@@ -181,112 +181,87 @@ _DEFAULT_RANGE = {"decay_lo": 60, "decay_hi": 450, "centroid_lo": 250, "centroid
 
 def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[str]]:
     """
-    Data-driven heuristic — boundaries derived from 30-clip dataset analysis.
+    Drop mode: decay time is the PRIMARY discriminator and carries most of the weight.
 
-    STRONGEST discriminator (from data):
-      DROP mode — decay time:  real gold avg 331ms, fake avg 74ms  (+256ms gap)
-        Decision boundary: >120ms → likely real, <80ms → likely fake
-        R² is NOT a good discriminator on glass (fake can have higher R² than real)
-      TAP mode — gold-band energy + decay time secondary
-        Centroid and HF useless on glass surface (both 60–90% HF for both classes)
+    Physics basis:
+      Gold internal damping: 3×10⁻⁴ → very low energy loss → long sustained ring
+      Brass/zinc damping:    2–10×10⁻⁴ → 3–10× faster decay → dead, short ring
+      At 5% threshold (phone on glass): real gold 100ms–2500ms, fakes 80–200ms.
+      LONGER = more gold-like. Secondary features (gold-band, R²) are confirmatory only.
 
-    Weights reflect actual information content, not physics intuition.
+    Weight design:
+      DROP: decay contributes ±48 of the ~45-point swing above/below 50.
+            All secondary features combined cap at ~±10.
+      TAP:  gold-band is primary; decay secondary (multiple taps obscure decay).
     """
     decay_ms   = physics["decay_ms"]
-    centroid   = physics["centroid_hz"]
     gold_ratio = physics["gold_ratio"]
     hf_ratio   = physics["hf_ratio"]
     decay_r2   = physics["decay_r2"]
-    snr_db     = physics["snr_db"]
     events     = physics["event_count"]
     is_drop    = mode == "drop"
 
     score, reasons = 50, []
 
-    # ── DECAY TIME — primary signal for drop, secondary for tap ─────────────
-    # Data: real gold avg 331ms (range 46–2177ms), fake avg 74ms (range 38–122ms)
-    # Clear boundary at ~120ms: fakes cluster below, real gold mostly above.
+    # ── DECAY TIME (drop: primary / tap: secondary) ───────────────────────────
     if is_drop:
-        if decay_ms >= 120:
-            score += 30
-            reasons.append(f"Drop decay {decay_ms:.0f}ms — typical of solid gold (real avg 331ms)")
+        # Fakes (5% threshold): 80–200ms.  Real gold: 80ms (small ring) – 2500ms (bangle).
+        # Thresholds sized so that the ≥150ms band covers real necklaces / medium rings
+        # and the ≥250ms / ≥500ms bands cover rings and bangles that ring visibly longer.
+        if decay_ms >= 500:
+            score += 48
+            reasons.append(f"Very long ring {decay_ms:.0f}ms — solid gold sustains resonance (damping 3×10⁻⁴)")
+        elif decay_ms >= 250:
+            score += 38
+            reasons.append(f"Long drop decay {decay_ms:.0f}ms — well above typical base-metal range")
+        elif decay_ms >= 150:
+            score += 16
+            reasons.append(f"Drop decay {decay_ms:.0f}ms — moderate; secondary features determine verdict")
         elif decay_ms >= 80:
-            score += 8
-            reasons.append(f"Drop decay {decay_ms:.0f}ms — borderline (fake avg 74ms, real avg 331ms)")
+            score += 4
+            reasons.append(f"Drop decay {decay_ms:.0f}ms — borderline overlap zone")
         else:
-            score -= 18
-            reasons.append(f"Short drop decay {decay_ms:.0f}ms — consistent with imitation metal (fake avg 74ms)")
+            score -= 25
+            reasons.append(f"Short drop decay {decay_ms:.0f}ms — consistent with high-damping base metal")
     else:
-        # Tap: decay less reliable, use gently
-        if decay_ms >= 60:
+        # Tap: decay less reliable (multiple taps extend apparent decay for both classes)
+        if decay_ms >= 80:
             score += 10
-            reasons.append(f"Tap decay {decay_ms:.0f}ms — supportive evidence")
-        elif decay_ms < 30:
+            reasons.append(f"Tap decay {decay_ms:.0f}ms — supportive")
+        elif decay_ms < 35:
             score -= 8
             reasons.append(f"Very short tap decay {decay_ms:.0f}ms")
 
-    # ── DECAY R² — useful only as a secondary signal ─────────────────────────
-    # Data: fake avg R²=0.83 HIGHER than real avg R²=0.71
-    # Heavy real gold (bangles) has complex multi-mode ringing → lower R²
-    # DO NOT heavily penalise low R² — it's ambiguous on glass
-    # Only mildly reward very high R² as confirmatory (not discriminating)
-    if decay_r2 >= 0.95 and decay_ms >= 120:
-        score += 5
-        reasons.append(f"High R²={decay_r2:.2f} with long decay — strong single-material signature")
-    elif decay_r2 < 0.15 and is_drop:
-        score -= 5  # very poor fit only, not moderate values
-        reasons.append(f"Very irregular decay R²={decay_r2:.2f}")
+    # ── SECONDARY FEATURES (confirmatory, total max ±10) ─────────────────────
 
-    # ── GOLD-BAND ENERGY — consistent secondary signal ───────────────────────
-    # Data: real avg 16.6% vs fake avg 10.8%  (+5.8% gap)
-    # Boundary: >15% favors real, <8% favors fake
+    # Gold-band energy: real avg 16.6% vs fake avg 10.8%
     if gold_ratio >= 0.20:
-        score += 12
+        score += 6
         reasons.append(f"Gold-band energy {gold_ratio:.0%} — above real-gold average (16.6%)")
     elif gold_ratio >= 0.12:
-        score += 5
+        score += 2
         reasons.append(f"Gold-band energy {gold_ratio:.0%} — moderate")
     else:
-        score -= 8
+        score -= 5
         reasons.append(f"Low gold-band energy {gold_ratio:.0%} — below fake average (10.8%)")
 
-    # ── HF RATIO — largely useless on glass but penalise extreme values ───────
-    # Data: both classes 60–90% HF due to glass surface — minimal discriminating power
-    # Only flag truly extreme outliers
-    if hf_ratio > 0.92:
-        score -= 4
-        reasons.append(f"Very high HF {hf_ratio:.0%} — possible noise contamination")
-    elif hf_ratio < 0.20:
-        score += 6   # genuinely low HF = warmer sound = favors real gold
-        reasons.append(f"Low HF ratio {hf_ratio:.0%} — warm acoustic signature")
-
-    # ── MULTI-IMPACT BONUS ────────────────────────────────────────────────────
-    if events >= 3:
-        score += 3
-        reasons.append(f"{events} impacts — multi-event evidence is more robust")
-
-    return max(5, min(95, score)), reasons
-
-    # ── HIGH-FREQ RATIO (plated indicator) ──────────────────────────────────
-    # Drop on glass: high HF is normal (glass resonance), so penalty is halved.
-    hf_bad  = 0.70 if is_drop else (0.42 if item_type in {"earring","chain"} else 0.30)
-    hf_warn = 0.50 if is_drop else (0.24 if item_type in {"earring","chain"} else 0.15)
-    if hf_ratio > hf_bad:
-        score -= 6 if is_drop else 14
-        reasons.append(f"Very high-freq energy {hf_ratio:.0%} — {'surface noise' if is_drop else 'tinny plated signature'}")
-    elif hf_ratio > hf_warn:
-        score -= 2 if is_drop else 4
-        reasons.append(f"Some high-freq content {hf_ratio:.0%}")
-
-    # ── MULTI-TAP BONUS ─────────────────────────────────────────────────────
-    if not is_drop and events >= 2:
+    # R²: only meaningful paired with a long decay (multi-mode bangles have low R²)
+    if decay_r2 >= 0.95 and decay_ms >= 150:
         score += 4
-        reasons.append(f"{events} tap events — multi-tap evidence more robust")
+        reasons.append(f"R²={decay_r2:.2f} with long decay — clean single-material ring")
 
-    # ── RECORDING QUALITY ───────────────────────────────────────────────────
-    if snr_db >= 30:
+    # HF ratio: 60–90% normal on glass — only flag true extremes
+    if hf_ratio > 0.92:
+        score -= 2
+        reasons.append(f"Very high HF {hf_ratio:.0%} — possible noise")
+    elif hf_ratio < 0.20:
         score += 3
-        reasons.append(f"Excellent recording SNR {snr_db:.0f}dB")
+        reasons.append(f"Low HF {hf_ratio:.0%} — warm acoustic signature")
+
+    # Multi-tap bonus (tap mode only — drop mode onset count reflects ring harmonics)
+    if not is_drop and events >= 3:
+        score += 3
+        reasons.append(f"{events} tap impacts detected")
 
     return max(5, min(95, score)), reasons
 
@@ -326,8 +301,14 @@ def _verdict_and_confidence(score: int, mode: str, item_type: str, low_conf_flag
         if score >= 72:
             verdict = "Likely solid gold (chain signal — lower certainty)"
 
+    # Gemini low_confidence_flag can demote confidence, but not override a clear
+    # physics verdict. Score >= 72 already signals "Likely solid gold" — Gemini's
+    # signal-quality uncertainty should not collapse that to "low confidence".
     if low_conf_flag:
-        conf = "low"
+        if score >= 72:
+            conf = "medium"   # cap at medium; don't go to low for a clear score
+        else:
+            conf = "low"
 
     return verdict, conf
 
@@ -349,10 +330,31 @@ async def _gemini_explain(
     lang_out = "Hindi (Devanagari)" if lang == "hi" else "English"
     try:
         wav_b64 = base64.b64encode(_float32_to_wav(arr, sr)).decode()
+
+        # Mode-specific context: critical because Gemini's prior for gold is
+        # free-air ring (1–3 seconds). Phone recordings on glass are much shorter.
+        # Without this context Gemini calls 120–300ms "extremely short" which is WRONG.
+        if mode == "drop":
+            mode_ctx = (
+                "DROP TEST — phone recording on glass surface:\n"
+                "  Real solid gold (2–15g jewelry): decay 100–2000 ms depending on mass.\n"
+                "  Imitation/plated (brass, zinc): decay 50–160 ms — shorter, more damped.\n"
+                "  Gold internal damping = 3e-4 (very low) → LONGER ring. Brass 3–10× higher.\n"
+                "  LONGER decay = more gold-like. High-freq ratio 60–90% is NORMAL on glass.\n"
+                "  Do NOT call a decay of 100–500 ms 'short' — it is typical for phone tests.\n"
+            )
+        else:
+            mode_ctx = (
+                "TAP TEST — phone held near ornament:\n"
+                "  Gold-band energy >15% and decay >80 ms favour real gold.\n"
+                "  High-freq ratio 60–90% is normal for glass surface — not an indicator.\n"
+            )
+
         prompt = (
-            f"You are an acoustic-analysis assistant. "
-            f"A separate physics model already scored this {item_type} at {score}/100 for gold authenticity "
-            f"using a {mode} test. You are NOT scoring — explain only.\n\n"
+            f"You are an acoustic-analysis assistant for jewelry authentication. "
+            f"A separate physics classifier scored this {item_type} at {score}/100. "
+            f"You ONLY explain the measured parameters — you do NOT change the score.\n\n"
+            f"{mode_ctx}\n"
             f"Measured parameters:\n"
             f"  Decay time: {physics['decay_ms']:.0f} ms\n"
             f"  Dominant freq: {physics['dom_freq_hz']:.0f} Hz\n"
@@ -361,8 +363,10 @@ async def _gemini_explain(
             f"  High-freq ratio: {physics['hf_ratio']:.0%}\n"
             f"  Decay R²: {physics['decay_r2']:.2f}\n"
             f"  SNR: {physics['snr_db']:.0f} dB\n\n"
-            f"In 2–3 sentences ({lang_out}), explain what these parameters suggest about the material. "
-            f"If the signal is weak or ambiguous, say so and set low_confidence to true.\n"
+            f"In 2–3 sentences ({lang_out}), explain what these parameters suggest. "
+            f"Set low_confidence to true ONLY for genuine signal quality problems: "
+            f"SNR < 20 dB, or no clear impact detected. "
+            f"Do NOT set low_confidence based on physics interpretation — the classifier handles that.\n"
             f"Respond ONLY with JSON: "
             '{"explanation": "<text>", "low_confidence": true/false}'
         )
