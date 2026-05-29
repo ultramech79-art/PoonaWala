@@ -252,14 +252,23 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
     total_power = val["total_power"]
     abs_arr  = np.abs(arr)
 
-    # Decay time (time to fall to 10% of peak)
+    # Decay time — use smoothed envelope peak, not raw peak.
+    # Raw peak and smoothed envelope use different window sizes; comparing them
+    # causes smoothed[0] < raw_peak * 0.10 immediately → decay=0ms (wrong).
     post = abs_arr[peak_idx:]
-    win = max(1, int(sr * 0.010))
+    win = max(1, int(sr * 0.010))  # 10ms smoothing
     smoothed = np.convolve(post, np.ones(win) / win, mode="same")
-    below = np.where(smoothed < peak * 0.10)[0]
-    decay_idx = int(below[0]) if len(below) else len(post) - 1
-    decay_ms_val = decay_idx / sr * 1000.0
-    decay_env = smoothed[:max(decay_idx, 20)]
+    # Find the smoothed envelope's own peak to use as the reference
+    smooth_peak_idx = int(np.argmax(smoothed[:min(len(smoothed), int(sr * 0.1))]))  # peak within first 100ms
+    smooth_peak = float(smoothed[smooth_peak_idx])
+    if smooth_peak < 1e-6:
+        smooth_peak = float(np.max(smoothed)) or 1e-6
+    # Measure from smoothed peak onwards
+    post_peak = smoothed[smooth_peak_idx:]
+    below = np.where(post_peak < smooth_peak * 0.10)[0]
+    decay_idx = int(below[0]) if len(below) else len(post_peak) - 1
+    decay_ms_val = (smooth_peak_idx + decay_idx) / sr * 1000.0
+    decay_env = post_peak[:max(decay_idx, 20)]
     decay_r2_val = exp_decay_r2(decay_env)
 
     # Spectral metrics — bandpass 120–8000 Hz before centroid.
