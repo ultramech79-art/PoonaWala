@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import type { HuidVerificationResult } from '../lib/api'
 import type { LTVComponent } from '../lib/ltvEngine'
 import type { ROIComponent } from '../lib/roiEngine'
 import type { RepaymentType, AmortizationRow } from '../lib/emiEngine'
@@ -102,6 +103,7 @@ export interface SessionState {
   huidCode: string | null
   scannedKarat: number | null
   certificateData: CertificateData | null
+  huidVerification: HuidVerificationResult | null
   liveAuthResult: LiveAuthResult | null
   tapTestResult: TapTestResult | null
   result: AssessmentResult | null
@@ -181,6 +183,7 @@ let _state: SessionState = {
   huidCode: null,
   scannedKarat: null,
   certificateData: null,
+  huidVerification: null,
   liveAuthResult: null,
   tapTestResult: null,
   result: null,
@@ -223,6 +226,7 @@ export function useSessionStore() {
     },
     setWeight: (g: number | null) => setState({ weightG: g }),
     setHuid: (code: string | null) => setState({ huidCode: code }),
+    setHuidVerification: (huidVerification: HuidVerificationResult | null) => setState({ huidVerification }),
     setScannedKarat: (karat: number | null) => setState({ scannedKarat: karat }),
     setCertificateData: (certificateData: CertificateData | null) => setState({ certificateData }),
     setLiveAuthResult: (liveAuthResult: LiveAuthResult | null) => setState({ liveAuthResult }),
@@ -245,6 +249,7 @@ export function useSessionStore() {
       huidCode: null,
       scannedKarat: null,
       certificateData: null,
+      huidVerification: null,
       liveAuthResult: null,
       tapTestResult: null,
       result: null,

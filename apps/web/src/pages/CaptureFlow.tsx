@@ -6,7 +6,7 @@ import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield } from 'lucide-react'
 import { clsx } from 'clsx'
-import { evaluateFrameAPI, type FrameEvalResult } from '../lib/api'
+import { evaluateFrameAPI, verifyHuidAPI, type FrameEvalResult, type HuidVerificationResult } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
 
 interface Step {
@@ -41,7 +41,7 @@ function speak(text: string) {
 export function CaptureFlow() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { addCapture, state, setScannedKarat, setHuid, initSession } = useSessionStore()
+  const { addCapture, state, setScannedKarat, setHuid, setHuidVerification, initSession } = useSessionStore()
 
   const STEPS: Step[] = [
     {
@@ -97,6 +97,8 @@ export function CaptureFlow() {
   const [manualHuid, setManualHuid] = useState(state.huidCode || '')
   const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat || null)
   const [activeTab, setActiveTab] = useState<'scan' | 'manual'>('scan')
+  const [huidVerifying, setHuidVerifying] = useState(false)
+  const [huidVerifyResult, setHuidVerifyResult] = useState<HuidVerificationResult | null>(state.huidVerification ?? null)
   const spokenStep = useRef(-1)
 
   const step = STEPS[stepIdx]
@@ -178,6 +180,25 @@ export function CaptureFlow() {
     setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle', dataUrl: undefined } }))
     setCaptured(prev => { const s = new Set(prev); s.delete(stepIdx); return s })
     setCameraKey(k => k + 1)
+  }
+
+  const handleVerifyHuid = async (huid: string) => {
+    if (!huid || huid.length !== 6) return
+    setHuidVerifying(true)
+    setHuidVerifyResult(null)
+    try {
+      const result = await verifyHuidAPI(huid)
+      setHuidVerifyResult(result)
+      setHuidVerification(result)
+      if (result.purity) {
+        const kMap: Record<string, number> = { '24K999': 24, '22K916': 22, '18K750': 18, '14K585': 14, '9K375': 9 }
+        const k = kMap[result.purity]
+        if (k) { setScannedKarat(k); setSelectedKarat(k) }
+      }
+    } catch {
+      setHuidVerifyResult({ huid, status: 'AGENT_ERROR', confidence: 0, purity: null, article_type: null, jeweller_name: null, hallmark_date: null, error: 'Verifier unavailable — check ngrok URL' })
+    }
+    setHuidVerifying(false)
   }
 
   const handleEnterDemo = useCallback(async () => {
@@ -352,9 +373,52 @@ export function CaptureFlow() {
                           <span className="text-sm font-bold text-emerald-600">{selectedKarat ? `${selectedKarat}K` : 'Not Detected'}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-stone-500">HUID Status</span>
-                          <span className="text-sm font-bold text-emerald-600">{manualHuid || currentEval?.result?.detected?.huid_code ? 'Verified' : 'Manual Entry Needed'}</span>
+                          <span className="text-xs text-stone-500">HUID</span>
+                          <span className="text-sm font-mono font-bold text-stone-700">
+                            {(currentEval?.result?.detected?.huid_code as string) || manualHuid || '—'}
+                          </span>
                         </div>
+                        {/* Verify HUID via BIS when detected */}
+                        {((currentEval?.result?.detected?.huid_code as string) || manualHuid) && !huidVerifyResult && (
+                          <button
+                            onClick={() => handleVerifyHuid((currentEval?.result?.detected?.huid_code as string) || manualHuid)}
+                            disabled={huidVerifying}
+                            className="w-full py-2 rounded-xl text-xs font-bold bg-brand-600 text-white disabled:opacity-50"
+                          >
+                            {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Verify HUID with BIS CARE →'}
+                          </button>
+                        )}
+                        {/* BIS result inline */}
+                        {huidVerifyResult && (
+                          <div className={clsx(
+                            'rounded-xl border p-3 space-y-1.5',
+                            huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
+                            huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
+                            'bg-amber-50 border-amber-200'
+                          )}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-stone-600">BIS CARE</span>
+                              <span className={clsx(
+                                'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                                huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
+                                huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              )}>
+                                {huidVerifyResult.status.replace('_', ' ')}
+                              </span>
+                            </div>
+                            {huidVerifyResult.error ? (
+                              <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                {huidVerifyResult.purity && <><span className="text-stone-500">Purity</span><span className="font-semibold">{huidVerifyResult.purity}</span></>}
+                                {huidVerifyResult.jeweller_name && <><span className="text-stone-500">Jeweller</span><span className="font-semibold">{huidVerifyResult.jeweller_name}</span></>}
+                                {huidVerifyResult.hallmark_date && <><span className="text-stone-500">Date</span><span className="font-semibold">{huidVerifyResult.hallmark_date}</span></>}
+                                {huidVerifyResult.article_type && <><span className="text-stone-500">Article</span><span className="font-semibold capitalize">{huidVerifyResult.article_type}</span></>}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <p className="text-[11px] text-stone-600 leading-relaxed italic border-t border-stone-200 pt-2">
                           {currentEval?.result?.feedback || 'Take a clear photo of the Hallmark stamp for automatic extraction.'}
                         </p>
@@ -365,19 +429,88 @@ export function CaptureFlow() {
                   <div className="space-y-4">
                     <div>
                       <label className="label mb-2 block">HUID Alphanumeric Code</label>
-                      <input
-                        type="text"
-                        value={manualHuid}
-                        onChange={e => {
-                          const val = e.target.value.toUpperCase();
-                          setManualHuid(val);
-                          setHuid(val || null);
-                        }}
-                        placeholder="e.g., A3F2K1"
-                        className="input-field font-mono"
-                        maxLength={10}
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={manualHuid}
+                          onChange={e => {
+                            const val = e.target.value.toUpperCase();
+                            setManualHuid(val);
+                            setHuid(val || null);
+                            setHuidVerifyResult(null);
+                          }}
+                          placeholder="e.g., A3F2K1"
+                          className="input-field font-mono flex-1"
+                          maxLength={6}
+                        />
+                        <button
+                          onClick={() => handleVerifyHuid(manualHuid)}
+                          disabled={manualHuid.length !== 6 || huidVerifying}
+                          className={clsx(
+                            'px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap',
+                            manualHuid.length === 6 && !huidVerifying
+                              ? 'bg-brand-600 border-brand-600 text-white'
+                              : 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
+                          )}
+                        >
+                          {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify BIS'}
+                        </button>
+                      </div>
                     </div>
+
+                    {/* BIS Verification Result */}
+                    {huidVerifyResult && (
+                      <div className={clsx(
+                        'rounded-2xl border p-3 space-y-2',
+                        huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
+                        huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
+                        'bg-amber-50 border-amber-200'
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-stone-700">BIS CARE Result</span>
+                          <span className={clsx(
+                            'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                            huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
+                            huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
+                            'bg-amber-100 text-amber-700'
+                          )}>
+                            {huidVerifyResult.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        {huidVerifyResult.error ? (
+                          <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                            {huidVerifyResult.purity && (
+                              <>
+                                <span className="text-stone-500">Purity</span>
+                                <span className="font-semibold text-stone-800">{huidVerifyResult.purity}</span>
+                              </>
+                            )}
+                            {huidVerifyResult.article_type && (
+                              <>
+                                <span className="text-stone-500">Article</span>
+                                <span className="font-semibold text-stone-800 capitalize">{huidVerifyResult.article_type}</span>
+                              </>
+                            )}
+                            {huidVerifyResult.jeweller_name && (
+                              <>
+                                <span className="text-stone-500">Jeweller</span>
+                                <span className="font-semibold text-stone-800">{huidVerifyResult.jeweller_name}</span>
+                              </>
+                            )}
+                            {huidVerifyResult.hallmark_date && (
+                              <>
+                                <span className="text-stone-500">Hallmark Date</span>
+                                <span className="font-semibold text-stone-800">{huidVerifyResult.hallmark_date}</span>
+                              </>
+                            )}
+                            <span className="text-stone-500">Confidence</span>
+                            <span className="font-semibold text-stone-800">{huidVerifyResult.confidence}%</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div>
                       <label className="label mb-2 block">Purity / Karat</label>

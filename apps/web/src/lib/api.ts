@@ -201,6 +201,28 @@ export function certificateOcrAPI(imageDataUrl: string, timeoutMs = 45000): Prom
   return post('/api/certificate-ocr', { image_data_url: imageDataUrl }, timeoutMs)
 }
 
+// ─── HUID Verifier (local Mac via ngrok) ─────────────────
+export type HuidStatus = 'VERIFIED' | 'NOT_VERIFIED' | 'NEEDS_MANUAL_REVIEW' | 'INVALID_FORMAT' | 'AGENT_ERROR'
+
+export interface HuidVerificationResult {
+  huid: string
+  status: HuidStatus
+  confidence: number
+  purity: string | null
+  article_type: string | null
+  jeweller_name: string | null
+  hallmark_date: string | null
+  error: string | null
+}
+
+export async function verifyHuidAPI(huid: string): Promise<HuidVerificationResult> {
+  const verifierBase = (import.meta.env.VITE_HUID_VERIFIER_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+  if (!verifierBase) throw new Error('HUID verifier URL not configured (VITE_HUID_VERIFIER_URL)')
+  const res = await fetch(`${verifierBase}/verify-huid/${encodeURIComponent(huid)}`)
+  if (!res.ok) throw new Error(`HUID verifier ${res.status}: ${await res.text().catch(() => res.statusText)}`)
+  return res.json() as Promise<HuidVerificationResult>
+}
+
 // ─── 2Factor.in OTP API ──────────────────────────────────
 export interface OtpSendResponse {
   success: boolean
