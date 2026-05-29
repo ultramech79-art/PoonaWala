@@ -66,6 +66,11 @@ router = APIRouter()
 MAX_VIDEO_FRAMES = 11
 
 
+def _is_video_frame(frame_type: str | None) -> bool:
+    label = str(frame_type or "").lower()
+    return label == "video" or label.startswith("video_")
+
+
 class VideoEvalRequest(BaseModel):
     frames_b64: list[str]
     language: str = "en"
@@ -306,12 +311,22 @@ Return ONLY valid JSON:
             )
             comparisons[idx] = {**confirmed, "frame_idx": idx, "frame_type": f"video_{idx}"}
 
-        mismatches = [item for item in comparisons if is_blocking_mismatch(item)]
+        blocking_mismatches = [item for item in comparisons if is_blocking_mismatch(item)]
+        video_mismatches = [item for item in blocking_mismatches if _is_video_frame(item.get("frame_type"))]
+        non_video_mismatches = [item for item in blocking_mismatches if not _is_video_frame(item.get("frame_type"))]
+        severe_video_mismatches = [
+            item for item in video_mismatches
+            if float(item.get("confidence", 0.0)) >= 0.92 and float(item.get("same_item_score", 0.5)) <= 0.18
+        ]
+        mismatches = non_video_mismatches + (
+            video_mismatches if len(video_mismatches) >= 2 else severe_video_mismatches
+        )
         if mismatches:
             strongest = sorted(mismatches, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
             same_item_summary = {
                 **strongest,
                 "frames_checked": len(comparisons),
+                "blocking_mismatch": True,
                 "mismatched_frames": mismatches,
                 "comparisons": comparisons,
             }
@@ -322,6 +337,7 @@ Return ONLY valid JSON:
             same_item_summary = {
                 **strongest,
                 "frames_checked": len(comparisons),
+                "blocking_mismatch": False,
                 "mismatched_frames": [],
                 "comparisons": comparisons,
             }
@@ -354,7 +370,7 @@ Return ONLY valid JSON:
             "अनिश्चित"              if video_score >= 50 else
             "संभवतः गोल्ड-प्लेटेड"
         )
-    if same_item_summary and same_item_summary.get("verdict") == "different":
+    if same_item_summary and same_item_summary.get("blocking_mismatch"):
         verdict = "Different jewelry item detected" if req.language == "en" else "अलग गहना मिला"
 
     logger.info(

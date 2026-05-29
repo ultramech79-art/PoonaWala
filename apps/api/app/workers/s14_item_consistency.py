@@ -20,6 +20,17 @@ def _frame_label(idx: int) -> str:
     return f"video_{idx - len(STILL_FRAME_LABELS)}"
 
 
+def _is_video_frame(frame_type: str | None) -> bool:
+    label = str(frame_type or "").lower()
+    return label == "video" or label.startswith("video_")
+
+
+def _reference_for_candidate(frames: list[str], candidate_idx: int) -> tuple[str, str]:
+    if candidate_idx > 1 and len(frames) > 1 and frames[1]:
+        return frames[1], "45deg"
+    return frames[0], "top"
+
+
 async def run(session_id: str, frames: list[str], selfie_url: str | None = None, **_) -> SignalResult:
     t0 = time.time()
     try:
@@ -48,14 +59,15 @@ async def run(session_id: str, frames: list[str], selfie_url: str | None = None,
 
         comparisons = []
         for idx, label, url in candidates:
+            reference, reference_label = _reference_for_candidate(frames, idx)
             result = await compare_item_images(
                 reference,
                 url,
-                reference_frame_type="top",
+                reference_frame_type=reference_label,
                 candidate_frame_type=label,
                 use_gemini=False,
             )
-            result = {**result, "frame_idx": idx, "frame_type": label}
+            result = {**result, "frame_idx": idx, "frame_type": label, "reference_frame_type": reference_label}
             comparisons.append(result)
 
         suspect_frames = sorted(
@@ -70,30 +82,45 @@ async def run(session_id: str, frames: list[str], selfie_url: str | None = None,
         for item in suspect_frames:
             idx = int(item["frame_idx"])
             label, url = candidates_by_idx[idx]
+            reference, reference_label = _reference_for_candidate(frames, idx)
             confirmed = await compare_item_images(
                 reference,
                 url,
-                reference_frame_type="top",
+                reference_frame_type=reference_label,
                 candidate_frame_type=label,
             )
             comparisons = [
-                {**confirmed, "frame_idx": idx, "frame_type": label} if c.get("frame_idx") == idx else c
+                {**confirmed, "frame_idx": idx, "frame_type": label, "reference_frame_type": reference_label}
+                if c.get("frame_idx") == idx else c
                 for c in comparisons
             ]
 
-        mismatched = []
+        blocking_results = []
         for item in comparisons:
             if is_blocking_mismatch(item):
-                mismatched.append({
-                    "frame_idx": item["frame_idx"],
-                    "frame_type": item["frame_type"],
-                    "result": item,
-                })
+                blocking_results.append(item)
+
+        video_mismatches = [item for item in blocking_results if _is_video_frame(item.get("frame_type"))]
+        non_video_mismatches = [item for item in blocking_results if not _is_video_frame(item.get("frame_type"))]
+        severe_video_mismatches = [
+            item for item in video_mismatches
+            if float(item.get("confidence", 0.0)) >= 0.92 and float(item.get("same_item_score", 0.5)) <= 0.18
+        ]
+        active_mismatches = non_video_mismatches + (
+            video_mismatches if len(video_mismatches) >= 2 else severe_video_mismatches
+        )
+        mismatched = [
+            {
+                "frame_idx": item["frame_idx"],
+                "frame_type": item["frame_type"],
+                "result": item,
+            }
+            for item in active_mismatches
+        ]
 
         mismatch_scores = [
             (1.0 - float(item.get("same_item_score", 0.5))) * float(item.get("confidence", 0.0))
-            for item in comparisons
-            if item.get("verdict") == "different"
+            for item in active_mismatches
         ]
         item_mismatch_score = max(mismatch_scores) if mismatch_scores else 0.0
         same_item_mismatch = bool(mismatched)

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { analyzeFrame, sendTapTest, authCheck, type AnalyzeResult, type TapTestResult, type AuthCheckResult } from '../lib/liveSession'
+import { preferredCameraDeviceId } from '../lib/cameraQuality'
 import { X, Zap, ZapOff, Mic, CheckCircle, SwitchCamera } from 'lucide-react'
 
 const ANGLES = ['top', '45deg', 'side', 'macro', 'selfie'] as const
@@ -294,7 +295,6 @@ export function LiveCapture() {
   const lastGuidanceRef = useRef('')
   const lastGuidanceAtRef = useRef(0)
   const approvalStreakRef = useRef<{ angle: Angle | null; count: number }>({ angle: null, count: 0 })
-
   const [capturedCount, setCapturedCount] = useState(0)
   const [guidance, setGuidance]           = useState('')
   const [observedItem, setObservedItem]   = useState('')
@@ -309,7 +309,6 @@ export function LiveCapture() {
   const [zoom, setZoom]                   = useState(1)
   const [zoomMin, setZoomMin]             = useState(1)
   const [zoomMax, setZoomMax]             = useState(1)
-
   // Purity modal (shown after macro shot)
   const [showPurityModal, setShowPurityModal]     = useState(false)
   const [purityPrediction, setPurityPrediction]   = useState<{hint: string; confidence: number} | null>(null)
@@ -400,8 +399,12 @@ export function LiveCapture() {
       previous.getVideoTracks().forEach(t => t.stop())
     }
 
+    const deviceId = await preferredCameraDeviceId(facingMode)
     const next = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode, width: { ideal: 1280 } },
+      video: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode }),
+        width: { ideal: 1280 },
+      },
       audio: includeAudio
         ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
         : false,
@@ -441,8 +444,13 @@ export function LiveCapture() {
   const startCamera = useCallback(async () => {
     setStatus('loading')
     try {
+      const deviceId = await preferredCameraDeviceId({ ideal: 'environment' })
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false,
+        video: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
+          width: { ideal: 1280 },
+        },
+        audio: false,
       })
       streamRef.current = stream
       if (videoRef.current) {

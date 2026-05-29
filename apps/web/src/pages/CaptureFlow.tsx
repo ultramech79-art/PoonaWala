@@ -29,6 +29,23 @@ interface StepEval {
   dataUrl?: string
 }
 
+function referenceForStep(
+  stepType: CaptureType,
+  captures: Partial<Record<CaptureType, { dataUrl: string }>>,
+) {
+  if (stepType === '45deg') {
+    return { referenceFrameType: 'top', referenceImageDataUrl: undefined }
+  }
+
+  const angleReference = captures['45deg']?.dataUrl
+  if (angleReference) {
+    return { referenceFrameType: '45deg', referenceImageDataUrl: angleReference }
+  }
+
+  const topReference = captures.top?.dataUrl
+  return { referenceFrameType: 'top', referenceImageDataUrl: topReference }
+}
+
 function speak(text: string) {
   if (!('speechSynthesis' in window)) return
   window.speechSynthesis.cancel()
@@ -45,18 +62,18 @@ export function CaptureFlow() {
 
   const STEPS: Step[] = [
     {
-      type: 'top',
-      titleKey: 'step_top_title',
-      hintKey: 'step_top_hint',
-      voiceGuide: t('voice_top'),
-      demoUrl: '/assets/demo/top.jpg',
-    },
-    {
       type: '45deg',
       titleKey: 'step_45_title',
       hintKey: 'step_45_hint',
       voiceGuide: t('voice_45deg'),
       demoUrl: '/assets/demo/45deg.jpg',
+    },
+    {
+      type: 'top',
+      titleKey: 'step_top_title',
+      hintKey: 'step_top_hint',
+      voiceGuide: t('voice_top'),
+      demoUrl: '/assets/demo/top.jpg',
     },
     {
       type: 'side',
@@ -83,7 +100,7 @@ export function CaptureFlow() {
   ]
 
   const STEP_LABELS = [
-    t('step_label_top'), t('step_label_45'), t('step_label_side'),
+    t('step_label_45'), t('step_label_top'), t('step_label_side'),
     t('step_label_hallmark'), t('step_label_selfie'),
   ]
 
@@ -106,6 +123,7 @@ export function CaptureFlow() {
   const currentEval = evals[stepIdx]
   const evalState = currentEval?.state ?? 'idle'
   const sameItemMismatch = currentEval?.result?.issues?.includes('same_item_mismatch') ?? false
+  const visibleIssues = currentEval?.result?.issues?.filter(issue => issue !== 'same_item_mismatch') ?? []
 
   useEffect(() => {
     if (spokenStep.current === stepIdx) return
@@ -135,13 +153,10 @@ export function CaptureFlow() {
       const optimizedDataUrl = await resizeDataUrl(dataUrl, 1024, 0.8)
 
       const sessionId = state.sessionId || initSession()
-      const referenceImageDataUrl =
-        step.type === 'top'
-          ? undefined
-          : (state.captures.top?.dataUrl || evals[0]?.dataUrl)
+      const { referenceFrameType, referenceImageDataUrl } = referenceForStep(step.type, state.captures)
       const evalOptions = {
         sessionId,
-        referenceFrameType: 'top',
+        referenceFrameType,
         referenceImageDataUrl,
       }
 
@@ -174,7 +189,7 @@ export function CaptureFlow() {
       }))
       speak(fallback)
     }
-  }, [step, stepIdx, addCapture, setScannedKarat, state.sessionId, state.captures.top, evals, initSession])
+  }, [step, stepIdx, addCapture, setScannedKarat, state.sessionId, state.captures, initSession])
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
@@ -678,9 +693,9 @@ export function CaptureFlow() {
                 <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-red-700">{currentEval.result.feedback}</p>
-                  {currentEval.result.issues.length > 0 && (
+                  {visibleIssues.length > 0 && (
                     <ul className="mt-1.5 space-y-0.5">
-                      {currentEval.result.issues.map((issue, i) => (
+                      {visibleIssues.map((issue, i) => (
                         <li key={i} className="text-xs text-red-600/70">• {issue}</li>
                       ))}
                     </ul>
