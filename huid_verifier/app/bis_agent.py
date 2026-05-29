@@ -142,10 +142,13 @@ def _build_driver() -> webdriver.Remote:
     # If activity is configured use it; otherwise let Appium resolve the launcher
     if settings.bis_activity:
         opts.app_activity = settings.bis_activity
-    opts.no_reset = True           # keep app state / don't reinstall
+    opts.no_reset = True
     opts.full_reset = False
     opts.new_command_timeout = settings.appium_new_command_timeout
     opts.auto_grant_permissions = True
+    opts.set_capability("uiautomator2ServerLaunchTimeout", 60000)
+    opts.set_capability("uiautomator2ServerInstallTimeout", 60000)
+    opts.set_capability("adbExecTimeout", 60000)
 
     logger.info(
         "Starting Appium session — device=%s udid=%s package=%s",
@@ -234,6 +237,15 @@ def verify_huid_via_app(huid: str) -> AgentResult:
 
             input_field = find_huid_input(driver, timeout=wait)
 
+        # Dismiss lingering "invalid HUID" dialog from a previous failed search
+        try:
+            find_by_text_contains(driver, "HUID number appears to be invalid")
+            click_first_matching_text(driver, ["ENTER CORRECT HUID NUMBER", "ENTER CORRECT", "OK"])
+            time.sleep(0.5)
+            logger.info("Cleared lingering invalid-HUID dialog")
+        except NoSuchElementException:
+            pass
+
         if click_reset_if_present(driver):
             input_field = find_huid_input(driver, timeout=wait)
 
@@ -286,18 +298,33 @@ def verify_huid_via_app(huid: str) -> AgentResult:
         except TimeoutException:
             logger.warning("Timed out waiting for a clear result marker; capturing current screen")
 
-        # ── 5. Capture before scroll (Jeweller Details visible) ──────────────
+        # ── 5. Detect "invalid HUID" dialog ──────────────────────────────────
+        try:
+            invalid_el = find_by_text_contains(driver, "HUID number appears to be invalid")
+            # Dialog is showing — tap the dismiss button and reset session
+            logger.info("Invalid HUID dialog detected — dismissing")
+            click_first_matching_text(driver, [
+                "ENTER CORRECT HUID NUMBER", "ENTER CORRECT", "OK", "CLOSE",
+            ])
+            time.sleep(0.3)
+            _mark_driver_failed()  # Force fresh session next call
+            return AgentResult(raw_text="HUID not found", screenshot_path=None, error=None)
+        except NoSuchElementException:
+            pass  # No dialog — normal result screen
+
+        # ── 6. Capture before scroll (Jeweller Details visible) ──────────────
         raw_text_top = driver.page_source
 
-        # ── 6. Scroll down to reveal Article Details (purity, date) ─────────
+        # ── 6. Scroll down twice to reveal Article Details (purity, date) ───
         try:
             size = driver.get_window_size()
-            driver.swipe(
-                size["width"] // 2, int(size["height"] * 0.75),
-                size["width"] // 2, int(size["height"] * 0.25),
-                duration=500,
-            )
-            time.sleep(0.8)
+            cx = size["width"] // 2
+            # First swipe
+            driver.swipe(cx, int(size["height"] * 0.75), cx, int(size["height"] * 0.25), duration=400)
+            time.sleep(0.6)
+            # Second swipe to get past RESET button into Article Details
+            driver.swipe(cx, int(size["height"] * 0.75), cx, int(size["height"] * 0.25), duration=400)
+            time.sleep(1.2)
         except Exception as e:
             logger.warning("Scroll failed: %s", e)
 
