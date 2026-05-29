@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sarvam TTS Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f0f0f; color: #f0f0f0; padding: 20px; min-height: 100vh; }
+    h1 { font-size: 1.2rem; margin-bottom: 4px; color: #fbbf24; }
+    p.sub { font-size: 0.75rem; color: #6b7280; margin-bottom: 20px; }
+    label { font-size: 0.8rem; color: #9ca3af; display: block; margin-bottom: 6px; }
+    textarea {
+      width: 100%; background: #1f1f1f; color: #f0f0f0;
+      border: 1px solid #374151; border-radius: 10px;
+      padding: 12px; font-size: 0.95rem; line-height: 1.5;
+      resize: vertical; min-height: 80px; margin-bottom: 12px;
+    }
+    select {
+      width: 100%; background: #1f1f1f; color: #f0f0f0;
+      border: 1px solid #374151; border-radius: 10px;
+      padding: 10px 12px; font-size: 0.9rem; margin-bottom: 12px;
+    }
+    .row { display: flex; gap: 10px; margin-bottom: 12px; }
+    .row label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
+    input[type=range] { flex: 1; accent-color: #fbbf24; }
+    span.val { font-size: 0.8rem; color: #fbbf24; width: 36px; text-align: right; }
+    button {
+      width: 100%; padding: 14px; border: none; border-radius: 12px;
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:active { opacity: 0.7; }
+    #btn-speak { background: #fbbf24; color: #000; margin-bottom: 10px; }
+    #btn-stop  { background: #374151; color: #f0f0f0; margin-bottom: 20px; }
+    #btn-speak:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+    #status {
+      padding: 12px; border-radius: 10px; font-size: 0.8rem;
+      line-height: 1.5; white-space: pre-wrap; word-break: break-all;
+      min-height: 44px; background: #1a1a1a; border: 1px solid #2d2d2d;
+    }
+    #status.ok  { border-color: #059669; color: #6ee7b7; }
+    #status.err { border-color: #dc2626; color: #fca5a5; }
+    #status.inf { border-color: #2563eb; color: #93c5fd; }
+    audio { width: 100%; margin-top: 14px; }
+    .divider { border: none; border-top: 1px solid #2d2d2d; margin: 16px 0; }
+    .presets { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .preset {
+      padding: 10px 14px; background: #1f1f1f; border: 1px solid #374151;
+      border-radius: 10px; font-size: 0.82rem; color: #d1d5db; cursor: pointer;
+      text-align: left;
+    }
+    .preset:active { background: #2d2d2d; }
+    .tag { display: inline-block; font-size: 0.65rem; background: #374151; color: #9ca3af;
+           padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+  </style>
+</head>
+<body>
+
+<h1>🎙 Sarvam AI TTS Test</h1>
+<p class="sub">Open on phone → http://&lt;your-mac-ip&gt;:5174/tts-test.html</p>
+
+<label>Quick presets — tap to load</label>
+<div class="presets">
+  <button class="preset" onclick="loadPreset('step1')">
+    <span class="tag">Step 1</span>चरण 1. कैमरे को 45 डिग्री के कोण पर झुकाएं ताकि गहराई दिखे।
+  </button>
+  <button class="preset" onclick="loadPreset('result')">
+    <span class="tag">Result</span>आपका सोना असली लगता है। उच्च विश्वास स्तर।
+  </button>
+  <button class="preset" onclick="loadPreset('done')">
+    <span class="tag">Done</span>सब हो गया! अब आपके सोने का आकलन हो रहा है।
+  </button>
+  <button class="preset" onclick="loadPreset('cert')">
+    <span class="tag">Bill</span>कृपया इस आभूषण का मूल बिल स्कैन करें। सुनिश्चित करें कि सारा विवरण स्पष्ट हो।
+  </button>
+</div>
+
+<hr class="divider" />
+
+<label>Text to speak (Hindi or English)</label>
+<textarea id="text">चरण 1. कैमरे को 45 डिग्री के कोण पर झुकाएं ताकि गहराई दिखे। तैयार होने पर कैप्चर करें।</textarea>
+
+<label>Voice (speaker)</label>
+<select id="speaker">
+  <optgroup label="── Female ──">
+    <option value="meera">meera</option>
+    <option value="pavithra">pavithra</option>
+    <option value="maitreyi">maitreyi</option>
+    <option value="anushka">anushka</option>
+    <option value="kavitha">kavitha</option>
+    <option value="vidya">vidya</option>
+    <option value="shreya">shreya</option>
+    <option value="nisha">nisha</option>
+    <option value="sakshi">sakshi</option>
+    <option value="anu">anu</option>
+    <option value="manisha">manisha</option>
+  </optgroup>
+  <optgroup label="── Male ──">
+    <option value="arvind">arvind</option>
+    <option value="amol">amol</option>
+    <option value="arjun">arjun</option>
+  </optgroup>
+</select>
+
+<div class="row">
+  <label>Pace <input type="range" id="pace" min="0.5" max="1.5" step="0.05" value="0.85"
+    oninput="document.getElementById('paceVal').textContent=this.value">
+    <span class="val" id="paceVal">0.85</span></label>
+</div>
+
+<div class="row">
+  <label>Pitch <input type="range" id="pitch" min="-2" max="2" step="0.5" value="0"
+    oninput="document.getElementById('pitchVal').textContent=this.value">
+    <span class="val" id="pitchVal">0</span></label>
+</div>
+
+<div class="row">
+  <label>Loudness <input type="range" id="loudness" min="1" max="2" step="0.1" value="1.5"
+    oninput="document.getElementById('loudnessVal').textContent=this.value">
+    <span class="val" id="loudnessVal">1.5</span></label>
+</div>
+
+<button id="btn-speak" onclick="testTTS()">▶ Speak</button>
+<button id="btn-stop" onclick="stopAudio()">■ Stop</button>
+
+<div id="status" class="inf">Ready — tap Speak to test</div>
+<audio id="player" controls style="display:none"></audio>
+
+<script>
+// Calls the backend proxy — key lives on Render, not in browser
+const PROXY_URL = (location.hostname === 'localhost' || location.hostname.match(/^192\.168\./))
+  ? 'http://localhost:8000/api/tts'
+  : '/api/tts'
+
+const PRESETS = {
+  step1: 'चरण 1. कैमरे को 45 डिग्री के कोण पर झुकाएं ताकि गहराई दिखे। तैयार होने पर कैप्चर करें।',
+  result: 'आपका सोना असली लगता है। उच्च विश्वास स्तर।',
+  done: 'सब हो गया! अब आपके सोने का आकलन हो रहा है।',
+  cert: 'कृपया इस आभूषण का मूल बिल स्कैन करें। सुनिश्चित करें कि सारा विवरण स्पष्ट हो।',
+}
+
+function loadPreset(key) {
+  document.getElementById('text').value = PRESETS[key]
+}
+
+let currentAudio = null
+
+function stopAudio() {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null }
+}
+
+async function testTTS() {
+  const text = document.getElementById('text').value.trim()
+  if (!text) return
+
+  const speaker  = document.getElementById('speaker').value
+  const pace     = parseFloat(document.getElementById('pace').value)
+  const pitch    = parseFloat(document.getElementById('pitch').value)
+  const loudness = parseFloat(document.getElementById('loudness').value)
+
+  const btn = document.getElementById('btn-speak')
+  const status = document.getElementById('status')
+  const player = document.getElementById('player')
+
+  btn.disabled = true
+  btn.textContent = '⏳ Calling Sarvam API…'
+  status.className = 'inf'
+  status.textContent = 'POST ' + URL + '\nSpeaker: ' + speaker + ' | Pace: ' + pace
+
+  try {
+    const t0 = Date.now()
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, speaker, pace, pitch, loudness }),
+    })
+
+    const elapsed = Date.now() - t0
+    status.textContent = 'HTTP ' + res.status + ' (' + elapsed + 'ms)\n'
+
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error('HTTP ' + res.status + ': ' + errText)
+    }
+
+    const data = await res.json()
+    status.textContent += 'Keys: ' + Object.keys(data).join(', ') + '\n'
+
+    const b64 = data.audio_b64
+    if (!b64) throw new Error('No audio in response. Full: ' + JSON.stringify(data).slice(0, 300))
+
+    status.textContent += 'Audio b64 length: ' + b64.length + '\n✅ Playing!'
+    status.className = 'ok'
+
+    stopAudio()
+    const src = 'data:audio/wav;base64,' + b64
+    player.src = src
+    player.style.display = 'block'
+    currentAudio = player
+    await player.play()
+
+  } catch (e) {
+    status.className = 'err'
+    status.textContent = '❌ ' + (e.message || e)
+    console.error(e)
+  } finally {
+    btn.disabled = false
+    btn.textContent = '▶ Speak'
+  }
+}
+</script>
+</body>
+</html>

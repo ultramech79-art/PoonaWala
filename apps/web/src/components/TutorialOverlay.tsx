@@ -7,19 +7,25 @@ interface Props {
 }
 
 const TUTORIAL_LABELS: Record<string, string> = {
-  top:    'Top-Down Shot',
-  '45deg': '45° Angle Shot',
-  side:   'Side Profile Shot',
-  macro:  'Hallmark Close-Up',
-  selfie: 'Selfie with Gold',
+  top:         'Top-Down Shot',
+  '45deg':     '45° Angle Shot',
+  side:        'Side Profile Shot',
+  selfie:      'Selfie with Gold',
+  macro:       'Hallmark Close-Up',
+  video:       '15-Second Video Scan',
+  audio:       'Gold Ring Sound Test',
+  certificate: 'Bill & Certificate',
 }
 
 const TUTORIAL_HINTS: Record<string, string> = {
-  top:    'Hold your gold jewelry flat on a surface. Point the camera straight down from above.',
-  '45deg': 'Tilt the camera to a 45° angle so you can see both the top surface and the depth of the piece.',
-  side:   'Hold the camera at table-height, level with the edge of the gold, to show its thickness.',
-  macro:  'Get very close to the BIS hallmark or purity stamp. The text should fill the frame.',
-  selfie: 'Hold the gold piece beside your face. Both your face and the gold must be visible.',
+  top:         'Hold your gold jewelry flat on a surface. Point the camera straight down from above.',
+  '45deg':     'Tilt the camera to a 45° angle so you can see both the top surface and the depth of the piece.',
+  side:        'Hold the camera at table-height, level with the edge of the gold, to show its thickness.',
+  selfie:      'Hold the gold piece beside your face. Both your face and the gold must be clearly visible.',
+  macro:       'Get very close to the BIS hallmark or purity stamp. The text should fill the frame.',
+  video:       'Place gold on a white surface. Slowly rotate the piece during 15 seconds — show all edges, clasps, and the hallmark area.',
+  audio:       'Drop from ~20 cm onto glass (or tap with coin edge). Keep the room quiet so the mic captures the full ring decay.',
+  certificate: 'Scan the original purchase bill or authenticity certificate. Ensure the HUID and purity stamp are clearly visible.',
 }
 
 export function TutorialOverlay({ stepType, onDismiss }: Props) {

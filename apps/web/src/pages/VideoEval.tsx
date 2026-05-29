@@ -10,6 +10,9 @@ import { ChevronRight, Video, AlertCircle, SkipForward, CheckCircle } from 'luci
 import { clsx } from 'clsx'
 import { apiBase } from '../lib/api'
 import { preferredCameraDeviceId } from '../lib/cameraQuality'
+import { speak } from '../lib/tts'
+import { TutorialOverlay } from '../components/TutorialOverlay'
+import { useTranslation } from 'react-i18next'
 
 const VIDEO_DURATION_MS = 15_000
 const FRAME_INTERVAL_MS = 1_500   // ≈10 frames plus final frame
@@ -58,16 +61,24 @@ interface VideoResult {
 export function VideoEval() {
   const navigate = useNavigate()
   const { setLiveAuthResult, addCapture, state } = useSessionStore()
+  const { t } = useTranslation()
   const lang = (localStorage.getItem('goldeye_lang') ?? 'en') as 'en' | 'hi'
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const framesRef = useRef<string[]>([])
 
-  const [phase, setPhase]         = useState<Phase>('intro')
+  const [phase, setPhase]             = useState<Phase>('intro')
   const [secondsLeft, setSecondsLeft] = useState(0)
-  const [result, setResult]       = useState<VideoResult | null>(null)
-  const [error, setError]         = useState('')
+  const [result, setResult]           = useState<VideoResult | null>(null)
+  const [error, setError]             = useState('')
+  const [showTutorial, setShowTutorial] = useState(true)
+
+  // Speak voice guide on intro
+  useEffect(() => {
+    const timer = setTimeout(() => speak(t('voice_video')), 500)
+    return () => clearTimeout(timer)
+  }, [t])
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach(t => t.stop()) }, [])
 
@@ -147,6 +158,7 @@ export function VideoEval() {
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data = await res.json()
       setResult(data)
+      if (data.verdict) speak(data.verdict)
       // Store full result (video_score + placeholder audio fields) in session
       setLiveAuthResult({
         video_score:    data.video_score,
@@ -169,20 +181,32 @@ export function VideoEval() {
   return (
     <div className="page bg-gradient-to-b from-stone-50 to-white overflow-y-auto">
 
+      {/* Tutorial overlay */}
+      {showTutorial && phase === 'intro' && (
+        <TutorialOverlay stepType="video" onDismiss={() => setShowTutorial(false)} />
+      )}
+
       {/* Header */}
       <div className="page-header">
         <button
-          onClick={() => phase !== 'recording' && navigate('/certificate-scan')}
+          onClick={() => phase !== 'recording' && navigate('/capture')}
           className={clsx('btn-icon', phase === 'recording' && 'opacity-30 cursor-not-allowed')}
           disabled={phase === 'recording'}
         >
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
         <div className="flex flex-col items-center">
-          <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">Step 1 of 2</span>
+          <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">Video Scan</span>
           <span className="text-sm font-semibold text-stone-900 mt-0.5">Video Analysis</span>
         </div>
-        <div className="w-9" />
+        <button
+          onClick={() => speak(t('voice_video'))}
+          className="btn-icon"
+          title="Replay instructions"
+          disabled={phase === 'recording'}
+        >
+          <Video className="w-4 h-4 text-stone-500" />
+        </button>
       </div>
 
       <div className="px-5 py-4 space-y-5">

@@ -30,6 +30,7 @@ from app.routes.gold_price_regional import router as regional_price_router
 from app.routes.certificate_ocr import router as certificate_ocr_router
 from app.routes.video_eval import router as video_eval_router
 from app.routes.audio_eval import router as audio_eval_router
+from app.routes.tts import router as tts_router
 from app.decision.ibja import price_metadata, _refresh_async
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -105,6 +106,7 @@ app.include_router(regional_price_router, prefix="/api",           tags=["Prices
 app.include_router(certificate_ocr_router,prefix="/api",           tags=["OCR"])
 app.include_router(video_eval_router,     prefix="/api",           tags=["VideoEval"])
 app.include_router(audio_eval_router,     prefix="/api",           tags=["AudioEval"])
+app.include_router(tts_router,                                     tags=["TTS"])
 
 
 @app.get("/health", tags=["Infra"])

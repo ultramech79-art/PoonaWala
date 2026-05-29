@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Camera } from '../components/Camera'
 import { useSessionStore, type CertificateData } from '../store/session'
@@ -9,6 +9,9 @@ import {
   FileText, Loader2, RotateCcw, ShieldCheck, Upload,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { speak } from '../lib/tts'
+import { TutorialOverlay } from '../components/TutorialOverlay'
+import { useTranslation } from 'react-i18next'
 
 function toCertificateData(result: CertificateOCRResult): CertificateData {
   return {
@@ -28,6 +31,7 @@ function toCertificateData(result: CertificateOCRResult): CertificateData {
 
 export function CertificateScan() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const {
     addCapture,
     setCertificateData,
@@ -42,6 +46,13 @@ export function CertificateScan() {
   const [error, setError] = useState('')
   const [data, setData] = useState<CertificateData | null>(state.certificateData)
   const [cameraKey, setCameraKey] = useState(0)
+  const [showTutorial, setShowTutorial] = useState(true)
+
+  // Speak voice guide on mount
+  useEffect(() => {
+    const timer = setTimeout(() => speak(t('voice_certificate')), 500)
+    return () => clearTimeout(timer)
+  }, [t])
 
   const scanDocument = useCallback(async (blob: Blob, dataUrl: string, exif?: Record<string, unknown>) => {
     addCapture({ type: 'certificate', blob, dataUrl, timestamp: Date.now(), exif })
@@ -87,12 +98,12 @@ export function CertificateScan() {
       if (sourceData.weightG) setWeight(sourceData.weightG)
       if (sourceData.huid) setHuid(sourceData.huid)
     }
-    navigate('/video-eval')
+    navigate('/weight')
   }
 
   function continueWithoutDocument() {
     setCertificateData(null)
-    navigate('/video-eval')
+    navigate('/weight')
   }
 
   function useExtracted() {
@@ -113,8 +124,13 @@ export function CertificateScan() {
 
   return (
     <div className="page overflow-y-auto no-scrollbar animate-slide-up bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
+      {/* Tutorial overlay */}
+      {showTutorial && (
+        <TutorialOverlay stepType="certificate" onDismiss={() => setShowTutorial(false)} />
+      )}
+
       <div className="page-header">
-        <button onClick={() => navigate('/capture')} className="btn-icon">
+        <button onClick={() => navigate('/audio-eval')} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
         <span className="font-display font-semibold text-sm text-stone-700">Bill & Certificate</span>

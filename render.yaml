@@ -36,6 +36,9 @@ services:
       - key: REDIS_URL
         scope: all
         value: ${REDIS_URL}
+      - key: SARVAM_API_KEY
+        scope: all
+        value: ${SARVAM_API_KEY}
 
 databases:
   - name: goldeye-db
