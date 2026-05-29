@@ -222,18 +222,27 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
     decay_env = smoothed[:max(decay_idx, 20)]
     decay_r2_val = exp_decay_r2(decay_env)
 
-    # Spectral metrics
-    centroid = float(np.dot(freqs, spectrum) / total_power)
-    dom_idx  = int(np.argmax(spectrum))
+    # Spectral metrics — bandpass 120–8000 Hz before centroid.
+    # Glass surface resonance and room noise live above 8kHz; including them
+    # pulls centroid to 15kHz+ and kills the score on valid gold recordings.
+    ANALYSIS_HZ_MAX = 8000.0
+    analysis_mask = (freqs >= 120) & (freqs <= ANALYSIS_HZ_MAX)
+    analysis_spectrum = spectrum.copy()
+    analysis_spectrum[~analysis_mask] = 0.0
+    analysis_power = float(np.sum(analysis_spectrum)) or 1.0
+
+    centroid = float(np.dot(freqs, analysis_spectrum) / analysis_power)
+    dom_idx  = int(np.argmax(analysis_spectrum))
     dom_freq = float(freqs[dom_idx])
 
     ranges = _ORNAMENT_RANGES.get(item_type.lower(), _DEFAULT_RANGE)
     c_lo, c_hi = ranges["centroid_lo"], ranges["centroid_hi"]
     band_lo = max(120, c_lo * 0.75)
     band_hi = min(4500, c_hi * 1.25)
-    gold_mask = (freqs >= band_lo) & (freqs <= band_hi)
-    gold_ratio = float(np.sum(spectrum[gold_mask]) / total_power)
-    hf_ratio   = float(np.sum(spectrum[freqs > 1500]) / total_power)
+    gold_mask  = (freqs >= band_lo) & (freqs <= band_hi)
+    gold_ratio = float(np.sum(analysis_spectrum[gold_mask]) / analysis_power)
+    hf_mask    = (freqs > 1500) & (freqs <= ANALYSIS_HZ_MAX)
+    hf_ratio   = float(np.sum(analysis_spectrum[hf_mask]) / analysis_power)
 
     # Q-factor
     half_power = float(spectrum[dom_idx]) / np.sqrt(2)
