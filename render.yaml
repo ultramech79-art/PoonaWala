@@ -37,19 +37,6 @@ services:
         scope: all
         value: ${REDIS_URL}
 
-  - type: web
-    name: huid-verifier
-    runtime: python
-    buildCommand: pip install -r huid_verifier/requirements.txt
-    startCommand: cd huid_verifier && uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
-      - key: APPIUM_URL
-        value: ${APPIUM_URL}
-      - key: ALLOWED_ORIGINS
-        value: "*"
-
 databases:
   - name: goldeye-db
     plan: free
