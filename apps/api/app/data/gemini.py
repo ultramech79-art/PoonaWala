@@ -35,7 +35,7 @@ GEMINI_AUDIO_VIDEO_API_KEYS = _split_keys("GEMINI_AUDIO_VIDEO_API_KEY")
 GEMINI_GUIDANCE_FALLBACK_API_KEYS = _split_keys("GEMINI_GUIDANCE_FALLBACK_API_KEY")
 # Gemini API Configuration. Keep this env-driven so local and Render deployments
 # can pin a released multimodal model without code changes.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1beta").strip() or "v1beta"
 GEMINI_THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "minimal").strip() or "minimal"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
