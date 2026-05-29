@@ -31,7 +31,8 @@ from app.data.image_utils import (
 from app.data.phash import compute_phash, hamming_distance
 
 
-COMPARE_FRAME_TYPES = {"45deg", "side", "macro", "selfie", "video"}
+COMPARE_FRAME_TYPES = {"45deg", "side", "macro", "hallmark", "huid", "closeup", "selfie", "video"}
+LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup", "selfie"}
 
 
 async def _load_bytes(source: str) -> Optional[bytes]:
@@ -164,7 +165,7 @@ def _local_compare(ref: dict, cand: dict, candidate_frame_type: str) -> dict:
     if ref.get("best_karat") and cand.get("best_karat") and ref.get("best_karat") == cand.get("best_karat"):
         matches.append("karat_color_hint_consistent")
 
-    frame_factor = 0.82 if candidate_frame_type in ("macro", "selfie") else 1.0
+    frame_factor = 0.82 if candidate_frame_type in LOW_CONTEXT_FRAME_TYPES else 1.0
     same_item_score = color_score * 0.42 + shape_score * 0.40 + phash_score * 0.18
     if strong_geometry_conflict:
         same_item_score = min(same_item_score, 0.28)
@@ -306,6 +307,7 @@ async def compare_item_images(
     candidate_image: str,
     reference_frame_type: str = "top",
     candidate_frame_type: str = "unknown",
+    use_gemini: bool = True,
 ) -> dict:
     reference_raw = await _load_bytes(reference_image)
     candidate_raw = await _load_bytes(candidate_image)
@@ -322,18 +324,19 @@ async def compare_item_images(
 
     local_result = _local_compare(_fingerprint(reference_raw), _fingerprint(candidate_raw), candidate_frame_type)
 
-    try:
-        gemini_result = await _gemini_compare(
-            reference_raw,
-            candidate_raw,
-            reference_frame_type,
-            candidate_frame_type,
-            local_result,
-        )
-        if gemini_result:
-            return gemini_result
-    except Exception:
-        pass
+    if use_gemini:
+        try:
+            gemini_result = await _gemini_compare(
+                reference_raw,
+                candidate_raw,
+                reference_frame_type,
+                candidate_frame_type,
+                local_result,
+            )
+            if gemini_result:
+                return gemini_result
+        except Exception:
+            pass
 
     return local_result
 

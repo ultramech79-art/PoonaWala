@@ -11,7 +11,8 @@ import { clsx } from 'clsx'
 import { apiBase } from '../lib/api'
 
 const VIDEO_DURATION_MS = 15_000
-const FRAME_INTERVAL_MS = 1_500   // ≈10 frames
+const FRAME_INTERVAL_MS = 1_500   // ≈10 frames plus final frame
+const MAX_VIDEO_FRAMES = 11
 
 function grabFrame(video: HTMLVideoElement): string {
   if (video.readyState < 2) return ''
@@ -97,7 +98,8 @@ export function VideoEval() {
       if (videoRef.current) { const b64 = grabFrame(videoRef.current); if (b64) framesRef.current.push(b64) }
       stream.getTracks().forEach(t => t.stop()); streamRef.current = null
 
-      const usableFrames = framesRef.current.filter(Boolean).slice(0, 10)
+      framesRef.current = framesRef.current.filter(Boolean).slice(0, MAX_VIDEO_FRAMES)
+      const usableFrames = framesRef.current
       if (usableFrames.length) {
         const dataUrls = usableFrames.map(frameDataUrl)
         addCapture({

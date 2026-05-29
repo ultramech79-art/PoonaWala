@@ -1,8 +1,9 @@
 """
 S14 — In-session same-item consistency.
 
-Compares the first/top-view capture against later stills and a small sample of
-video frames. This detects a borrower switching jewelry between capture steps.
+Compares the first/top-view capture against later stills, the selfie, and every
+video frame supplied in the final assessment request. This detects a borrower
+switching jewelry between capture steps.
 """
 import time
 
@@ -10,13 +11,19 @@ from app.data.item_match import compare_item_images, is_blocking_mismatch
 from app.models.schemas import SignalResult
 
 
-FRAME_LABELS = ["top", "45deg", "side", "macro"]
+STILL_FRAME_LABELS = ["top", "45deg", "side", "macro"]
 
 
-async def run(session_id: str, frames: list[str], **_) -> SignalResult:
+def _frame_label(idx: int) -> str:
+    if idx < len(STILL_FRAME_LABELS):
+        return STILL_FRAME_LABELS[idx]
+    return f"video_{idx - len(STILL_FRAME_LABELS)}"
+
+
+async def run(session_id: str, frames: list[str], selfie_url: str | None = None, **_) -> SignalResult:
     t0 = time.time()
     try:
-        if not frames or len(frames) < 2:
+        if not frames or (len(frames) < 2 and not selfie_url):
             return SignalResult(
                 signal_id="s14_item_consistency",
                 confidence=0.0,
@@ -33,29 +40,55 @@ async def run(session_id: str, frames: list[str], **_) -> SignalResult:
 
         reference = frames[0]
         candidates = []
-        for idx, url in enumerate(frames[1:4], start=1):
+        for idx, url in enumerate(frames[1:], start=1):
             if url:
-                label = FRAME_LABELS[idx] if idx < len(FRAME_LABELS) else f"frame_{idx}"
-                candidates.append((idx, label, url))
-
-        # Video frames are appended after the still photos by the web client.
-        for idx, url in list(enumerate(frames[4:8], start=4))[:2]:
-            if url:
-                candidates.append((idx, "video", url))
+                candidates.append((idx, _frame_label(idx), url))
+        if selfie_url:
+            candidates.append((len(frames), "selfie", selfie_url))
 
         comparisons = []
-        mismatched = []
         for idx, label, url in candidates:
             result = await compare_item_images(
                 reference,
                 url,
                 reference_frame_type="top",
                 candidate_frame_type=label,
+                use_gemini=False,
             )
             result = {**result, "frame_idx": idx, "frame_type": label}
             comparisons.append(result)
-            if is_blocking_mismatch(result):
-                mismatched.append({"frame_idx": idx, "frame_type": label, "result": result})
+
+        suspect_frames = sorted(
+            [
+                item for item in comparisons
+                if item.get("verdict") != "same" or float(item.get("same_item_score", 0.5)) < 0.55
+            ],
+            key=lambda item: (1.0 - float(item.get("same_item_score", 0.5))) * float(item.get("confidence", 0.0)),
+            reverse=True,
+        )[:3]
+        candidates_by_idx = {idx: (label, url) for idx, label, url in candidates}
+        for item in suspect_frames:
+            idx = int(item["frame_idx"])
+            label, url = candidates_by_idx[idx]
+            confirmed = await compare_item_images(
+                reference,
+                url,
+                reference_frame_type="top",
+                candidate_frame_type=label,
+            )
+            comparisons = [
+                {**confirmed, "frame_idx": idx, "frame_type": label} if c.get("frame_idx") == idx else c
+                for c in comparisons
+            ]
+
+        mismatched = []
+        for item in comparisons:
+            if is_blocking_mismatch(item):
+                mismatched.append({
+                    "frame_idx": item["frame_idx"],
+                    "frame_type": item["frame_type"],
+                    "result": item,
+                })
 
         mismatch_scores = [
             (1.0 - float(item.get("same_item_score", 0.5))) * float(item.get("confidence", 0.0))
