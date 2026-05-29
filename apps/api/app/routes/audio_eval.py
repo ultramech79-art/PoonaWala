@@ -436,7 +436,11 @@ async def audio_eval(req: AudioEvalRequest):
         return _invalid_response("No audio data provided.", mode)
     try:
         raw_b = base64.b64decode(audio_b64)
-        arr   = preprocess(np.frombuffer(raw_b, dtype=np.float32).copy())
+        # Truncate to nearest multiple of 4 bytes (float32 = 4 bytes)
+        trim = len(raw_b) - (len(raw_b) % 4)
+        if trim == 0:
+            return _invalid_response("Audio data too short. Please try again.", mode)
+        arr = preprocess(np.frombuffer(raw_b[:trim], dtype=np.float32).copy())
     except Exception as e:
         logger.error(f"Audio decode error: {e}")
         return _invalid_response("Could not decode audio. Please try again.", mode)

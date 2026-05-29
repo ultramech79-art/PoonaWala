@@ -125,10 +125,15 @@ def attack_ms(abs_arr: np.ndarray, peak_idx: int, peak: float, sr: int) -> float
 # ── Validation ────────────────────────────────────────────────────────────────
 
 def _thresholds(item_type: str, mode: str) -> dict:
-    soft = item_type in SOFT_ITEMS or mode in {"tap"}
+    """
+    Looser thresholds for live phone recordings vs. controlled studio clips.
+    Drop on glass: attack can be >90ms depending on phone placement.
+    Metal-band and tonal checks lowered — phone mics capture more room sound.
+    """
+    soft = item_type in SOFT_ITEMS
     if mode == "drop" and not soft:
-        return {"snr_min": 14.0, "attack_max_ms": 90.0, "flatness_max": 0.56, "tonal_min": 0.16}
-    return {"snr_min": 9.0, "attack_max_ms": 180.0, "flatness_max": 0.70, "tonal_min": 0.08}
+        return {"snr_min": 10.0, "attack_max_ms": 220.0, "flatness_max": 0.72, "tonal_min": 0.06}
+    return {"snr_min": 7.0, "attack_max_ms": 300.0, "flatness_max": 0.80, "tonal_min": 0.04}
 
 
 def validate_recording(arr: np.ndarray, sr: int, item_type: str = "unknown", mode: str = "tap") -> dict:
@@ -182,9 +187,9 @@ def validate_recording(arr: np.ndarray, sr: int, item_type: str = "unknown", mod
     if flatness > thr["flatness_max"] and tonal_ratio < thr["tonal_min"] * 1.4:
         return {"valid": False, "snr_db": snr_db,
                 "reason": "Audio sounds like noise or voice, not a metal strike."}
-    if tonal_ratio < thr["tonal_min"] and metal_ratio < 0.22:
+    if tonal_ratio < thr["tonal_min"] and metal_ratio < 0.12:
         return {"valid": False, "snr_db": snr_db,
-                "reason": "No clear metallic ring detected."}
+                "reason": "No clear metallic ring detected. Tap harder or hold the phone closer to the ornament."}
 
     return {
         "valid": True, "snr_db": snr_db, "attack_ms": atk,
