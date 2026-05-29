@@ -16,6 +16,9 @@ import { useSessionStore } from '../store/session'
 import { ChevronRight, Mic, AlertCircle, SkipForward, CheckCircle, Zap, Hand } from 'lucide-react'
 import { clsx } from 'clsx'
 import { apiBase } from '../lib/api'
+import { speak } from '../lib/tts'
+import { TutorialOverlay } from '../components/TutorialOverlay'
+import { useTranslation } from 'react-i18next'
 
 const AUDIO_DURATION_MS = 10_000
 
@@ -69,6 +72,7 @@ const ORNAMENTS = [
 export function AudioEval() {
   const navigate = useNavigate()
   const { setTapTestResult } = useSessionStore()
+  const { t } = useTranslation()
   const lang = (localStorage.getItem('goldeye_lang') ?? 'en') as 'en' | 'hi'
 
   const streamRef      = useRef<MediaStream | null>(null)
@@ -87,8 +91,15 @@ export function AudioEval() {
   const [error, setError]         = useState('')
   const [levelDb, setLevelDb]     = useState(-60)
   const [tapCount, setTapCount]   = useState(0)
+  const [showTutorial, setShowTutorial] = useState(true)
   const tapCountRef = useRef(0)
   const lastTapRef  = useRef(0)
+
+  // Speak voice guide on intro
+  useEffect(() => {
+    const timer = setTimeout(() => speak(t('voice_audio')), 500)
+    return () => clearTimeout(timer)
+  }, [t])
 
   // Auto-set safe mode when ornament changes
   useEffect(() => {
@@ -212,6 +223,7 @@ export function AudioEval() {
       const data: TapResult = await res.json()
       setResult(data)
       setTapTestResult(data as any)
+      if (data.verdict) speak(data.verdict)
     } catch (e: any) {
       setError(e?.message ?? 'Analysis failed.')
     }
@@ -247,6 +259,11 @@ export function AudioEval() {
   return (
     <div className="page bg-gradient-to-b from-stone-50 to-white overflow-y-auto">
 
+      {/* Tutorial overlay */}
+      {showTutorial && phase === 'intro' && (
+        <TutorialOverlay stepType="audio" onDismiss={() => setShowTutorial(false)} />
+      )}
+
       {/* Header */}
       <div className="page-header">
         <button onClick={() => phase !== 'recording' && navigate('/video-eval')}
@@ -258,7 +275,14 @@ export function AudioEval() {
           <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">Acoustic Test</span>
           <span className="text-sm font-semibold text-stone-900 mt-0.5">10-Second Sound Test</span>
         </div>
-        <div className="w-9" />
+        <button
+          onClick={() => speak(t('voice_audio'))}
+          className="btn-icon"
+          title="Replay instructions"
+          disabled={phase === 'recording'}
+        >
+          <Mic className="w-4 h-4 text-stone-500" />
+        </button>
       </div>
 
       <div className="px-5 py-4 space-y-4">
@@ -393,7 +417,7 @@ export function AudioEval() {
               <Mic className="w-5 h-5" />
               Start 10-Second Recording
             </button>
-            <button onClick={() => navigate('/weight')}
+            <button onClick={() => navigate('/certificate-scan')}
               className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
               <SkipForward className="w-4 h-4" /> Skip Acoustic Test
             </button>
@@ -498,7 +522,7 @@ export function AudioEval() {
                 <button onClick={() => { setResult(null); setError(''); setPhase('intro') }} className="w-full btn-primary">
                   <Mic className="w-5 h-5" /> Try Again
                 </button>
-                <button onClick={() => navigate('/weight')} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
+                <button onClick={() => navigate('/certificate-scan')} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
                   <SkipForward className="w-4 h-4" /> Skip — Continue Without Acoustic Test
                 </button>
               </div>
@@ -627,9 +651,9 @@ export function AudioEval() {
 
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5">
                   <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <p className="text-xs font-semibold text-emerald-700">Acoustic test complete — next: Weight entry</p>
+                  <p className="text-xs font-semibold text-emerald-700">Acoustic test complete — next: Bill scan</p>
                 </div>
-                <button onClick={() => navigate('/weight')} className="w-full btn-primary">
+                <button onClick={() => navigate('/certificate-scan')} className="w-full btn-primary">
                   Continue to Weight Entry <ChevronRight className="w-5 h-5" />
                 </button>
               </div>

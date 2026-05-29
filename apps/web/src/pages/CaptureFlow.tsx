@@ -5,6 +5,7 @@ import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown } from 'lucide-react'
+import { speak } from '../lib/tts'
 import { clsx } from 'clsx'
 import { evaluateFrameAPI, verifyHuidAPI, type FrameEvalResult, type HuidVerificationResult } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
@@ -46,14 +47,6 @@ function referenceForStep(
   return { referenceFrameType: 'top', referenceImageDataUrl: topReference }
 }
 
-function speak(text: string) {
-  if (!('speechSynthesis' in window)) return
-  window.speechSynthesis.cancel()
-  const u = new SpeechSynthesisUtterance(text)
-  u.lang = localStorage.getItem('goldeye_lang') === 'hi' ? 'hi-IN' : 'en-US'
-  u.rate = 0.95
-  window.speechSynthesis.speak(u)
-}
 
 export function CaptureFlow() {
   const navigate = useNavigate()
@@ -83,13 +76,6 @@ export function CaptureFlow() {
       demoUrl: '/assets/demo/side.jpg',
     },
     {
-      type: 'macro',
-      titleKey: 'step_macro_title',
-      hintKey: 'step_macro_hint',
-      voiceGuide: t('voice_macro'),
-      demoUrl: '/assets/demo/macro.jpg',
-    },
-    {
       type: 'selfie',
       titleKey: 'step_selfie_title',
       hintKey: 'step_selfie_hint',
@@ -97,11 +83,18 @@ export function CaptureFlow() {
       facingMode: 'user',
       demoUrl: '/assets/demo/selfie.jpg',
     },
+    {
+      type: 'macro',
+      titleKey: 'step_macro_title',
+      hintKey: 'step_macro_hint',
+      voiceGuide: t('voice_macro'),
+      demoUrl: '/assets/demo/macro.jpg',
+    },
   ]
 
   const STEP_LABELS = [
     t('step_label_45'), t('step_label_top'), t('step_label_side'),
-    t('step_label_hallmark'), t('step_label_selfie'),
+    t('step_label_selfie'), t('step_label_hallmark'),
   ]
 
   const [stepIdx, setStepIdx] = useState(0)
@@ -246,7 +239,7 @@ export function CaptureFlow() {
       setShowTutorial(true)   // show tutorial when entering each new step
     } else {
       speak(t('speak_all_done'))
-      navigate('/certificate-scan')
+      navigate('/video-eval')
     }
   }
 
