@@ -100,16 +100,15 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
       setTorchOn(false)
     }
 
-    if (caps?.zoom) {
+    if (caps?.zoom && Number(caps.zoom.max ?? 1) > Number(caps.zoom.min ?? 1) + 0.1) {
       const min = Number(caps.zoom.min ?? 1)
       const max = Number(caps.zoom.max ?? 1)
-      setZoomSupported(max > min + 0.1)
-      setZoomMin(min)
-      setZoomMax(max)
-      setZoom(min)
+      setZoomSupported(true)
+      setZoomMin(min); setZoomMax(max); setZoom(min)
     } else {
-      setZoomSupported(false)
-      setZoom(1); setZoomMin(1); setZoomMax(1)
+      // Software zoom always available: 1×–4×
+      setZoomSupported(true)
+      setZoomMin(1); setZoomMax(4); setZoom(1)
     }
   }, [])
 
@@ -179,11 +178,18 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
   }, [torchOn])
 
   const applyZoom = useCallback(async (value: number) => {
-    const track = mediaRef.current?.getVideoTracks()[0]
-    if (!track) return
     const next = Math.max(zoomMin, Math.min(zoomMax, value))
     setZoom(next)
-    try { await track.applyConstraints({ advanced: [{ zoom: next } as any] }) } catch {}
+    // Hardware zoom via constraints
+    const track = mediaRef.current?.getVideoTracks()[0]
+    if (track) {
+      try { await track.applyConstraints({ advanced: [{ zoom: next } as any] }) } catch {}
+    }
+    // CSS software zoom — always applied as visual feedback
+    if (videoRef.current) {
+      videoRef.current.style.transform = `scale(${next / zoomMin})`
+      videoRef.current.style.transformOrigin = 'center center'
+    }
   }, [zoomMin, zoomMax])
 
   const tapToFocus = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {

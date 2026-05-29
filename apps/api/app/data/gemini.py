@@ -875,36 +875,57 @@ _FRAME_PROMPTS = _build_frame_prompts(gold_price_24k=0.0)
 
 async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
     """
-    Capture validation for top/45-degree/side/macro/bill/hallmark views:
-    Groq primary, Gemini fallback.
+    Capture validation routing:
+      - image frames (top/45deg/side/macro/selfie/bill): Groq PRIMARY → Gemini STRICT fallback
+      - video/audio frames: Gemini PRIMARY → Groq STRICT fallback
+    No IBJA call — gold price context not needed for image quality checks.
     """
+    # ── Video / audio: Gemini primary, Groq strict fallback ──────────────────
     if frame_type in ("video", "audio"):
-        return await _evaluate_frame_gemini(
-            image_base64,
-            frame_type,
-            GEMINI_GUIDANCE_FALLBACK_API_KEYS,
-            "gemini_guidance_fallback",
-        )
+        if GEMINI_AUDIO_VIDEO_API_KEYS:
+            result = await _evaluate_frame_gemini(
+                image_base64,
+                frame_type,
+                GEMINI_AUDIO_VIDEO_API_KEYS,
+                "gemini_audio_video",
+            )
+            if result.get("provider") != "error":
+                return result
+            logger.warning(f"Gemini audio/video eval failed [{frame_type}], trying Groq fallback")
 
-    try:
-        from app.decision.ibja import current_price_24k
-        live_price = current_price_24k()
-    except Exception:
-        live_price = 0.0
+        # Groq strict fallback for video/audio
+        if GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS:
+            try:
+                from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
+                prompts = _build_frame_prompts(gold_price_24k=0)
+                prompt = prompts.get(frame_type, prompts["top"])
+                data, success = await call_groq_vision_with_keys(
+                    prompt, image_base64, GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS, "image/jpeg", timeout=45,
+                )
+                if success:
+                    text = extract_gemini_text(data)
+                    result = parse_json_response(text)
+                    result.setdefault("approved", True)
+                    result.setdefault("quality_score", 0.7)
+                    result.setdefault("feedback", "Evaluated")
+                    result.setdefault("issues", [])
+                    result.setdefault("detected", {})
+                    result["provider"] = "groq_fallback"
+                    return result
+            except Exception as e:
+                logger.warning(f"Groq fallback for audio/video failed [{frame_type}]: {e}")
 
-    prompts = _build_frame_prompts(gold_price_24k=live_price)
+        return {"approved": True, "quality_score": 0.5, "feedback": "Captured", "issues": [], "detected": {}, "provider": "passthrough"}
+
+    # ── Image frames: Groq PRIMARY → Gemini STRICT fallback ──────────────────
+    prompts = _build_frame_prompts(gold_price_24k=0)
     prompt = prompts.get(frame_type, prompts["top"])
 
     if GROQ_PRIMARY_API_KEYS:
         try:
             from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
-
             data, success = await call_groq_vision_with_keys(
-                prompt,
-                image_base64,
-                GROQ_PRIMARY_API_KEYS,
-                "image/jpeg",
-                timeout=45,
+                prompt, image_base64, GROQ_PRIMARY_API_KEYS, "image/jpeg", timeout=45,
             )
             if success:
                 text = extract_gemini_text(data)
@@ -917,20 +938,18 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
                 result["quality_score"] = max(0.0, min(1.0, float(result["quality_score"])))
                 result["provider"] = "groq"
                 result["model"] = GROQ_MODEL
-                logger.info(
-                    f"Groq frame eval [{frame_type}]: approved={result['approved']}, "
-                    f"score={result['quality_score']}"
-                )
+                logger.info(f"Groq frame eval [{frame_type}]: approved={result['approved']}, score={result['quality_score']}")
                 return result
-            logger.warning(f"Groq frame eval failed [{frame_type}]: {data.get('error', 'unknown')}")
+            logger.warning(f"Groq frame eval failed [{frame_type}], falling back to Gemini")
         except Exception as e:
-            logger.warning(f"Groq frame eval error [{frame_type}]: {e}")
+            logger.warning(f"Groq frame eval error [{frame_type}]: {e}, falling back to Gemini")
 
+    # Gemini strict fallback for image frames
     return await _evaluate_frame_gemini(
         image_base64,
         frame_type,
         GEMINI_GUIDANCE_FALLBACK_API_KEYS,
-        "gemini_guidance_fallback",
+        "gemini_strict_fallback",
     )
 
 
