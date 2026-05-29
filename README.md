@@ -32,15 +32,13 @@
 
 ## 🏆 Hackathon Demo — Try It in 3 Minutes
 
-> **Live app:** **[poona-wala.vercel.app](https://poona-wala.vercel.app)**  
-> **Backend:** **[poonawala.onrender.com](https://poonawala.onrender.com/health)**  
+
 > First load may take ~15s if the Render backend is cold-starting — just wait for the health check to turn green.
 
 ---
 
 ### Step 1 — Open the App
 
-Go to **[poona-wala.vercel.app](https://poona-wala.vercel.app)** on your phone or laptop.  
 Select **English** (or Hindi) and tap **Get Started**.
 
 ---
@@ -155,14 +153,6 @@ A borrower opens the app, photographs their jewelry from 7 angles, taps the ring
 
 ---
 
-## Live Deployments
-
-| Service | URL | Purpose |
-|---|---|---|
-| Frontend PWA | [poona-wala.vercel.app](https://poona-wala.vercel.app) | React 18 PWA — borrower-facing |
-| Backend API | [poonawala.onrender.com](https://poonawala.onrender.com) | FastAPI — all ML inference |
-| API Health | [/health](https://poonawala.onrender.com/health) | Live model status check |
-| Gold Price | [/api/price](https://poonawala.onrender.com/api/price) | Live IBJA gold feed |
 
 > Add `?demo=1` to the app URL for the hackathon demo overlay with QR code.
 
