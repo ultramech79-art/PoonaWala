@@ -195,27 +195,32 @@ def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[
     d_lo, d_hi = ranges["decay_lo"], ranges["decay_hi"]
     c_lo, c_hi = ranges["centroid_lo"], ranges["centroid_hi"]
 
-    decay_ms  = physics["decay_ms"]
-    centroid  = physics["centroid_hz"]
+    decay_ms   = physics["decay_ms"]
+    centroid   = physics["centroid_hz"]
+    dom_freq   = physics["dom_freq_hz"]   # peak of spectrum — more reliable on glass
     gold_ratio = physics["gold_ratio"]
-    hf_ratio  = physics["hf_ratio"]
-    decay_r2  = physics["decay_r2"]
-    snr_db    = physics["snr_db"]
-    events    = physics["event_count"]
-    soft_item = item_type in {"necklace", "earring", "chain"}
-    is_drop   = mode == "drop"
+    hf_ratio   = physics["hf_ratio"]
+    decay_r2   = physics["decay_r2"]
+    snr_db     = physics["snr_db"]
+    events     = physics["event_count"]
+    soft_item  = item_type in {"necklace", "earring", "chain"}
+    is_drop    = mode == "drop"
+
+    # In drop mode, dominant freq is more reliable than centroid:
+    # glass surface adds 2-5kHz background that pulls centroid up, but the
+    # ring's fundamental resonance still shows as the loudest spectral peak.
+    freq_ref = dom_freq if is_drop else centroid
 
     score, reasons = 50, []
 
     # ── DECAY (primary for drop, secondary for tap) ──────────────────────────
     if is_drop:
-        # Drop: decay time is the main signal
         if d_lo <= decay_ms <= d_hi:
             score += 25
-            reasons.append(f"Drop decay {decay_ms:.0f}ms in expected range ({d_lo}–{d_hi}ms) for solid gold {item_type}")
+            reasons.append(f"Drop decay {decay_ms:.0f}ms in expected range ({d_lo}–{d_hi}ms)")
         elif decay_ms < d_lo:
-            score -= 6 if soft_item else 12
-            reasons.append(f"Short drop decay {decay_ms:.0f}ms — may indicate lighter/smaller piece")
+            score -= 4   # softer penalty — short decay common on glass surface
+            reasons.append(f"Short drop decay {decay_ms:.0f}ms (glass surface absorbs some ring)")
         elif decay_ms <= d_hi * 2:
             score -= 20
             reasons.append(f"Long decay {decay_ms:.0f}ms — plated brass rings longer than solid gold")
@@ -223,19 +228,21 @@ def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[
             score -= 30
             reasons.append(f"Very long ring {decay_ms:.0f}ms — gold-plated silver/brass signature")
 
-        # Decay R² strong signal in drop mode
+        # Decay R² — primary discriminator in drop mode
         if decay_r2 >= 0.85:
-            score += 12
+            score += 15
             reasons.append(f"Exponential decay R²={decay_r2:.2f} — clean single-material ring")
-        elif decay_r2 < 0.55:
-            score -= 12
+        elif decay_r2 >= 0.65:
+            score += 5
+            reasons.append(f"Good decay R²={decay_r2:.2f}")
+        elif decay_r2 < 0.45:
+            score -= 10
             reasons.append(f"Irregular decay R²={decay_r2:.2f} — composite or plated material")
 
     else:
-        # Tap: decay less reliable, use softer weighting
         if d_lo <= decay_ms <= d_hi:
             score += 12
-            reasons.append(f"Tap decay {decay_ms:.0f}ms within range — supportive evidence")
+            reasons.append(f"Tap decay {decay_ms:.0f}ms within range")
         elif decay_ms > d_hi * 1.5:
             score -= 10
             reasons.append(f"Tap decay {decay_ms:.0f}ms unusually long")
@@ -243,23 +250,24 @@ def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[
             score += 6
             reasons.append(f"Clean tap decay R²={decay_r2:.2f}")
 
-    # ── SPECTRAL CENTROID (primary for tap) ─────────────────────────────────
-    if c_lo <= centroid <= c_hi:
-        score += 20 if not is_drop else 12
-        reasons.append(f"Centroid {centroid:.0f}Hz in expected range ({c_lo}–{c_hi}Hz) for {item_type}")
-    elif centroid < c_lo * 0.70:
-        score += 4
-        reasons.append(f"Low centroid {centroid:.0f}Hz — heavy piece, borderline")
-    elif centroid > c_hi * 1.5:
-        score -= 18 if not is_drop else 12
-        reasons.append(f"High centroid {centroid:.0f}Hz — bright tinny resonance (plated substrate)")
+    # ── FREQUENCY CHECK (dominant freq for drop, centroid for tap) ───────────
+    # Widen range ×1.5 for drop mode — glass surface shifts apparent frequency
+    f_lo = c_lo * (0.5 if is_drop else 1.0)
+    f_hi = c_hi * (2.5 if is_drop else 1.0)
+    if f_lo <= freq_ref <= f_hi:
+        score += 20 if not is_drop else 10
+        reasons.append(f"{'Dominant freq' if is_drop else 'Centroid'} {freq_ref:.0f}Hz in expected range for {item_type}")
+    elif freq_ref > f_hi:
+        # Only penalise lightly in drop mode — glass resonance causes false positives
+        score -= 4 if is_drop else 15
+        reasons.append(f"{'Dominant freq' if is_drop else 'Centroid'} {freq_ref:.0f}Hz high — {'glass surface effect' if is_drop else 'tinny/plated signature'}")
     else:
-        score -= 6
-        reasons.append(f"Centroid {centroid:.0f}Hz slightly outside expected range")
+        score += 3   # low freq = heavy piece, fine
+        reasons.append(f"Low frequency {freq_ref:.0f}Hz — heavy piece")
 
     # ── GOLD-BAND ENERGY ────────────────────────────────────────────────────
-    strong = 0.30 if soft_item else 0.40
-    medium = 0.18 if soft_item else 0.25
+    strong = 0.20 if is_drop else (0.30 if soft_item else 0.40)  # lower bar for drop/glass
+    medium = 0.10 if is_drop else (0.18 if soft_item else 0.25)
     if gold_ratio >= strong:
         score += 10
         reasons.append(f"Reference-band energy {gold_ratio:.0%} — dense metal acoustic signature")
@@ -270,13 +278,14 @@ def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[
         reasons.append(f"Weak reference-band energy {gold_ratio:.0%}")
 
     # ── HIGH-FREQ RATIO (plated indicator) ──────────────────────────────────
-    hf_bad  = 0.42 if item_type in {"earring", "chain"} else 0.30
-    hf_warn = 0.24 if item_type in {"earring", "chain"} else 0.15
+    # Drop on glass: high HF is normal (glass resonance), so penalty is halved.
+    hf_bad  = 0.70 if is_drop else (0.42 if item_type in {"earring","chain"} else 0.30)
+    hf_warn = 0.50 if is_drop else (0.24 if item_type in {"earring","chain"} else 0.15)
     if hf_ratio > hf_bad:
-        score -= 14
-        reasons.append(f"High-freq energy {hf_ratio:.0%} >1500Hz — tinny plated signature")
+        score -= 6 if is_drop else 14
+        reasons.append(f"Very high-freq energy {hf_ratio:.0%} — {'surface noise' if is_drop else 'tinny plated signature'}")
     elif hf_ratio > hf_warn:
-        score -= 4
+        score -= 2 if is_drop else 4
         reasons.append(f"Some high-freq content {hf_ratio:.0%}")
 
     # ── MULTI-TAP BONUS ─────────────────────────────────────────────────────
