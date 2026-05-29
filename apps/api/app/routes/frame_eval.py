@@ -27,6 +27,7 @@ class FrameEvalRequest(BaseModel):
     reference_frame_type: str = "top"
     reference_image_data_url: Optional[str] = None
     reference_image_url: Optional[str] = None
+    language: str = "en"
 
 
 class FrameEvalResponse(BaseModel):
@@ -60,8 +61,9 @@ async def _evaluate_compare_store(
     reference_frame_type: str = "top",
     reference_image_data_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
+    language: str = "en",
 ) -> FrameEvalResponse:
-    result = await evaluate_frame(image_b64, frame_type)
+    result = await evaluate_frame(image_b64, frame_type, language=language)
     detected = result.get("detected", {}) or {}
     issues = list(result.get("issues", []) or [])
     approved = bool(result.get("approved", True))
@@ -146,6 +148,7 @@ async def evaluate_frame_endpoint(req: FrameEvalRequest):
         reference_frame_type=req.reference_frame_type,
         reference_image_data_url=req.reference_image_data_url,
         reference_image_url=req.reference_image_url,
+        language=req.language,
     )
 
 
@@ -179,6 +182,7 @@ async def evaluate_frame_ws(websocket: WebSocket):
                 reference_frame_type=req.get("reference_frame_type", "top"),
                 reference_image_data_url=req.get("reference_image_data_url"),
                 reference_image_url=req.get("reference_image_url"),
+                language=req.get("language", "en"),
             )
             logger.info(
                 f"WS eval [{frame_type}]: approved={response.approved}, "

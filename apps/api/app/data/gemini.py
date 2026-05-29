@@ -642,14 +642,19 @@ Respond with JSON:
 
 
 
-def _build_frame_prompts(gold_price_24k: float = 0.0) -> dict:
+def _build_frame_prompts(gold_price_24k: float = 0.0, language: str = "en") -> dict:
     """Build per-step evaluation prompts, optionally embedding the live gold price."""
     price_line = ""
     if gold_price_24k > 0:
         price_line = f"\nCurrent live gold price (IBJA): ₹{gold_price_24k:,.0f}/g for 24K gold.\n"
 
+    lang_instruction = (
+        "\nIMPORTANT: Write the 'feedback' field in Hindi (Devanagari script). All other fields remain as defined.\n"
+        if language == "hi" else ""
+    )
+
     return {
-        "top": f"""You are a strict gold loan assessment agent evaluating a photo for a gold appraisal service.
+        "top": f"""{lang_instruction}You are a strict gold loan assessment agent evaluating a photo for a gold appraisal service.
 CRITICAL VALIDATION: This image MUST contain ACTUAL PHYSICAL GOLD JEWELRY. Reject immediately if it does not.
 
 REJECT THESE IMMEDIATELY (approved=false):
@@ -704,7 +709,7 @@ Return ONLY valid JSON (no markdown fences):
   }}
 }}""",
 
-        "45deg": f"""You are a strict gold loan assessment agent evaluating a 45-DEGREE ANGLE photo of gold jewelry.
+        "45deg": f"""{lang_instruction}You are a strict gold loan assessment agent evaluating a 45-DEGREE ANGLE photo of gold jewelry.
 CRITICAL: This image MUST contain gold jewelry. Reject if it does not.
 The goal: verify depth and thickness of the piece are clearly visible.
 
@@ -738,7 +743,7 @@ Return ONLY valid JSON:
   }}
 }}""",
 
-        "side": f"""You are a strict gold loan assessment agent evaluating a SIDE/PROFILE view of gold jewelry.
+        "side": f"""{lang_instruction}You are a strict gold loan assessment agent evaluating a SIDE/PROFILE view of gold jewelry.
 CRITICAL: This image MUST contain gold jewelry. Reject if it does not.
 Goal: clearly show thickness and cross-section of the piece.
 
@@ -771,7 +776,7 @@ Return ONLY valid JSON:
   }}
 }}""",
 
-        "macro": f"""You are a strict expert gold hallmark examiner evaluating a MACRO/CLOSE-UP photo.
+        "macro": f"""{lang_instruction}You are a strict expert gold hallmark examiner evaluating a MACRO/CLOSE-UP photo.
 CRITICAL: This image MUST show gold jewelry with a visible hallmark/marking area. Reject if not gold.
 Goal: identify BIS hallmark, karat purity markings, HUID code, or maker's marks.
 {price_line}
@@ -817,7 +822,7 @@ Return ONLY valid JSON:
   }}
 }}""",
 
-        "selfie": f"""You are a strict gold loan assessment agent evaluating a SELFIE photo for identity + anti-fraud.
+        "selfie": f"""{lang_instruction}You are a strict gold loan assessment agent evaluating a SELFIE photo for identity + anti-fraud.
 CRITICAL: This image MUST show BOTH a person's face AND visible gold jewelry. Reject if either is missing.
 The selfie must show a person holding or wearing gold jewelry assessed in previous steps.
 
@@ -873,7 +878,7 @@ Return ONLY valid JSON:
 _FRAME_PROMPTS = _build_frame_prompts(gold_price_24k=0.0)
 
 
-async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
+async def evaluate_frame(image_base64: str, frame_type: str, language: str = "en") -> dict:
     """
     Capture validation routing:
       - image frames (top/45deg/side/macro/selfie/bill): Groq PRIMARY → Gemini STRICT fallback
@@ -897,7 +902,7 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         if GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS:
             try:
                 from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
-                prompts = _build_frame_prompts(gold_price_24k=0)
+                prompts = _build_frame_prompts(gold_price_24k=0, language=language)
                 prompt = prompts.get(frame_type, prompts["top"])
                 data, success = await call_groq_vision_with_keys(
                     prompt, image_base64, GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS, "image/jpeg", timeout=45,
@@ -918,7 +923,7 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         return {"approved": True, "quality_score": 0.5, "feedback": "Captured", "issues": [], "detected": {}, "provider": "passthrough"}
 
     # ── Image frames: Groq PRIMARY → Gemini STRICT fallback ──────────────────
-    prompts = _build_frame_prompts(gold_price_24k=0)
+    prompts = _build_frame_prompts(gold_price_24k=0, language=language)
     prompt = prompts.get(frame_type, prompts["top"])
 
     if GROQ_PRIMARY_API_KEYS:
