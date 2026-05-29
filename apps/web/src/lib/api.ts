@@ -218,7 +218,9 @@ export interface HuidVerificationResult {
 export async function verifyHuidAPI(huid: string): Promise<HuidVerificationResult> {
   const verifierBase = (import.meta.env.VITE_HUID_VERIFIER_URL as string | undefined)?.replace(/\/$/, '') ?? ''
   if (!verifierBase) throw new Error('HUID verifier URL not configured (VITE_HUID_VERIFIER_URL)')
-  const res = await fetch(`${verifierBase}/verify-huid/${encodeURIComponent(huid)}`)
+  const res = await fetch(`${verifierBase}/verify-huid/${encodeURIComponent(huid)}`, {
+    headers: { 'ngrok-skip-browser-warning': 'true' },
+  })
   if (!res.ok) throw new Error(`HUID verifier ${res.status}: ${await res.text().catch(() => res.statusText)}`)
   return res.json() as Promise<HuidVerificationResult>
 }

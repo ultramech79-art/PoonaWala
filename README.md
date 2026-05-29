@@ -10,16 +10,6 @@
 
 <br/>
 
-[![Live App](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20App-poona--wala.vercel.app-FFD700?style=for-the-badge&labelColor=1a1a1a)](https://poona-wala.vercel.app)
-&nbsp;
-[![API](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F%20Backend%20API-poonawala.onrender.com-46E3B7?style=for-the-badge&labelColor=1a1a1a)](https://poonawala.onrender.com/health)
-
-<br/>
-
-[![Built for](https://img.shields.io/badge/Built%20for-Poonawala%20Fincorp-C0392B?style=for-the-badge&labelColor=1a1a1a)](https://poonawala.onrender.com)
-
-[![Coverage](https://img.shields.io/badge/Conformal%20Coverage-90.2%25-0288D1?style=for-the-badge&labelColor=1a1a1a)](#custom-trained-models)
-[![Stack](https://img.shields.io/badge/Stack-FastAPI%20%2B%20React%2018%20%2B%20ONNX-AB47BC?style=for-the-badge&labelColor=1a1a1a)](#tech-stack)
 
 <br/>
 
@@ -35,7 +25,6 @@
 
 ### ⬇️ Evaluating this project? Start here.
 
-[![HACKATHON DEMO — CLICK TO JUMP](https://img.shields.io/badge/%F0%9F%8F%86%20HACKATHON%20DEMO-Click%20to%20try%20the%20live%20app%20now-FF6B00?style=for-the-badge&labelColor=1a1a1a&logoColor=white)](#-hackathon-demo--try-it-in-3-minutes)
 
 </div>
 
@@ -43,15 +32,13 @@
 
 ## 🏆 Hackathon Demo — Try It in 3 Minutes
 
-> **Live app:** **[poona-wala.vercel.app](https://poona-wala.vercel.app)**  
-> **Backend:** **[poonawala.onrender.com](https://poonawala.onrender.com/health)**  
+
 > First load may take ~15s if the Render backend is cold-starting — just wait for the health check to turn green.
 
 ---
 
 ### Step 1 — Open the App
 
-Go to **[poona-wala.vercel.app](https://poona-wala.vercel.app)** on your phone or laptop.  
 Select **English** (or Hindi) and tap **Get Started**.
 
 ---
@@ -166,14 +153,6 @@ A borrower opens the app, photographs their jewelry from 7 angles, taps the ring
 
 ---
 
-## Live Deployments
-
-| Service | URL | Purpose |
-|---|---|---|
-| Frontend PWA | [poona-wala.vercel.app](https://poona-wala.vercel.app) | React 18 PWA — borrower-facing |
-| Backend API | [poonawala.onrender.com](https://poonawala.onrender.com) | FastAPI — all ML inference |
-| API Health | [/health](https://poonawala.onrender.com/health) | Live model status check |
-| Gold Price | [/api/price](https://poonawala.onrender.com/api/price) | Live IBJA gold feed |
 
 > Add `?demo=1` to the app URL for the hackathon demo overlay with QR code.
 

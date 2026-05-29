@@ -1,0 +1,34 @@
+filepath,label,item_type,mode,item_id,device_id
+/Users/parth/PoonaWala_Final/apps/audio_dataset/real_ring1_5.3g.opus,real,ring,tap,real_ring_A,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/real_ring2_1.93g.opus,real,ring,tap,real_ring_B,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/real_ring3_2.02.opus,real,ring,tap,real_ring_C,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/real_ring4_3.58g.opus,real,ring,tap,real_ring_D,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/real_ring5_3.46g.opus,real,ring,tap,real_ring_E,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/real_ring6_3.64g.opus,real,ring,tap,real_ring_F,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/real_ring7_6g.opus,real,ring,tap,real_ring_G,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real gold ring 3-5 gms drop glass.m4a,real,ring,drop,real_ring_H,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real gold ring 3-5gms tap glass.m4a,real,ring,tap,real_ring_H,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real_ring1 3-4 gm drop.m4a,real,ring,drop,real_ring_I,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real ring_2 5-7 gm drop.m4a,real,ring,drop,real_ring_J,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real ring_3 4.2 gm drop.m4a,real,ring,drop,real_ring_K,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Gold bangle real - 8-10g glass.m4a,real,bangle,tap,real_bangle_A,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Gold bangle glass tap 8-10g.m4a,real,bangle,tap,real_bangle_A,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real bangle tap test 10-12 gms gold glass.m4a,real,bangle,tap,real_bangle_B,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real bangle tap test 10-12 gms gold glass (1).m4a,real,bangle,tap,real_bangle_B,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real gold drop test 10-12 gms bangle glass.m4a,real,bangle,drop,real_bangle_B,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real gold drop test 10-12 gms bangle glass (1).m4a,real,bangle,drop,real_bangle_B,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real gold necklace 4-6 gms drop glass.m4a,real,necklace,drop,real_necklace_A,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Real gold tap 4-6gms necklace glass.m4a,real,necklace,tap,real_necklace_A,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/imitation_ring1.opus,fake,ring,tap,fake_ring_A,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/imitation_ring2.opus,fake,ring,tap,fake_ring_B,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/imitation_ring3.opus,fake,ring,tap,fake_ring_C,opus
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation ring around 10 grams glass.m4a,fake,ring,tap,fake_ring_D,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation ring drop.m4a,fake,ring,drop,fake_ring_D,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation tap test 10g ring glass.m4a,fake,ring,tap,fake_ring_D,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation bangle 8 gms tap glass.m4a,fake,bangle,tap,fake_bangle_A,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation bangle 8 gms drop glass.m4a,fake,bangle,drop,fake_bangle_A,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation bangle 10-14 gms tap glass.m4a,fake,bangle,tap,fake_bangle_B,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation bangle drop 10-14 gms glass.m4a,fake,bangle,drop,fake_bangle_B,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation bangle drop.m4a,fake,bangle,drop,fake_bangle_C,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation jewellery 20g glass drop necklace.m4a,fake,necklace,drop,fake_necklace_A,m4a
+/Users/parth/PoonaWala_Final/apps/audio_dataset/Imitation jewellery 20g glass tap necklace.m4a,fake,necklace,tap,fake_necklace_A,m4a
