@@ -51,6 +51,25 @@ def shutdown_appium_driver() -> None:
     close_driver()
 
 
+# ─── Error sanitizer ──────────────────────────────────────────────────────────
+
+def _friendly_error_str(msg: str) -> str:
+    m = msg.lower()
+    if "connection refused" in m or "max retries exceeded" in m or "failed to establish" in m:
+        return "Appium server is not running — start it on port 4723 and ensure the emulator is open."
+    if "no such driver" in m or "session" in m and "not found" in m:
+        return "Appium session lost — restart the verifier service."
+    if "no such element" in m or "nosuchelement" in m:
+        return "BIS CARE app element not found — the app UI may have changed."
+    if "timeout" in m:
+        return "BIS CARE app timed out — ensure the emulator is unlocked and BIS app is installed."
+    return msg[:200]
+
+
+def _friendly_error(exc: Exception) -> str:
+    return _friendly_error_str(str(exc))
+
+
 # ─── HUID validation ──────────────────────────────────────────────────────────
 
 _HUID_RE = re.compile(r"^[A-Z0-9]{6}$")
@@ -118,8 +137,12 @@ async def verify_huid(huid: str):
             status=VerificationStatus.AGENT_ERROR,
             confidence=0,
             raw_text="",
-            error=str(exc),
+            error=_friendly_error(exc),
         )
+
+    # Sanitise agent-level error messages
+    if agent_result.error:
+        agent_result.error = _friendly_error_str(agent_result.error)
 
     # ── 3. Handle agent-level errors ──────────────────────────────────────────
     if agent_result.error:
