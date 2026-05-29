@@ -9,6 +9,7 @@ import { CheckCircle, Lock } from 'lucide-react'
 
 const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const CACHE_KEY = 'goldeye_metal_prices_v2'
+const MAX_VIDEO_FRAMES = 11
 
 // ── Real-time gold price — 4-source fallback chain ────────────────────────────
 async function fetchLiveGoldPrice(): Promise<number> {
@@ -93,9 +94,9 @@ function getVideoFrameDataUrls(state: SessionState): string[] {
     ? rawFrames.filter((v): v is string => typeof v === 'string' && v.startsWith('data:image/'))
     : []
   if (video?.dataUrl?.startsWith('data:image/') && !frames.includes(video.dataUrl)) {
-    return [video.dataUrl, ...frames].slice(0, 10)
+    return [video.dataUrl, ...frames].slice(0, MAX_VIDEO_FRAMES)
   }
-  return frames.slice(0, 10)
+  return frames.slice(0, MAX_VIDEO_FRAMES)
 }
 
 function fallbackVisualWeight(state: SessionState): number {
@@ -322,6 +323,9 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const videoCapture = state.captures['video']
   const audioCapture = state.captures['audio']
   const selfieCapture = state.captures['selfie']
+  const selfieDataUrl = selfieCapture?.dataUrl && !selfieCapture.dataUrl.startsWith('local://')
+    ? await resizeDataUrl(selfieCapture.dataUrl, 1280).catch(() => selfieCapture.dataUrl)
+    : undefined
   const minDelay = new Promise<void>(r => setTimeout(r, 3500))
   const CACHE_KEY = 'goldeye_last_result'
 
@@ -341,12 +345,12 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
         frames: assessmentFrames.length > 0 ? assessmentFrames : [`local://${sessionId}/demo`],
         video: videoCapture?.dataUrl?.startsWith('data:') ? videoCapture.dataUrl : undefined,
         audio: audioCapture ? `local://${sessionId}/audio` : undefined,
-        selfie: selfieCapture ? `local://${sessionId}/selfie` : undefined,
+        selfie: selfieDataUrl,
         weight_g: weightG ?? undefined,
         lang: state.lang ?? 'en',
         device_metadata: {
           capture_count: captureTypes.length,
-          frame_types: [...photoTypes, ...videoFrames.map((_, i) => `video_${i}`)],
+          frame_types: [...photoTypes, ...(selfieDataUrl ? ['selfie'] : []), ...videoFrames.map((_, i) => `video_${i}`)],
           ua: navigator.userAgent,
           manual_huid: state.huidCode ?? state.certificateData?.huid ?? undefined,
           certificate_karat: state.certificateData?.karat ?? undefined,

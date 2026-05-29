@@ -9,9 +9,11 @@ import { useSessionStore } from '../store/session'
 import { ChevronRight, Video, AlertCircle, SkipForward, CheckCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { apiBase } from '../lib/api'
+import { preferredCameraDeviceId } from '../lib/cameraQuality'
 
 const VIDEO_DURATION_MS = 15_000
-const FRAME_INTERVAL_MS = 1_500   // ≈10 frames
+const FRAME_INTERVAL_MS = 1_500   // ≈10 frames plus final frame
+const MAX_VIDEO_FRAMES = 11
 
 function grabFrame(video: HTMLVideoElement): string {
   if (video.readyState < 2) return ''
@@ -76,8 +78,13 @@ export function VideoEval() {
     setSecondsLeft(Math.ceil(VIDEO_DURATION_MS / 1000))
 
     try {
+      const deviceId = await preferredCameraDeviceId({ ideal: 'environment' })
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }),
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       })
       streamRef.current = stream
@@ -97,7 +104,8 @@ export function VideoEval() {
       if (videoRef.current) { const b64 = grabFrame(videoRef.current); if (b64) framesRef.current.push(b64) }
       stream.getTracks().forEach(t => t.stop()); streamRef.current = null
 
-      const usableFrames = framesRef.current.filter(Boolean).slice(0, 10)
+      framesRef.current = framesRef.current.filter(Boolean).slice(0, MAX_VIDEO_FRAMES)
+      const usableFrames = framesRef.current
       if (usableFrames.length) {
         const dataUrls = usableFrames.map(frameDataUrl)
         addCapture({
@@ -123,6 +131,8 @@ export function VideoEval() {
 
   async function runAnalysis() {
     try {
+      const referenceCapture = state.captures['45deg'] ?? state.captures.top
+      const referenceFrameType = state.captures['45deg'] ? '45deg' : 'top'
       const res = await fetch(`${apiBase}/api/video-eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -130,8 +140,8 @@ export function VideoEval() {
           frames_b64: framesRef.current,
           language: lang,
           session_id: state.sessionId ?? undefined,
-          reference_image_data_url: state.captures.top?.dataUrl ?? null,
-          reference_frame_type: 'top',
+          reference_image_data_url: referenceCapture?.dataUrl ?? null,
+          reference_frame_type: referenceFrameType,
         }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)

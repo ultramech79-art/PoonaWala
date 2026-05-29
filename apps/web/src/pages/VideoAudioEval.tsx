@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../store/session'
 import { authCheck, sendTapTest, type AuthCheckResult, type TapTestResult } from '../lib/liveSession'
+import { preferredCameraDeviceId } from '../lib/cameraQuality'
 import { ChevronRight, Video, Mic, CheckCircle, AlertCircle, SkipForward } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -77,8 +78,13 @@ export function VideoAudioEval() {
     setSecondsLeft(Math.ceil(VIDEO_DURATION_MS / 1000))
 
     try {
+      const deviceId = await preferredCameraDeviceId({ ideal: 'environment' })
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }),
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       })
       streamRef.current = stream

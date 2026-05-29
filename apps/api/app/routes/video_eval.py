@@ -63,6 +63,12 @@ from app.data.item_match import compare_item_images, is_blocking_mismatch
 
 logger = logging.getLogger("goldeye.video_eval")
 router = APIRouter()
+MAX_VIDEO_FRAMES = 11
+
+
+def _is_video_frame(frame_type: str | None) -> bool:
+    label = str(frame_type or "").lower()
+    return label == "video" or label.startswith("video_")
 
 
 class VideoEvalRequest(BaseModel):
@@ -92,7 +98,8 @@ async def video_eval(req: VideoEvalRequest):
     if not req.frames_b64:
         return _error("No frames received", req.language)
 
-    n_frames = min(len(req.frames_b64), 10)
+    n_frames = min(len(req.frames_b64), MAX_VIDEO_FRAMES)
+    analysis_frames = req.frames_b64[:n_frames]
     lang_out = "Hindi (Devanagari)" if req.language == "hi" else "English"
 
     prompt = f"""You are a gold authentication expert examining {n_frames} frames of a gold ornament rotating over 15 seconds.
@@ -183,7 +190,7 @@ Return ONLY valid JSON:
 }}"""
 
     parts = [{"text": prompt}]
-    for b64 in req.frames_b64[:n_frames]:
+    for b64 in analysis_frames:
         parts.append({"inlineData": {"mimeType": "image/jpeg", "data": b64}})
 
     payload = {
@@ -233,7 +240,7 @@ Return ONLY valid JSON:
             f"Raw response: {raw if 'raw' in locals() else 'None'}"
         )
         try:
-            res = await _groq_video_fallback(prompt, req.frames_b64[:n_frames])
+            res = await _groq_video_fallback(prompt, analysis_frames)
         except Exception as groq_error:
             logger.error(f"video_eval Groq fallback failed using {GROQ_MODEL}: {groq_error}")
             return _error(str(e), req.language)
@@ -274,31 +281,80 @@ Return ONLY valid JSON:
     same_item_summary = None
     if req.reference_image_data_url:
         comparisons = []
-        for b64 in req.frames_b64[:2]:
+        for idx, b64 in enumerate(analysis_frames):
             item_result = await compare_item_images(
                 req.reference_image_data_url,
                 f"data:image/jpeg;base64,{b64}",
                 reference_frame_type=req.reference_frame_type,
-                candidate_frame_type="video",
+                candidate_frame_type=f"video_{idx}",
+                use_gemini=False,
             )
-            comparisons.append(item_result)
-        mismatches = [item for item in comparisons if is_blocking_mismatch(item)]
+            comparisons.append({**item_result, "frame_idx": idx, "frame_type": f"video_{idx}"})
+
+        # All video frames get a fast local check. Confirm the riskiest frames
+        # semantically so one bad local fingerprint does not unfairly block.
+        suspect_frames = sorted(
+            [
+                item for item in comparisons
+                if item.get("verdict") != "same" or float(item.get("same_item_score", 0.5)) < 0.55
+            ],
+            key=lambda item: (1.0 - float(item.get("same_item_score", 0.5))) * float(item.get("confidence", 0.0)),
+            reverse=True,
+        )[:3]
+        for item in suspect_frames:
+            idx = int(item["frame_idx"])
+            confirmed = await compare_item_images(
+                req.reference_image_data_url,
+                f"data:image/jpeg;base64,{analysis_frames[idx]}",
+                reference_frame_type=req.reference_frame_type,
+                candidate_frame_type=f"video_{idx}",
+            )
+            comparisons[idx] = {**confirmed, "frame_idx": idx, "frame_type": f"video_{idx}"}
+
+        blocking_mismatches = [item for item in comparisons if is_blocking_mismatch(item)]
+        video_mismatches = [item for item in blocking_mismatches if _is_video_frame(item.get("frame_type"))]
+        non_video_mismatches = [item for item in blocking_mismatches if not _is_video_frame(item.get("frame_type"))]
+        severe_video_mismatches = [
+            item for item in video_mismatches
+            if float(item.get("confidence", 0.0)) >= 0.92 and float(item.get("same_item_score", 0.5)) <= 0.18
+        ]
+        mismatches = non_video_mismatches + (
+            video_mismatches if len(video_mismatches) >= 2 else severe_video_mismatches
+        )
         if mismatches:
             strongest = sorted(mismatches, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
-            same_item_summary = strongest
+            same_item_summary = {
+                **strongest,
+                "frames_checked": len(comparisons),
+                "blocking_mismatch": True,
+                "mismatched_frames": mismatches,
+                "comparisons": comparisons,
+            }
             video_score = min(video_score, 35)
             signals.insert(0, "Different jewelry item detected compared with the top-view photo")
         elif comparisons:
-            same_item_summary = sorted(comparisons, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
+            strongest = sorted(comparisons, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
+            same_item_summary = {
+                **strongest,
+                "frames_checked": len(comparisons),
+                "blocking_mismatch": False,
+                "mismatched_frames": [],
+                "comparisons": comparisons,
+            }
 
     if req.session_id:
-        for idx, b64 in enumerate(req.frames_b64[:3]):
+        comparison_by_idx = {
+            int(item["frame_idx"]): item
+            for item in (same_item_summary or {}).get("comparisons", [])
+            if "frame_idx" in item
+        }
+        for idx, b64 in enumerate(analysis_frames):
             try:
                 await store_capture_asset(
                     req.session_id,
                     f"video_{idx}",
                     f"data:image/jpeg;base64,{b64}",
-                    same_item=same_item_summary,
+                    same_item=comparison_by_idx.get(idx) or same_item_summary,
                 )
             except Exception as exc:
                 logger.warning(f"video_eval asset store failed: {exc}")
@@ -314,7 +370,7 @@ Return ONLY valid JSON:
             "अनिश्चित"              if video_score >= 50 else
             "संभवतः गोल्ड-प्लेटेड"
         )
-    if same_item_summary and same_item_summary.get("verdict") == "different":
+    if same_item_summary and same_item_summary.get("blocking_mismatch"):
         verdict = "Different jewelry item detected" if req.language == "en" else "अलग गहना मिला"
 
     logger.info(

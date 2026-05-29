@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { Camera as CameraIcon, Video, RotateCcw, Music, CheckCircle, Zap, ZapOff, SwitchCamera, Focus } from 'lucide-react'
 import type { CaptureType } from '../store/session'
+import { preferredCameraDeviceId } from '../lib/cameraQuality'
 
 type MotionSample = { x: number; y: number; z: number; t: number }
 
@@ -115,9 +116,10 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
   const startCamera = useCallback(async (facing: 'environment' | 'user' = initialFacing) => {
     setStatus('starting')
     try {
+      const deviceId = await preferredCameraDeviceId(facing)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: facing },
+          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: facing } }),
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           // Ask for higher frame rate for better focus

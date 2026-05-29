@@ -78,16 +78,26 @@ async def _evaluate_compare_store(
             candidate_frame_type=frame_type,
         )
         detected["same_item"] = same_item
-        if is_blocking_mismatch(same_item):
+        blocking_mismatch = is_blocking_mismatch(same_item)
+        logger.info(
+            "same_item [%s vs %s]: verdict=%s score=%s confidence=%s method=%s blocking=%s",
+            reference_frame_type or "top",
+            frame_type,
+            same_item.get("verdict"),
+            same_item.get("same_item_score"),
+            same_item.get("confidence"),
+            same_item.get("method"),
+            blocking_mismatch,
+        )
+        if blocking_mismatch:
             approved = False
             quality_score = min(quality_score, 0.35)
             if "same_item_mismatch" not in issues:
                 issues.append("same_item_mismatch")
-            reasons = same_item.get("mismatch_reasons") or []
-            reason_text = f" ({'; '.join(reasons[:2])})" if reasons else ""
+            reference_label = "45-degree photo" if (reference_frame_type or "top") == "45deg" else "top-view photo"
             feedback = (
-                "This does not look like the same jewelry item as the top-view photo. "
-                f"Please retake using the same item{reason_text}."
+                f"This does not look like the same jewelry item as the {reference_label}. "
+                "Please retake using the same item."
             )
 
     asset = None
