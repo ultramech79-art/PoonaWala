@@ -263,9 +263,12 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
     smooth_peak = float(smoothed[smooth_peak_idx])
     if smooth_peak < 1e-6:
         smooth_peak = float(np.max(smoothed)) or 1e-6
-    # Measure from smoothed peak onwards
+    # Measure from smoothed peak onwards.
+    # 5% threshold (not 10%): gold's low internal damping (3e-4) sustains the ring
+    # well below half-amplitude. At typical phone SNR of 40-55 dB, 5% of peak is
+    # still 14-26 dB above the noise floor — reliable to measure.
     post_peak = smoothed[smooth_peak_idx:]
-    below = np.where(post_peak < smooth_peak * 0.10)[0]
+    below = np.where(post_peak < smooth_peak * 0.05)[0]
     decay_idx = int(below[0]) if len(below) else len(post_peak) - 1
     decay_ms_val = (smooth_peak_idx + decay_idx) / sr * 1000.0
     decay_env = post_peak[:max(decay_idx, 20)]
