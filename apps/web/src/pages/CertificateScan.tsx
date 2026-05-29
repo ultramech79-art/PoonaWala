@@ -13,6 +13,12 @@ import { speak } from '../lib/tts'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { useTranslation } from 'react-i18next'
 
+const BILL_CRUX_HI: Record<string, string> = {
+  good:    'बिल मिलान सफल। यह वही आभूषण है।',
+  warn:    'सावधान — बिल का HUID मेल नहीं खाता।',
+  neutral: 'बिल मिला। विवरण की जांच करें।',
+}
+
 function toCertificateData(result: CertificateOCRResult): CertificateData {
   return {
     source: 'ocr',
@@ -47,8 +53,9 @@ export function CertificateScan() {
   const [data, setData] = useState<CertificateData | null>(state.certificateData)
   const [cameraKey, setCameraKey] = useState(0)
   const [showTutorial, setShowTutorial] = useState(true)
+  const lang = localStorage.getItem('goldeye_lang') ?? 'en'
 
-  // Speak voice guide on mount
+  // Speak intro on mount
   useEffect(() => {
     const timer = setTimeout(() => speak(t('voice_certificate')), 500)
     return () => clearTimeout(timer)
@@ -66,6 +73,10 @@ export function CertificateScan() {
       const extracted = toCertificateData(result)
       setData(extracted)
       setStatus('done')
+      // Speak just the crux in the user's language
+      const billResult = getBillMatchStatus(extracted, state.huidCode ?? null)
+      const crux = lang === 'hi' ? BILL_CRUX_HI[billResult.tone] : billResult.label
+      setTimeout(() => speak(crux), 400)
     } catch (err) {
       console.error('[CertificateScan] OCR failed:', err)
       setStatus('error')

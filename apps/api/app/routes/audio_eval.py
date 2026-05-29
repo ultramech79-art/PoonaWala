@@ -279,27 +279,28 @@ def _classifier_score(feature_vec: np.ndarray) -> Optional[int]:
         return None
 
 
-def _verdict_and_confidence(score: int, mode: str, item_type: str, low_conf_flag: bool) -> tuple[str, str]:
+def _verdict_and_confidence(score: int, mode: str, item_type: str, low_conf_flag: bool, language: str = "en") -> tuple[str, str]:
     is_chain = item_type in {"chain", "necklace", "earring"}
+    hi = language == "hi"
 
     # Boundaries calibrated on 33-clip dataset (real min=63, fake max=77).
     # Classifier output compresses to 53–77; "high" fires only for physics heuristic scores >= 82.
     # Lower boundary raised 50 → 62: fakes at 53–58 now correctly reach "Possibly plated"
     # without pushing real gold (dataset min=63) into that zone.
     if score >= 72:
-        verdict = "Likely solid gold"
+        verdict = "संभवतः ठोस सोना है" if hi else "Likely solid gold"
         conf = "high" if score >= 82 and not is_chain else "medium"
     elif score >= 62:
-        verdict = "Inconclusive — acoustic evidence mixed"
+        verdict = "अनिश्चित — ध्वनि प्रमाण मिश्रित है" if hi else "Inconclusive — acoustic evidence mixed"
         conf = "medium"
     else:
-        verdict = "Possibly plated or imitation"
+        verdict = "संभवतः प्लेटेड या नकली है" if hi else "Possibly plated or imitation"
         conf = "medium" if score >= 40 else "low"
 
     if is_chain:
         conf = min(conf, "medium")  # chains always capped at medium
         if score >= 72:
-            verdict = "Likely solid gold (chain signal — lower certainty)"
+            verdict = "संभवतः ठोस सोना (चेन सिग्नल — कम निश्चितता)" if hi else "Likely solid gold (chain signal — lower certainty)"
 
     # Gemini low_confidence_flag can demote confidence, but not override a clear
     # physics verdict. Score >= 72 already signals "Likely solid gold" — Gemini's
@@ -485,7 +486,7 @@ async def audio_eval(req: AudioEvalRequest):
     explanation, low_conf = await _gemini_explain(arr, sr, physics, final_score, item_type, mode, lang)
 
     # ── Verdict + confidence ───────────────────────────────────────────────────
-    verdict, confidence = _verdict_and_confidence(final_score, mode, item_type, low_conf)
+    verdict, confidence = _verdict_and_confidence(final_score, mode, item_type, low_conf, language=lang)
 
     params = AudioParams(
         decay_time_ms=physics["decay_ms"],
