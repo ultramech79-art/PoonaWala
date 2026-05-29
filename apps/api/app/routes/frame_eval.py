@@ -2,6 +2,7 @@
 Frame evaluation and live guidance endpoints.
 Live guidance uses GROQ_GUIDANCE_API_KEY with GEMINI_GUIDANCE_FALLBACK_API_KEY fallback.
 """
+import asyncio
 import base64
 import json
 import logging
@@ -71,24 +72,32 @@ async def _evaluate_compare_store(
     same_item = None
     reference_source = reference_image_data_url or reference_image_url
     if reference_source and frame_type in COMPARE_FRAME_TYPES:
-        same_item = await compare_item_images(
-            reference_source,
-            image_source,
-            reference_frame_type=reference_frame_type or "top",
-            candidate_frame_type=frame_type,
-        )
+        try:
+            same_item = await asyncio.wait_for(
+                compare_item_images(
+                    reference_source,
+                    image_source,
+                    reference_frame_type=reference_frame_type or "top",
+                    candidate_frame_type=frame_type,
+                ),
+                timeout=12.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("same_item comparison timed out for [%s vs %s] — skipping", reference_frame_type, frame_type)
+            same_item = None
         detected["same_item"] = same_item
         blocking_mismatch = is_blocking_mismatch(same_item)
-        logger.info(
-            "same_item [%s vs %s]: verdict=%s score=%s confidence=%s method=%s blocking=%s",
-            reference_frame_type or "top",
-            frame_type,
-            same_item.get("verdict"),
-            same_item.get("same_item_score"),
-            same_item.get("confidence"),
-            same_item.get("method"),
-            blocking_mismatch,
-        )
+        if same_item:
+            logger.info(
+                "same_item [%s vs %s]: verdict=%s score=%s confidence=%s method=%s blocking=%s",
+                reference_frame_type or "top",
+                frame_type,
+                same_item.get("verdict"),
+                same_item.get("same_item_score"),
+                same_item.get("confidence"),
+                same_item.get("method"),
+                blocking_mismatch,
+            )
         if blocking_mismatch:
             approved = False
             quality_score = min(quality_score, 0.35)
