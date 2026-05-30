@@ -38,9 +38,9 @@ def _chain_like() -> np.ndarray:
 async def test_item_match_local_same_image(monkeypatch):
     from app.data import item_match
 
-    monkeypatch.setattr(item_match, "GEMINI_GUIDANCE_FALLBACK_API_KEYS", [])
-    monkeypatch.setattr(item_match, "GEMINI_AUDIO_VIDEO_API_KEYS", [])
     monkeypatch.setattr(item_match, "GROQ_PRIMARY_API_KEYS", [])
+    monkeypatch.setattr(item_match, "GROQ_GUIDANCE_API_KEYS", [])
+    monkeypatch.setattr(item_match, "GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS", [])
     monkeypatch.setattr(item_match, "detect_coin_hough", lambda *_: None)
 
     img = _data_uri(_ring())
@@ -55,9 +55,9 @@ async def test_item_match_local_same_image(monkeypatch):
 async def test_item_match_local_obvious_type_mismatch_blocks(monkeypatch):
     from app.data import item_match
 
-    monkeypatch.setattr(item_match, "GEMINI_GUIDANCE_FALLBACK_API_KEYS", [])
-    monkeypatch.setattr(item_match, "GEMINI_AUDIO_VIDEO_API_KEYS", [])
     monkeypatch.setattr(item_match, "GROQ_PRIMARY_API_KEYS", [])
+    monkeypatch.setattr(item_match, "GROQ_GUIDANCE_API_KEYS", [])
+    monkeypatch.setattr(item_match, "GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS", [])
     monkeypatch.setattr(item_match, "detect_coin_hough", lambda *_: None)
 
     result = await item_match.compare_item_images(
@@ -71,7 +71,7 @@ async def test_item_match_local_obvious_type_mismatch_blocks(monkeypatch):
     assert item_match.is_blocking_mismatch(result)
 
 
-async def test_gemini_confirmed_side_mismatch_blocks():
+async def test_groq_confirmed_side_mismatch_blocks():
     from app.data import item_match
 
     result = {
@@ -79,7 +79,7 @@ async def test_gemini_confirmed_side_mismatch_blocks():
         "same_item": False,
         "same_item_score": 0.2,
         "confidence": 0.86,
-        "method": "gemini_multimodal_compare",
+        "method": "groq_multimodal_compare",
         "candidate_frame_type": "side",
     }
 
@@ -119,19 +119,78 @@ async def test_semantic_same_is_vetoed_by_45deg_visual_conflict():
     assert item_match.is_blocking_mismatch(hybrid)
 
 
+async def test_local_side_view_requires_stronger_confirmation():
+    from app.data import item_match
+
+    bbox = {
+        "width_px": 100,
+        "height_px": 70,
+        "major_axis_px": 100,
+        "minor_axis_px": 70,
+        "fill_ratio": 0.45,
+        "hollow_ratio": 0.25,
+        "area_fraction": 0.08,
+        "image_width_px": 320,
+        "image_height_px": 320,
+        "x_px": 100,
+        "y_px": 100,
+    }
+    ref = {
+        "valid": True,
+        "bbox": bbox,
+        "geometry_class": "compact_or_pendant",
+        "aspect": 1.42,
+        "fill_ratio": 0.45,
+        "hollow_ratio": 0.25,
+        "area_fraction": 0.08,
+        "mean_lab": [70, 8, 70],
+        "metal_fraction": 0.2,
+        "phash": 12345,
+    }
+    cand = {**ref, "phash": 12346}
+
+    result = item_match._local_compare(ref, cand, "45deg", "side")
+
+    assert result["same_item_score"] >= 0.66
+    assert result["verdict"] == "inconclusive"
+    assert result["same_item"] is None
+
+
+async def test_top_side_timeout_is_unverified_not_accepted():
+    from app.routes import frame_eval
+
+    assert frame_eval._same_item_unverified({
+        "method": "same_item_timeout",
+        "mismatch_reasons": ["same_item_compare_timeout"],
+    }, "top")
+    assert frame_eval._same_item_unverified({
+        "method": "local_visual_fingerprint_timeout",
+        "mismatch_reasons": ["local_fingerprint_timeout"],
+    }, "side")
+    assert frame_eval._same_item_unverified({
+        "method": "local_visual_fingerprint",
+        "verdict": "inconclusive",
+        "mismatch_reasons": [],
+    }, "side")
+    assert not frame_eval._same_item_unverified({
+        "method": "local_visual_fingerprint_timeout",
+        "mismatch_reasons": ["local_fingerprint_timeout"],
+    }, "macro")
+
+
 async def test_partial_top_reference_does_not_block_shape_only_difference(monkeypatch):
     from app.data import item_match
 
-    monkeypatch.setattr(item_match, "GEMINI_GUIDANCE_FALLBACK_API_KEYS", [])
-    monkeypatch.setattr(item_match, "GEMINI_AUDIO_VIDEO_API_KEYS", [])
     monkeypatch.setattr(item_match, "GROQ_PRIMARY_API_KEYS", [])
+    monkeypatch.setattr(item_match, "GROQ_GUIDANCE_API_KEYS", [])
+    monkeypatch.setattr(item_match, "GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS", [])
 
     result = await item_match.compare_item_images(
         _data_uri(_partial_ring()),
         _data_uri(_ring()),
         reference_frame_type="top",
         candidate_frame_type="side",
-        use_gemini=False,
+        use_remote=False,
     )
 
     assert result["reference_view_partial"] is True
@@ -139,7 +198,7 @@ async def test_partial_top_reference_does_not_block_shape_only_difference(monkey
     assert not item_match.is_blocking_mismatch(result)
 
 
-async def test_partial_top_reference_needs_stronger_gemini_mismatch():
+async def test_partial_top_reference_needs_stronger_groq_mismatch():
     from app.data import item_match
 
     moderate = {
@@ -147,7 +206,7 @@ async def test_partial_top_reference_needs_stronger_gemini_mismatch():
         "same_item": False,
         "same_item_score": 0.25,
         "confidence": 0.86,
-        "method": "gemini_multimodal_compare",
+        "method": "groq_multimodal_compare",
         "candidate_frame_type": "side",
         "reference_view_partial": True,
     }
@@ -160,14 +219,14 @@ async def test_partial_top_reference_needs_stronger_gemini_mismatch():
 async def test_s14_flags_in_session_mismatch(monkeypatch):
     s14 = importlib.import_module("app.workers.s14_item_consistency")
 
-    async def fake_compare(reference_image, candidate_image, reference_frame_type="top", candidate_frame_type="unknown", use_gemini=True):
-        if use_gemini:
+    async def fake_compare(reference_image, candidate_image, reference_frame_type="top", candidate_frame_type="unknown", use_remote=True, **_):
+        if use_remote:
             return {
                 "same_item": False,
                 "verdict": "different",
                 "same_item_score": 0.2,
                 "confidence": 0.86,
-                "method": "gemini_multimodal_compare",
+                "method": "groq_multimodal_compare",
                 "candidate_frame_type": candidate_frame_type,
                 "matching_signals": [],
                 "mismatch_reasons": ["overall_shape_differs"],
@@ -184,6 +243,7 @@ async def test_s14_flags_in_session_mismatch(monkeypatch):
         }
 
     monkeypatch.setattr(s14, "compare_item_images", fake_compare)
+    monkeypatch.setattr(s14, "_groq_item_api_keys", lambda: ["test-key"])
 
     result = await s14.run(
         "same-item-test",
@@ -214,15 +274,32 @@ async def test_s14_compares_selfie_and_all_video_frames(monkeypatch):
         }
 
     monkeypatch.setattr(s14, "compare_item_images", fake_compare)
+    monkeypatch.setattr(s14, "_groq_item_api_keys", lambda: ["test-key"])
+
+    async def fake_fingerprint_entry(label, url):
+        return {"label": label, "url": url, "fp": {"valid": True, "n": 10}}
+
+    def fake_group_by_orb(fingerprints):
+        n = len(fingerprints)
+        return [[i] for i in range(n)], {(i, j): 0 for i in range(n) for j in range(i + 1, n)}
+
+    monkeypatch.setattr(s14, "_fingerprint_entry", fake_fingerprint_entry)
+    monkeypatch.setattr(s14, "group_by_orb", fake_group_by_orb)
 
     frames = ["top", "45", "side", "macro"] + [f"video-{i}" for i in range(11)]
     result = await s14.run("same-item-test", frames, selfie_url="selfie")
 
     assert result.error is None
-    assert seen == [("top", "45deg"), ("45deg", "side"), ("45deg", "macro")] + [
-        ("45deg", f"video_{i}") for i in range(11)
-    ] + [("45deg", "selfie")]
-    assert result.payload["frames_compared"] == 15
+    assert seen == [
+        ("top", "45deg"),
+        ("45deg", "side"),
+        ("side", "macro"),
+        ("macro", "video_0"),
+        ("video_0", "video_1"),
+        ("video_1", "video_2"),
+        ("video_2", "selfie"),
+    ]
+    assert result.payload["frames_compared"] == 8
 
 
 async def test_video_eval_checks_and_stores_all_11_frames(monkeypatch):
@@ -306,14 +383,14 @@ async def test_video_eval_single_non_severe_video_mismatch_does_not_override(mon
         }
         return {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}}]}, True
 
-    async def fake_compare(reference_image, candidate_image, reference_frame_type="top", candidate_frame_type="unknown", use_gemini=True):
+    async def fake_compare(reference_image, candidate_image, reference_frame_type="top", candidate_frame_type="unknown", use_remote=True):
         if candidate_frame_type == "video_0":
             return {
                 "same_item": False,
                 "verdict": "different",
                 "same_item_score": 0.27,
                 "confidence": 0.83,
-                "method": "gemini_multimodal_compare" if use_gemini else "local_visual_fingerprint",
+                "method": "groq_multimodal_compare" if use_remote else "local_visual_fingerprint",
                 "candidate_frame_type": candidate_frame_type,
                 "matching_signals": [],
                 "mismatch_reasons": ["overall_shape_differs"],

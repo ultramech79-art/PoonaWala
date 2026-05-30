@@ -287,7 +287,7 @@ Return ONLY valid JSON:
                 f"data:image/jpeg;base64,{b64}",
                 reference_frame_type=req.reference_frame_type,
                 candidate_frame_type=f"video_{idx}",
-                use_gemini=False,
+                use_remote=False,
             )
             comparisons.append({**item_result, "frame_idx": idx, "frame_type": f"video_{idx}"})
 
