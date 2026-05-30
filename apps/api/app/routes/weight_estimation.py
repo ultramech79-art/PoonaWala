@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -27,6 +28,7 @@ class WeightEstimateRequest(BaseModel):
 
 @router.post("/weight-estimate")
 async def estimate_weight(req: WeightEstimateRequest):
+    started = time.perf_counter()
     try:
         vlm_roi = None
         angle_vlm_roi = None
@@ -40,11 +42,13 @@ async def estimate_weight(req: WeightEstimateRequest):
         vlm_validated = False
         jewelry_type = req.jewelry_type
         if req.use_vlm_roi:
+            roi_started = time.perf_counter()
             vlm_roi, angle_vlm_roi, side_vlm_roi = await asyncio.gather(
                 _require_vlm_roi(req.image_data_url, "top view"),
                 _require_vlm_roi(req.image_45_data_url, "45-degree view"),
                 _require_vlm_roi(req.side_image_data_url, "side view"),
             )
+            logger.info("Weight ROI validation complete in %.2fs", time.perf_counter() - roi_started)
             vlm_validated = True
             if jewelry_point is None:
                 jewelry_point = vlm_roi["jewellery_point"]
@@ -64,7 +68,9 @@ async def estimate_weight(req: WeightEstimateRequest):
             }:
                 jewelry_type = vlm_roi["item_type"]
 
-        return estimate_weight_from_image(
+        estimate_started = time.perf_counter()
+        estimate = await asyncio.to_thread(
+            estimate_weight_from_image,
             image_data_url=req.image_data_url,
             image_45_data_url=req.image_45_data_url,
             side_image_data_url=req.side_image_data_url,
@@ -80,7 +86,13 @@ async def estimate_weight(req: WeightEstimateRequest):
             side_jewelry_point=side_jewelry_point,
             side_jewelry_bbox=side_jewelry_bbox,
             vlm_validated=vlm_validated,
-        ) | {
+        )
+        logger.info(
+            "Weight CV estimate complete in %.2fs total=%.2fs",
+            time.perf_counter() - estimate_started,
+            time.perf_counter() - started,
+        )
+        return estimate | {
             "vlm_roi": vlm_roi,
             "angle_vlm_roi": angle_vlm_roi,
             "side_vlm_roi": side_vlm_roi,

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import math
 import os
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -21,6 +23,7 @@ import numpy as np
 
 JewelryType = Literal["ring", "bangle", "bracelet", "necklace", "pendant", "chain", "irregular", "auto"]
 Karat = Literal[24, 22, 18]
+logger = logging.getLogger("goldeye.weight_estimation")
 
 
 class WeightEstimationError(ValueError):
@@ -1344,16 +1347,24 @@ def estimate_weight_from_image(
     side_jewelry_bbox: Optional[dict[str, float]] = None,
     vlm_validated: bool = False,
 ) -> dict[str, Any]:
+    started = time.perf_counter()
     cfg = _config()
     if reference_object != "rs10_coin":
         raise WeightEstimationError("unsupported_reference_object", "Only Rs 10 coin scaling is currently supported.")
     img = _decode_image_data_url(image_data_url)
     quality = _image_quality(img)
     quality_issues = _validate_quality(quality)
+    logger.info("Weight stage decode_quality complete in %.2fs", time.perf_counter() - started)
 
     coin = _detect_rs10_coin(img)
     ref = cfg["reference_objects"]["rs10_coin"]
     mm_per_pixel = float(ref["diameter_mm"]) / coin.diameter_px
+    logger.info(
+        "Weight stage top_coin_scale complete in %.2fs coin_diameter_px=%.2f mm_per_pixel=%.5f",
+        time.perf_counter() - started,
+        coin.diameter_px,
+        mm_per_pixel,
+    )
     ring_mask = None
     if jewelry_type == "ring" and jewelry_bbox and vlm_validated:
         ring_mask = _ring_annulus_mask_from_bbox(img.shape[:2], jewelry_bbox)
@@ -1375,9 +1386,24 @@ def estimate_weight_from_image(
                 max(segmentation.quality, 0.72),
                 _contour_count(ring_mask),
             )
+    logger.info(
+        "Weight stage segmentation complete in %.2fs method=%s quality=%.3f pixels=%d",
+        time.perf_counter() - started,
+        segmentation.method,
+        segmentation.quality,
+        int(np.count_nonzero(segmentation.mask)),
+    )
     depth = _estimate_depth(img, segmentation.mask)
     geometry = _extract_geometry(segmentation.mask, mm_per_pixel, jewelry_type)
     material_features = _validate_jewelry_candidate(img, segmentation.mask, geometry, vlm_validated)
+    logger.info(
+        "Weight stage geometry_depth complete in %.2fs type=%s width=%.2f height=%.2f depth_method=%s",
+        time.perf_counter() - started,
+        geometry["type"],
+        geometry["dimensions"]["width_mm"],
+        geometry["dimensions"]["height_mm"],
+        depth.method,
+    )
     angle_profile = _profile_measurement(
         image_45_data_url,
         "angle_45",
@@ -1393,6 +1419,14 @@ def estimate_weight_from_image(
         side_jewelry_point,
     )
     profile = _combine_profile_thickness(side_profile, angle_profile)
+    logger.info(
+        "Weight stage profile complete in %.2fs side=%.2f angle=%.2f selected=%.2f source=%s",
+        time.perf_counter() - started,
+        side_profile.thickness_mm,
+        angle_profile.thickness_mm,
+        profile.thickness_mm,
+        profile.scale_source,
+    )
     volume_cm3, estimated_depth_mm, volume_model = _volume_cm3(
         geometry,
         depth.depth,
@@ -1404,6 +1438,13 @@ def estimate_weight_from_image(
     density = float(cfg["densities_g_cm3"][str(karat)])
     estimated_weight_g = volume_cm3 * density
     confidence, components = _confidence(segmentation, coin, quality, depth, geometry)
+    logger.info(
+        "Weight stage physics complete in %.2fs volume=%.4f weight=%.2f confidence=%.3f",
+        time.perf_counter() - started,
+        volume_cm3,
+        estimated_weight_g,
+        confidence,
+    )
 
     issues = list(quality_issues)
     if geometry["multiple_item_risk"] > 0.25:
@@ -1477,4 +1518,5 @@ def estimate_weight_from_image(
         response["visualizations"] = _visualizations(img, segmentation.mask, depth.depth, coin)
     elif include_mask_preview:
         response["visualizations"] = _mask_preview(img, segmentation.mask, coin, jewelry_bbox)
+    logger.info("Weight response ready in %.2fs", time.perf_counter() - started)
     return response
