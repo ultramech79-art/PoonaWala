@@ -555,13 +555,17 @@ def _normalize_semantic_result(raw: dict, local_result: dict) -> dict:
 
 
 def _identity_prompt(reference_frame_type: str, candidate_frame_type: str) -> str:
-    return f"""Gold-loan fraud check. Image A={reference_frame_type}, Image B={candidate_frame_type}.
-Are these the SAME physical jewelry item? Angles/zoom/lighting may differ — that is normal.
-Mark "different" ONLY for clear item substitution (different type, color family, or distinct design).
-Do NOT mark "different" for angle change, blur, crop, or partial view.
+    return f"""Gold-loan fraud check. Image A is a {reference_frame_type} view. Image B is a {candidate_frame_type} view.
+Do these two images show the EXACT SAME physical jewelry item?
+
+IMPORTANT RULES:
+- Angle changes between {reference_frame_type} and {candidate_frame_type} are EXPECTED and NORMAL. Do NOT mark different for angle change alone.
+- Lighting, blur, zoom, and partial cropping differences are NORMAL. Do NOT mark different for these.
+- Mark "different" ONLY if there is a CLEAR SUBSTITUTION: a completely different jewelry type (ring vs. bangle), different gold color (yellow vs. white), or obviously different design.
+- If in doubt, return "inconclusive" — do NOT falsely accuse.
 
 Return ONLY valid JSON:
-{{"same_item":true|false|null,"verdict":"same|different|inconclusive","confidence":0.0-1.0,"same_item_score":0.0-1.0,"matching_signals":["1-3 words"],"mismatch_reasons":["1-3 words"]}}"""
+{{"same_item":true|false|null,"verdict":"same|different|inconclusive","confidence":0.0-1.0,"same_item_score":0.0-1.0,"matching_signals":["up to 3 short reasons"],"mismatch_reasons":["up to 3 short reasons"]}}"""
 
 
 def _resize_for_compare(raw: bytes, max_px: int = 512) -> bytes:
@@ -617,8 +621,6 @@ def _build_groq_compare_payload(
         "temperature": 0.05,
         "max_tokens": 200,
     }
-
-
 
 
 async def _groq_compare(
@@ -971,14 +973,15 @@ async def compare_item_images(
     if use_remote:
         semantic_results: list[dict] = []
 
-        # Primary judge: Groq (fast, consistent)
+        # Primary: Groq Llama 4 Scout vision — fast, no TPM exhaustion, proven.
+        # Fallback: Gemini (only if Groq key missing/exhausted).
         try:
             groq_result = await asyncio.wait_for(
                 _groq_compare(
                     reference_raw, candidate_raw,
                     reference_frame_type, candidate_frame_type, local_result,
                 ),
-                timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 4.0, 3.0, 26.0) + 1.0,
+                timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 3.5, 2.0, 15.0),
             )
             if groq_result:
                 groq_result["reference_frame_type"] = reference_frame_type
@@ -1074,7 +1077,7 @@ def is_blocking_mismatch(result: Optional[dict]) -> bool:
         or (result.get("local_fingerprint") or {}).get("reference_view_partial")
     )
 
-    if method in ("groq_multimodal_compare", "gemini_multimodal_compare"):
+    if method in ("groq_multimodal_compare", "gemini_multimodal_compare", "bedrock_multimodal_compare"):
         local_debug = ((result.get("local_fingerprint") or {}).get("debug") or {})
         local_distinct = bool(local_debug.get("distinct_type_mismatch"))
         if reference_weak:

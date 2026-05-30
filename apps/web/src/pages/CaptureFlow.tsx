@@ -30,19 +30,29 @@ interface StepEval {
   dataUrl?: string
 }
 
+/**
+ * Returns the reference image to compare against for each step.
+ * Strategy: always anchor to the FIRST captured frame (45deg), so a user
+ * cannot swap jewelry after any step. If 45deg isn't captured yet (shouldn't
+ * happen since it's step 0), fall back to top.
+ */
 function referenceForStep(
   stepType: CaptureType,
   captures: Partial<Record<CaptureType, { dataUrl: string }>>,
 ) {
+  // The first step (45deg) has nothing to compare against — it IS the reference.
   if (stepType === '45deg') {
     return { referenceFrameType: 'top', referenceImageDataUrl: undefined }
   }
 
+  // For every subsequent step, always compare against 45deg (the anchor).
+  // This prevents swapping the item between any two steps.
   const angleReference = captures['45deg']?.dataUrl
   if (angleReference) {
     return { referenceFrameType: '45deg', referenceImageDataUrl: angleReference }
   }
 
+  // Fallback: use top if somehow 45deg is missing
   const topReference = captures.top?.dataUrl
   return { referenceFrameType: 'top', referenceImageDataUrl: topReference }
 }
