@@ -9,12 +9,20 @@ async function post<T>(path: string, body: unknown, timeoutMs = 25000): Promise<
   try {
     const jsonBody = JSON.stringify(body)
 
-    const res = await fetch(`${BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: jsonBody,
-      signal: controller.signal,
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: jsonBody,
+        signal: controller.signal,
+      })
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`${path} timed out. Weight estimation needs three Gemini image validations; retry with smaller images or wait for the server to finish.`)
+      }
+      throw error
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText)
       if (res.status === 422 && path === '/api/assess') {
@@ -332,7 +340,7 @@ export function estimateWeightAPI(
   jewelryType: JewelryType,
   karat: GoldKarat,
   jewelryPoint?: { x: number; y: number } | null,
-  timeoutMs = 90000,
+  timeoutMs = 180000,
 ): Promise<WeightEstimateResult> {
   return post('/api/weight-estimate', {
     image_data_url: imageDataUrl,

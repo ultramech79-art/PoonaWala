@@ -11,6 +11,7 @@ from app.data.gemini import (
 from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
 
 logger = logging.getLogger("goldeye.weight_vlm")
+_groq_org_restricted = False
 
 
 def _extract_b64(image_data_url: str) -> str:
@@ -66,7 +67,8 @@ JSON schema:
 
     image_b64 = _extract_b64(image_data_url)
 
-    if GROQ_GUIDANCE_API_KEYS:
+    global _groq_org_restricted
+    if GROQ_GUIDANCE_API_KEYS and not _groq_org_restricted:
         try:
             data, success = await call_groq_vision_with_keys(
                 prompt,
@@ -79,6 +81,7 @@ JSON schema:
                 return _normalize_roi_response(parse_json_response(extract_gemini_text(data)), "groq", GROQ_MODEL)
             logger.warning("VLM ROI failed: %s", data.get("error", "unknown"))
             if "organization_restricted" in str(data):
+                _groq_org_restricted = True
                 logger.warning("Groq organization is restricted; using Gemini ROI fallback")
         except Exception as exc:
             logger.warning("VLM ROI Groq exception: %s", exc)
