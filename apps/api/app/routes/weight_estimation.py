@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Literal
 
@@ -39,9 +40,11 @@ async def estimate_weight(req: WeightEstimateRequest):
         vlm_validated = False
         jewelry_type = req.jewelry_type
         if req.use_vlm_roi:
-            vlm_roi = await _require_vlm_roi(req.image_data_url, "top view")
-            angle_vlm_roi = await _require_vlm_roi(req.image_45_data_url, "45-degree view")
-            side_vlm_roi = await _require_vlm_roi(req.side_image_data_url, "side view")
+            vlm_roi, angle_vlm_roi, side_vlm_roi = await asyncio.gather(
+                _require_vlm_roi(req.image_data_url, "top view"),
+                _require_vlm_roi(req.image_45_data_url, "45-degree view"),
+                _require_vlm_roi(req.side_image_data_url, "side view"),
+            )
             vlm_validated = True
             if jewelry_point is None:
                 jewelry_point = vlm_roi["jewellery_point"]
