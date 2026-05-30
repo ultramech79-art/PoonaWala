@@ -189,11 +189,21 @@ export interface AssessmentResult {
   audit: { trace_id: string; input_asset_hashes: string[] }
 }
 
+let storedToken = localStorage.getItem('goldeye_auth_token')
+let storedProfile = localStorage.getItem('goldeye_user_profile')
+
+if (storedToken === 'guest') {
+  localStorage.removeItem('goldeye_auth_token')
+  localStorage.removeItem('goldeye_user_profile')
+  storedToken = null
+  storedProfile = null
+}
+
 // Simple module-level singleton store (no external dependency)
 let _state: SessionState = {
   sessionId: null,
-  authToken: localStorage.getItem('goldeye_auth_token'),
-  userProfile: JSON.parse(localStorage.getItem('goldeye_user_profile') || 'null'),
+  authToken: storedToken,
+  userProfile: JSON.parse(storedProfile || 'null'),
   lang: localStorage.getItem('goldeye_lang') || 'en',
   consentAt: null,
   phone: null,
@@ -235,8 +245,13 @@ export function useSessionStore() {
   return {
     state: getState(),
     setAuth: (authToken: string, userProfile: UserProfile) => {
-      localStorage.setItem('goldeye_auth_token', authToken)
-      localStorage.setItem('goldeye_user_profile', JSON.stringify(userProfile))
+      if (authToken === 'guest') {
+        localStorage.removeItem('goldeye_auth_token')
+        localStorage.removeItem('goldeye_user_profile')
+      } else {
+        localStorage.setItem('goldeye_auth_token', authToken)
+        localStorage.setItem('goldeye_user_profile', JSON.stringify(userProfile))
+      }
       setState({ authToken, userProfile, phone: userProfile.phone, name: userProfile.full_name, lang: userProfile.language })
     },
     clearAuth: () => {
