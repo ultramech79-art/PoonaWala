@@ -118,7 +118,20 @@ export function CaptureFlow() {
   const [captured, setCaptured] = useState<Set<number>>(new Set(
     STEPS.map((s, i) => state.captures[s.type] ? i : -1).filter(i => i !== -1)
   ))
-  const [evals, setEvals] = useState<Record<number, StepEval>>({})
+  const [evals, setEvals] = useState<Record<number, StepEval>>(() => {
+    const initialEvals: Record<number, StepEval> = {}
+    STEPS.forEach((s, i) => {
+      const cap = state.captures[s.type]
+      if (cap) {
+        initialEvals[i] = {
+          state: 'approved',
+          dataUrl: cap.dataUrl,
+          result: { approved: true, quality_score: 1.0, feedback: '', issues: [], detected: {} }
+        }
+      }
+    })
+    return initialEvals
+  })
   const [cameraKey, setCameraKey] = useState(0)
   const [showDemo, setShowDemo] = useState(false)
   const [showTutorial, setShowTutorial] = useState(true)  // auto-show on first step
@@ -167,6 +180,8 @@ export function CaptureFlow() {
     const currentStep = stepIdx
     const currentStepConfig = STEPS[currentStep]
 
+    const sessionId = state.sessionId || initSession()
+
     addCapture({ type: currentStepConfig.type, blob, dataUrl, timestamp: Date.now(), exif })
     setCaptured(prev => new Set([...prev, currentStep]))
 
@@ -185,8 +200,6 @@ export function CaptureFlow() {
 
     try {
       const optimizedDataUrl = await resizeDataUrl(dataUrl, 1024, 0.8)
-
-      const sessionId = state.sessionId || initSession()
       const { referenceFrameType, referenceImageDataUrl } = referenceForStep(currentStepConfig.type, state.captures)
       const evalOptions = {
         sessionId,
@@ -232,7 +245,6 @@ export function CaptureFlow() {
 
       // Fallback background upload since we are marking it approved
       if (state.authToken && state.authToken !== 'guest' && !isDemo) {
-        const sessionId = state.sessionId || initSession()
         uploadUserAssetAPI(state.authToken, blob, 'jewellery_capture', sessionId, currentStepConfig.type)
           .catch(err => console.error('[CaptureFlow] Immediate fallback upload failed:', err))
       }
