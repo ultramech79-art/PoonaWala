@@ -59,6 +59,10 @@ export function Profile() {
       navigate('/auth')
       return
     }
+    if (state.authToken === 'guest') {
+      setLoading(false)
+      return
+    }
     loadData()
   }, [state.authToken, navigate, loadData])
 
@@ -116,120 +120,139 @@ export function Profile() {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-6 pt-5 space-y-4">
-        {/* User Info Card */}
-        <div className="card p-5">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-center overflow-hidden">
-              {user?.profile_photo_url
-                ? <img src={user.profile_photo_url} className="w-full h-full object-cover" alt="" />
-                : <UserRound className="w-7 h-7 text-brand-700" />}
+        {state.authToken === 'guest' ? (
+          <div className="card p-6 flex flex-col items-center justify-center text-center mt-10">
+            <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center mb-4">
+              <UserRound className="w-8 h-8 text-stone-400" />
             </div>
-            <div className="min-w-0">
-              <p className="font-display font-black text-xl text-stone-950 truncate">{user?.full_name}</p>
-              <p className="text-sm text-stone-500 truncate">{user?.phone || user?.email}</p>
-              <p className="text-xs text-stone-400 mt-1">Region {user?.region_code} · {user?.language?.toUpperCase()}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Loan History */}
-        <div className="card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <History className="w-4 h-4 text-brand-700" />
-            <p className="font-display font-bold text-sm text-stone-900">Loan history</p>
-          </div>
-          {predictions.length === 0 ? (
-            <p className="text-sm text-stone-400">No completed loan predictions yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {predictions.map(item => (
-                <div key={item.id} className="rounded-xl border border-stone-200 bg-white p-3">
-                  <div className="flex justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-stone-900">{item.eligible_loan_inr ? `₹${Math.round(item.eligible_loan_inr).toLocaleString('en-IN')}` : 'Loan estimate'}</p>
-                      <p className="text-xs text-stone-500">{item.estimated_weight_g ? `${item.estimated_weight_g.toFixed(2)}g` : 'Weight unavailable'} · {item.region_code}</p>
-                    </div>
-                    <p className="text-[10px] text-stone-400 text-right">{new Date(item.created_at).toLocaleDateString('en-IN')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Uploaded Images */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ImageIcon className="w-4 h-4 text-brand-700" />
-              <p className="font-display font-bold text-sm text-stone-900">Uploaded images</p>
-              <span className="text-[10px] font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-full">{assets.length}</span>
-            </div>
-            <button onClick={loadData} disabled={loading} className="flex items-center gap-1 text-[10px] font-bold text-brand-600 hover:text-brand-700 disabled:opacity-40">
-              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+            <h2 className="text-xl font-bold text-stone-900 mb-2">Guest Mode</h2>
+            <p className="text-sm text-stone-500 mb-6">
+              You are currently using the app as a guest. To save your loan predictions, captures, and view your profile history, please create an account.
+            </p>
+            <button
+              onClick={() => { clearAuth(); navigate('/auth') }}
+              className="btn-primary w-full"
+            >
+              Sign In / Register
             </button>
           </div>
-
-          {loading ? (
-            <div className="grid grid-cols-3 gap-2">
-              {[1, 2, 3, 4, 5, 6].map(i => (
-                <div key={i} className="aspect-square rounded-xl bg-stone-100 animate-pulse" />
-              ))}
+        ) : (
+          <div className="card p-5">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-center overflow-hidden">
+                {user?.profile_photo_url
+                  ? <img src={user.profile_photo_url} className="w-full h-full object-cover" alt="" />
+                  : <UserRound className="w-7 h-7 text-brand-700" />}
+              </div>
+              <div className="min-w-0">
+                <p className="font-display font-black text-xl text-stone-950 truncate">{user?.full_name}</p>
+                <p className="text-sm text-stone-500 truncate">{user?.phone || user?.email}</p>
+                <p className="text-xs text-stone-400 mt-1">Region {user?.region_code} · {user?.language?.toUpperCase()}</p>
+              </div>
             </div>
-          ) : assets.length === 0 ? (
-            <p className="text-sm text-stone-400">No saved images yet.</p>
-          ) : (
-            <div className="space-y-4">
-              {sessionKeys.map(sessionKey => {
-                const sessionAssets = grouped[sessionKey]
-                const sessionDate = sessionAssets[0]?.created_at
-                  ? new Date(sessionAssets[0].created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                  : ''
-                return (
-                  <div key={sessionKey}>
-                    {sessionKeys.length > 1 && (
-                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
-                        {sessionKey === '_none' ? 'Unsorted' : `Session · ${sessionDate}`}
-                      </p>
-                    )}
-                    <div className="grid grid-cols-3 gap-2">
-                      {sessionAssets.map(asset => (
-                        <div key={asset.id} className="relative group aspect-square rounded-xl bg-stone-100 border border-stone-200 overflow-hidden">
-                          {asset.public_url && !imgErrors.has(asset.id) ? (
-                            <img
-                              src={asset.public_url}
-                              className="w-full h-full object-cover cursor-pointer"
-                              alt={asset.asset_kind}
-                              loading="lazy"
-                              onClick={() => setLightbox(asset.public_url)}
-                              onError={() => handleImgError(asset.id)}
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="w-6 h-6 text-stone-300" />
-                            </div>
-                          )}
-                          <AssetLabel asset={asset} />
-                          {/* Delete button */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setConfirmDelete(asset) }}
-                            disabled={deleting === asset.id}
-                            className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
-                          >
-                            {deleting === asset.id
-                              ? <div className="w-3 h-3 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
-                              : <Trash2 className="w-3 h-3 text-white" />}
-                          </button>
-                        </div>
-                      ))}
+          </div>
+        )}
+
+
+
+        {state.authToken !== 'guest' && (
+          <div className="card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <History className="w-4 h-4 text-brand-700" />
+              <p className="font-display font-bold text-sm text-stone-900">Loan history</p>
+            </div>
+            {predictions.length === 0 ? (
+              <p className="text-sm text-stone-400">No completed loan predictions yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {predictions.map(item => (
+                  <div key={item.id} className="rounded-xl border border-stone-200 bg-white p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+                        {new Date(item.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
+                        ₹{item.provisional_loan_inr?.toLocaleString('en-IN') || '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm font-medium text-stone-700">
+                      <span>{item.ltv_pct}% LTV</span>
+                      <span className="text-stone-300">•</span>
+                      <span>₹{item.city_gold_value_inr?.toLocaleString('en-IN') || '—'} Value</span>
                     </div>
                   </div>
-                )
-              })}
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Saved Assets */}
+        {state.authToken !== 'guest' && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-brand-700" />
+                <p className="font-display font-bold text-sm text-stone-900">Saved uploads</p>
+              </div>
+              <button onClick={loadData} disabled={loading} className="flex items-center gap-1 text-[10px] font-bold text-brand-600 hover:text-brand-700 disabled:opacity-40">
+                <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
             </div>
-          )}
-        </div>
+
+            {loading ? (
+              <div className="grid grid-cols-3 gap-2">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                  <div key={i} className="aspect-square rounded-xl bg-stone-100 animate-pulse" />
+                ))}
+              </div>
+            ) : assets.length === 0 ? (
+              <p className="text-sm text-stone-400">No images saved yet.</p>
+            ) : (
+              <div className="space-y-6">
+                {sessionKeys.map(sessionKey => {
+                  const sessionAssets = grouped[sessionKey]
+                  const sessionDate = new Date(sessionAssets[0].created_at)
+                  return (
+                    <div key={sessionKey}>
+                      <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3 border-b border-stone-100 pb-2">
+                        {sessionKey === '_none' ? 'Legacy Uploads' : sessionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {sessionAssets.map(asset => (
+                          <div key={asset.id} className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 border border-stone-200">
+                            {imgErrors.has(asset.id) ? (
+                              <div className="w-full h-full flex items-center justify-center bg-stone-100">
+                                <AlertTriangle className="w-5 h-5 text-stone-400" />
+                              </div>
+                            ) : (
+                              <img
+                                src={asset.public_url!}
+                                alt={asset.frame_type || asset.asset_kind}
+                                className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover:scale-105"
+                                onError={() => handleImgError(asset.id)}
+                                onClick={() => setLightbox(asset.public_url!)}
+                              />
+                            )}
+                            <AssetLabel asset={asset} />
+                            <button
+                              onClick={() => setConfirmDelete(asset)}
+                              disabled={deleting === asset.id}
+                              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500/90 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50"
+                            >
+                              {deleting === asset.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Lightbox */}

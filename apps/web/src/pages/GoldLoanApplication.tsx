@@ -133,7 +133,7 @@ export function GoldLoanApplication() {
       schedule: emiResult.schedule,
     }
     setLoanAppData(loanAppData)
-    if (state.authToken && state.sessionId && state.result) {
+    if (state.authToken && state.authToken !== 'guest' && state.sessionId && state.result) {
       try {
         const regionCode = state.userProfile?.region_code || activeEvalData.state
         await createUserSessionAPI(state.authToken, state.sessionId, regionCode, 'loan_application')

@@ -335,9 +335,28 @@ export function Auth() {
       </div>
 
       <div className="px-5 pb-6 pt-4 border-t border-stone-200 bg-white/90">
-        <button onClick={submit} disabled={!canSubmit || busy} className="btn-primary w-full text-lg py-4 disabled:opacity-40">
+        <button onClick={submit} disabled={!canSubmit || busy} className="btn-primary w-full text-lg py-4 disabled:opacity-40 mb-3">
           {busy ? copy.pleaseWait : mode === 'register' ? copy.createAccount : copy.login}
           <ArrowRight className="w-5 h-5" />
+        </button>
+        <button
+          onClick={() => {
+            setAuth('guest', {
+              id: 0,
+              full_name: 'Guest User',
+              email: null,
+              phone: null,
+              region_code: 'MH',
+              language: 'en',
+              cibil_score: null,
+              is_active: true,
+              profile_photo_url: null,
+            } as any)
+            navigate('/consent')
+          }}
+          className="w-full py-3 text-sm font-semibold text-stone-500 hover:text-stone-700 transition"
+        >
+          Continue as Guest
         </button>
       </div>
     </div>

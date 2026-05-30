@@ -208,7 +208,7 @@ export function CaptureFlow() {
       speak(result.feedback)
 
       // Background upload on success
-      if (result.approved && state.authToken && !isDemo) {
+      if (result.approved && state.authToken && state.authToken !== 'guest' && !isDemo) {
         uploadUserAssetAPI(state.authToken, blob, 'jewellery_capture', sessionId, currentStepConfig.type)
           .catch(err => console.error('[CaptureFlow] Immediate upload failed:', err))
       }
@@ -222,7 +222,7 @@ export function CaptureFlow() {
       speak(fallback)
 
       // Fallback background upload since we are marking it approved
-      if (state.authToken && !isDemo) {
+      if (state.authToken && state.authToken !== 'guest' && !isDemo) {
         const sessionId = state.sessionId || initSession()
         uploadUserAssetAPI(state.authToken, blob, 'jewellery_capture', sessionId, currentStepConfig.type)
           .catch(err => console.error('[CaptureFlow] Immediate fallback upload failed:', err))
