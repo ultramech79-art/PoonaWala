@@ -4,8 +4,10 @@ Live guidance uses GROQ_GUIDANCE_API_KEY with GEMINI_GUIDANCE_FALLBACK_API_KEY f
 """
 import asyncio
 import base64
+import hashlib
 import json
 import logging
+from collections import OrderedDict
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -17,7 +19,41 @@ from app.data.capture_assets import store_capture_asset
 from app.data.item_match import COMPARE_FRAME_TYPES, compare_item_images, is_blocking_mismatch
 
 router = APIRouter()
+
+# Angle variants: only run fast local fingerprint, skip Gemini/Groq semantic comparison
+# (the semantic compare was timing out on almost every request for these frame types)
+FAST_COMPARE_FRAME_TYPES = {"45deg", "side", "top"}
+# Max time to wait for same-item comparison before returning quality eval alone
+COMPARE_TIMEOUT_FAST = 3.0   # local-only (angle variants)
+COMPARE_TIMEOUT_FULL = 8.0   # with Gemini/Groq (macro, selfie)
 logger = logging.getLogger("goldeye.frame_eval")
+
+
+# ── Evaluation result cache (LRU, max 64 entries) ────────────────────────────
+# Key: hash(image_b64_prefix + frame_type)  →  Value: evaluate_frame() result dict
+# Prevents duplicate Groq/Gemini API calls on retries, WS→HTTP fallback, etc.
+_EVAL_CACHE: OrderedDict[str, dict] = OrderedDict()
+_EVAL_CACHE_MAX = 64
+
+
+def _eval_cache_key(image_b64: str, frame_type: str) -> str:
+    # Hash first 2048 chars of image data + frame_type — fast and collision-resistant
+    sample = (image_b64[:2048] + "|" + frame_type).encode()
+    return hashlib.md5(sample).hexdigest()
+
+
+def _eval_cache_get(key: str) -> Optional[dict]:
+    if key in _EVAL_CACHE:
+        _EVAL_CACHE.move_to_end(key)
+        return _EVAL_CACHE[key]
+    return None
+
+
+def _eval_cache_put(key: str, result: dict) -> None:
+    _EVAL_CACHE[key] = result
+    _EVAL_CACHE.move_to_end(key)
+    while len(_EVAL_CACHE) > _EVAL_CACHE_MAX:
+        _EVAL_CACHE.popitem(last=False)
 
 
 class FrameEvalRequest(BaseModel):
@@ -62,7 +98,16 @@ async def _evaluate_compare_store(
     reference_image_data_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
 ) -> FrameEvalResponse:
-    result = await evaluate_frame(image_b64, frame_type)
+    # ── Check evaluation cache first ──────────────────────────────────────────
+    cache_key = _eval_cache_key(image_b64, frame_type)
+    cached = _eval_cache_get(cache_key)
+    if cached is not None:
+        logger.info("eval cache HIT [%s] — returning instantly", frame_type)
+        result = cached
+    else:
+        result = await evaluate_frame(image_b64, frame_type)
+        _eval_cache_put(cache_key, result)
+
     detected = result.get("detected", {}) or {}
     issues = list(result.get("issues", []) or [])
     approved = bool(result.get("approved", True))
@@ -72,6 +117,8 @@ async def _evaluate_compare_store(
     same_item = None
     reference_source = reference_image_data_url or reference_image_url
     if reference_source and frame_type in COMPARE_FRAME_TYPES:
+        is_fast = frame_type in FAST_COMPARE_FRAME_TYPES
+        timeout = COMPARE_TIMEOUT_FAST if is_fast else COMPARE_TIMEOUT_FULL
         try:
             same_item = await asyncio.wait_for(
                 compare_item_images(
@@ -79,11 +126,12 @@ async def _evaluate_compare_store(
                     image_source,
                     reference_frame_type=reference_frame_type or "top",
                     candidate_frame_type=frame_type,
+                    use_gemini=not is_fast,  # skip slow semantic compare for angle variants
                 ),
-                timeout=12.0,
+                timeout=timeout,
             )
         except asyncio.TimeoutError:
-            logger.warning("same_item comparison timed out for [%s vs %s] — skipping", reference_frame_type, frame_type)
+            logger.warning("same_item comparison timed out for [%s vs %s] (%.1fs) — skipping", reference_frame_type, frame_type, timeout)
             same_item = None
         detected["same_item"] = same_item
         blocking_mismatch = is_blocking_mismatch(same_item)

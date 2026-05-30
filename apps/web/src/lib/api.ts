@@ -125,9 +125,12 @@ function evaluateFrameWS(frameType: string, imageDataUrl: string, options: Evalu
     let settled = false
     const ws = new WebSocket(wsUrl.toString())
 
+    // Match backend's own timeout so we don't kill the socket prematurely
+    // (the old 30s timeout was firing before the server finished, causing
+    // 1005 errors and then a duplicate HTTP POST retry)
     const timer = setTimeout(() => {
       if (!settled) { settled = true; ws.close(); reject(new Error('ws_timeout')) }
-    }, 30000) // Increased to 30s as requested
+    }, 48000)
 
     ws.onopen = () => {
       ws.send(JSON.stringify({

@@ -9,8 +9,10 @@ changes better than pure pHash or shape descriptors.
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
 import math
+from collections import OrderedDict
 from typing import Optional
 
 import numpy as np
@@ -39,6 +41,26 @@ logger = logging.getLogger("goldeye.item_match")
 COMPARE_FRAME_TYPES = {"top", "45deg", "side", "macro", "hallmark", "huid", "closeup", "selfie", "video"}
 LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup", "selfie"}
 ANGLE_VARIANT_FRAME_TYPES = {"45deg", "side"}
+
+
+# ── Fingerprint cache (LRU, max 32 entries) ──────────────────────────────────
+# The reference image fingerprint gets computed on every comparison call.
+# Caching avoids re-running OpenCV decode + bbox + color + pHash (~1-2s each).
+_FP_CACHE: OrderedDict[str, dict] = OrderedDict()
+_FP_CACHE_MAX = 32
+
+
+def _fingerprint_cached(raw: bytes) -> dict:
+    key = hashlib.md5(raw[:4096]).hexdigest()
+    if key in _FP_CACHE:
+        _FP_CACHE.move_to_end(key)
+        return _FP_CACHE[key]
+    fp = _fingerprint(raw)
+    _FP_CACHE[key] = fp
+    _FP_CACHE.move_to_end(key)
+    while len(_FP_CACHE) > _FP_CACHE_MAX:
+        _FP_CACHE.popitem(last=False)
+    return fp
 
 
 def _frame_context(frame_type: str | None) -> dict:
@@ -444,7 +466,7 @@ async def _gemini_compare(
         },
     }
 
-    data, success = await _gemini_request(payload, timeout=45, api_keys=keys, max_retries=1)
+    data, success = await _gemini_request(payload, timeout=15, api_keys=keys, max_retries=1)
     if not success:
         return None
 
@@ -539,7 +561,7 @@ async def _groq_compare(
                     GROQ_API_URL,
                     json=payload,
                     headers={"Authorization": f"Bearer {key}"},
-                    timeout=aiohttp.ClientTimeout(total=45),
+                    timeout=aiohttp.ClientTimeout(total=15),
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -651,8 +673,8 @@ async def compare_item_images(
         }
 
     local_result = _local_compare(
-        _fingerprint(reference_raw),
-        _fingerprint(candidate_raw),
+        _fingerprint_cached(reference_raw),
+        _fingerprint_cached(candidate_raw),
         reference_frame_type,
         candidate_frame_type,
     )
