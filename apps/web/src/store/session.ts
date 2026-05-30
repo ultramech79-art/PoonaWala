@@ -94,6 +94,8 @@ export interface TapTestResult {
 
 export interface SessionState {
   sessionId: string | null
+  authToken: string | null
+  userProfile: UserProfile | null
   lang: string
   consentAt: number | null
   phone: string | null
@@ -109,6 +111,22 @@ export interface SessionState {
   result: AssessmentResult | null
   evalData: EvalData | null
   loanAppData: LoanAppData | null
+}
+
+export interface UserProfile {
+  id: string
+  phone: string | null
+  email: string | null
+  full_name: string
+  dob: string
+  language: string
+  region_code: string
+  address: string | null
+  city: string | null
+  pincode: string | null
+  profile_photo_url: string | null
+  is_phone_verified: boolean
+  is_email_verified: boolean
 }
 
 export interface PurityBand {
@@ -174,6 +192,8 @@ export interface AssessmentResult {
 // Simple module-level singleton store (no external dependency)
 let _state: SessionState = {
   sessionId: null,
+  authToken: localStorage.getItem('goldeye_auth_token'),
+  userProfile: JSON.parse(localStorage.getItem('goldeye_user_profile') || 'null'),
   lang: localStorage.getItem('goldeye_lang') || 'en',
   consentAt: null,
   phone: null,
@@ -214,6 +234,16 @@ export function useSessionStore() {
 
   return {
     state: getState(),
+    setAuth: (authToken: string, userProfile: UserProfile) => {
+      localStorage.setItem('goldeye_auth_token', authToken)
+      localStorage.setItem('goldeye_user_profile', JSON.stringify(userProfile))
+      setState({ authToken, userProfile, phone: userProfile.phone, name: userProfile.full_name, lang: userProfile.language })
+    },
+    clearAuth: () => {
+      localStorage.removeItem('goldeye_auth_token')
+      localStorage.removeItem('goldeye_user_profile')
+      setState({ authToken: null, userProfile: null })
+    },
     setLang: (lang: string) => {
       localStorage.setItem('goldeye_lang', lang)
       setState({ lang })

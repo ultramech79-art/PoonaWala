@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Zap, Shield, TrendingUp, ChevronRight, Eye, TrendingDown, RefreshCw } from 'lucide-react'
 import { useMetalPrices } from '../hooks/useGoldPrice'
 import { useState } from 'react'
+import { useSessionStore } from '../store/session'
 
 
 function MarketTicker() {
@@ -93,6 +94,7 @@ function NativeGoldChart() {
 export function Welcome() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { state } = useSessionStore()
 
   const FEATURES = [
     { icon: Zap, label: t('feature_instant') },
@@ -200,7 +202,7 @@ export function Welcome() {
           <div className="absolute inset-0 bg-gradient-to-r from-brand-500/20 to-brand-600/20 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity" />
           <button
             id="welcome-cta"
-            onClick={() => navigate('/consent')}
+            onClick={() => navigate(state.authToken ? '/consent' : '/auth')}
             className="btn-primary w-full text-base py-4 relative font-semibold flex items-center justify-center gap-2"
           >
             {t('welcome_cta')}

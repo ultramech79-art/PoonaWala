@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight, ArrowRight, Gem, Circle, Sparkles, RotateCcw, Link2, Package } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useSessionStore } from '../store/session'
 
 export function Setup() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { state } = useSessionStore()
 
   const ITEM_TYPES = [
     { id: 'necklace', icon: Gem,       label: t('item_necklace') },
@@ -22,7 +24,7 @@ export function Setup() {
     <div className="page animate-slide-up">
       {/* Header */}
       <div className="page-header">
-        <button id="setup-back" onClick={() => navigate('/otp')} className="btn-icon">
+        <button id="setup-back" onClick={() => navigate(state.authToken ? '/consent' : '/otp')} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
         <span className="text-sm font-semibold text-stone-700">Select Item</span>

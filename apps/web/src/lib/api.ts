@@ -43,6 +43,32 @@ async function post<T>(path: string, body: unknown, timeoutMs = 25000): Promise<
   }
 }
 
+async function authPost<T>(path: string, body: unknown, token?: string | null, timeoutMs = 25000): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`${path} -> ${res.status}: ${(await res.text()).slice(0, 500)}`)
+    return res.json() as Promise<T>
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function authGet<T>(path: string, token: string): Promise<T> {
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined
+  const res = await fetch(`${BASE}${path}`, { headers })
+  if (!res.ok) throw new Error(`${path} -> ${res.status}: ${(await res.text()).slice(0, 500)}`)
+  return res.json() as Promise<T>
+}
+
 export interface SessionInitResponse {
   session_id: string
   created_at: string
@@ -417,4 +443,166 @@ export function sendOtpAPI(phone: string): Promise<OtpSendResponse> {
 
 export function verifyOtpAPI(sessionId: string, otp: string): Promise<OtpVerifyResponse> {
   return otpPost('/otp/verify-otp', { session_id: sessionId, otp })
+}
+
+export interface IndiaRegion {
+  code: string
+  name: string
+  type: 'state' | 'union_territory'
+}
+
+export interface UserProfile {
+  id: string
+  phone: string | null
+  email: string | null
+  full_name: string
+  dob: string
+  language: string
+  region_code: string
+  address: string | null
+  city: string | null
+  pincode: string | null
+  profile_photo_url: string | null
+  is_phone_verified: boolean
+  is_email_verified: boolean
+}
+
+export interface AuthResponse {
+  access_token: string
+  token_type: 'bearer'
+  user: UserProfile
+}
+
+export interface RegisterPayload {
+  full_name: string
+  dob: string
+  region_code: string
+  language: string
+  phone?: string
+  email?: string
+  password?: string
+  address?: string
+  city?: string
+  pincode?: string
+  otp_session_id?: string
+  otp?: string
+  google_id_token?: string
+  profile_photo_url?: string
+  profile_photo_public_id?: string
+}
+
+export function getIndiaRegionsAPI(): Promise<{ regions: IndiaRegion[] }> {
+  return authGet('/api/regions/india', '')
+}
+
+export function registerAPI(payload: RegisterPayload): Promise<AuthResponse> {
+  return authPost('/api/auth/register', payload)
+}
+
+export function passwordLoginAPI(phoneOrEmail: string, password: string): Promise<AuthResponse> {
+  return authPost('/api/auth/login/password', { phone_or_email: phoneOrEmail, password })
+}
+
+export function otpLoginAPI(phone: string, otpSessionId: string, otp: string): Promise<AuthResponse> {
+  return authPost('/api/auth/login/otp', { phone, otp_session_id: otpSessionId, otp })
+}
+
+export function googleLoginAPI(idToken: string): Promise<AuthResponse> {
+  return authPost('/api/auth/login/google', { id_token: idToken })
+}
+
+export interface UserAsset {
+  id: number
+  session_id: string | null
+  asset_kind: string
+  frame_type: string | null
+  public_url: string | null
+  cloudinary_public_id: string | null
+  width_px: number | null
+  height_px: number | null
+  size_bytes: number | null
+  created_at: string
+}
+
+export async function uploadUserAssetAPI(
+  token: string,
+  file: File | Blob,
+  assetKind: string,
+  sessionId?: string | null,
+  frameType?: string | null,
+): Promise<UserAsset> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('asset_kind', assetKind)
+  if (sessionId) form.append('session_id', sessionId)
+  if (frameType) form.append('frame_type', frameType)
+  const res = await fetch(`${BASE}/api/assets/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) throw new Error(`/api/assets/upload -> ${res.status}: ${(await res.text()).slice(0, 500)}`)
+  return res.json() as Promise<UserAsset>
+}
+
+export function listMyAssetsAPI(token: string, sessionId?: string): Promise<UserAsset[]> {
+  const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
+  return authGet(`/api/me/assets${query}`, token)
+}
+
+export function createUserSessionAPI(token: string, sessionId: string, regionCode?: string, currentStep?: string): Promise<unknown> {
+  return authPost('/api/me/sessions', { session_id: sessionId, region_code: regionCode, current_step: currentStep }, token)
+}
+
+export function saveLoanPredictionAPI(token: string, payload: {
+  session_id: string
+  status?: string
+  region_code: string
+  estimated_weight_g?: number
+  estimated_gold_value_inr?: number
+  eligible_loan_inr?: number
+  ltv_pct?: number
+  result: Record<string, unknown>
+}): Promise<unknown> {
+  return authPost('/api/me/loan-predictions', payload, token)
+}
+
+export function listLoanPredictionsAPI(token: string): Promise<Array<{
+  id: number
+  session_id: string
+  status: string
+  region_code: string
+  estimated_weight_g: number | null
+  estimated_gold_value_inr: number | null
+  eligible_loan_inr: number | null
+  ltv_pct: number | null
+  result: Record<string, unknown>
+  created_at: string
+}>> {
+  return authGet('/api/me/loan-predictions', token)
+}
+
+export async function deleteUserAssetAPI(token: string, assetId: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/me/assets/${assetId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`/api/me/assets/${assetId} → ${res.status}: ${(await res.text()).slice(0, 500)}`)
+  }
+}
+
+/**
+ * Convert a remote image URL to a data URL by fetching and reading as base64.
+ * Useful for reusing Cloudinary-stored images in APIs that expect data URLs.
+ */
+export async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
 }

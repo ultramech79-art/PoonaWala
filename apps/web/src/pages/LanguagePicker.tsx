@@ -24,7 +24,7 @@ export function LanguagePicker() {
   const select = (code: string) => {
     setLang(code)
     i18n.changeLanguage(code)
-    navigate('/consent')
+    navigate(state.authToken ? '/consent' : '/auth')
   }
 
   return (

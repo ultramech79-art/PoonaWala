@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
-import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown } from 'lucide-react'
+import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon } from 'lucide-react'
 import { speak } from '../lib/tts'
 import { clsx } from 'clsx'
-import { evaluateFrameAPI, verifyHuidAPI, type FrameEvalResult, type HuidVerificationResult } from '../lib/api'
+import { evaluateFrameAPI, listMyAssetsAPI, urlToDataUrl, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
 
 interface Step {
@@ -121,6 +121,25 @@ export function CaptureFlow() {
   const [huidVerifying, setHuidVerifying] = useState(false)
   const [huidVerifyResult, setHuidVerifyResult] = useState<HuidVerificationResult | null>(state.huidVerification ?? null)
   const spokenStep = useRef(-1)
+  const [previousAssets, setPreviousAssets] = useState<UserAsset[]>([])
+  const [loadingPrevious, setLoadingPrevious] = useState(false)
+
+  // Fetch previously uploaded images from user's profile
+  useEffect(() => {
+    if (!state.authToken) return
+    let cancelled = false
+    setLoadingPrevious(true)
+    listMyAssetsAPI(state.authToken)
+      .then(assets => {
+        if (!cancelled) setPreviousAssets(assets.filter(a => a.public_url && a.frame_type))
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingPrevious(false) })
+    return () => { cancelled = true }
+  }, [state.authToken])
+
+  // Find previous upload for current step
+  const previousForStep = previousAssets.find(a => a.frame_type === step.type)
 
   const step = STEPS[stepIdx]
   const currentEval = evals[stepIdx]
@@ -135,28 +154,31 @@ export function CaptureFlow() {
     return () => clearTimeout(t)
   }, [stepIdx, step.voiceGuide])
 
-  const handleCapture = useCallback(async (blob: Blob, dataUrl: string, exif?: Record<string, unknown>) => {
-    addCapture({ type: step.type, blob, dataUrl, timestamp: Date.now(), exif })
-    setCaptured(prev => new Set([...prev, stepIdx]))
+  const handleCapture = useCallback(async (blob: Blob, dataUrl: string, exif?: Record<string, unknown>, isDemo?: boolean) => {
+    const currentStep = stepIdx
+    const currentStepConfig = STEPS[currentStep]
 
-    if (step.isAudio) {
+    addCapture({ type: currentStepConfig.type, blob, dataUrl, timestamp: Date.now(), exif })
+    setCaptured(prev => new Set([...prev, currentStep]))
+
+    if (currentStepConfig.isAudio) {
       const msg = t('speak_audio_done')
       setEvals(prev => ({
         ...prev,
-        [stepIdx]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.9, feedback: msg, issues: [], detected: {} } },
+        [currentStep]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.9, feedback: msg, issues: [], detected: {} } },
       }))
       speak(msg)
       return
     }
 
     speak(t('speak_analysing'))
-    setEvals(prev => ({ ...prev, [stepIdx]: { state: 'evaluating', dataUrl } }))
+    setEvals(prev => ({ ...prev, [currentStep]: { state: 'evaluating', dataUrl } }))
 
     try {
       const optimizedDataUrl = await resizeDataUrl(dataUrl, 1024, 0.8)
 
       const sessionId = state.sessionId || initSession()
-      const { referenceFrameType, referenceImageDataUrl } = referenceForStep(step.type, state.captures)
+      const { referenceFrameType, referenceImageDataUrl } = referenceForStep(currentStepConfig.type, state.captures)
       const evalOptions = {
         sessionId,
         referenceFrameType,
@@ -166,34 +188,47 @@ export function CaptureFlow() {
 
       let result;
       try {
-        result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000, evalOptions)
+        result = await evaluateFrameAPI(currentStepConfig.type, optimizedDataUrl, 45000, evalOptions)
       } catch (e) {
         console.warn('[CaptureFlow] First evaluation attempt failed, retrying...', e)
         // Automatic retry once after 2 seconds
         await new Promise(r => setTimeout(r, 2000))
-        result = await evaluateFrameAPI(step.type, optimizedDataUrl, 45000, evalOptions)
+        result = await evaluateFrameAPI(currentStepConfig.type, optimizedDataUrl, 45000, evalOptions)
       }
 
-      if (step.type === 'macro' && result.detected?.karat_numeric && typeof result.detected.karat_numeric === 'number') {
+      if (currentStepConfig.type === 'macro' && result.detected?.karat_numeric && typeof result.detected.karat_numeric === 'number') {
         setScannedKarat(result.detected.karat_numeric)
         setSelectedKarat(result.detected.karat_numeric)
       }
 
       setEvals(prev => ({
         ...prev,
-        [stepIdx]: { state: result.approved ? 'approved' : 'rejected', result, dataUrl: optimizedDataUrl },
+        [currentStep]: { state: result.approved ? 'approved' : 'rejected', result, dataUrl: optimizedDataUrl },
       }))
       speak(result.feedback)
+
+      // Background upload on success
+      if (result.approved && state.authToken && !isDemo) {
+        uploadUserAssetAPI(state.authToken, blob, 'jewellery_capture', sessionId, currentStepConfig.type)
+          .catch(err => console.error('[CaptureFlow] Immediate upload failed:', err))
+      }
     } catch (err) {
       console.error('[CaptureFlow] Final evaluation attempt failed:', err)
       const fallback = t('speak_image_accepted')
       setEvals(prev => ({
         ...prev,
-        [stepIdx]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.7, feedback: fallback, issues: [], detected: {} } },
+        [currentStep]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.7, feedback: fallback, issues: [], detected: {} } },
       }))
       speak(fallback)
+
+      // Fallback background upload since we are marking it approved
+      if (state.authToken && !isDemo) {
+        const sessionId = state.sessionId || initSession()
+        uploadUserAssetAPI(state.authToken, blob, 'jewellery_capture', sessionId, currentStepConfig.type)
+          .catch(err => console.error('[CaptureFlow] Immediate fallback upload failed:', err))
+      }
     }
-  }, [step, stepIdx, addCapture, setScannedKarat, state.sessionId, state.captures, initSession])
+  }, [stepIdx, addCapture, setScannedKarat, state.sessionId, state.authToken, state.captures, initSession, t])
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
@@ -234,7 +269,7 @@ export function CaptureFlow() {
 
       reader.onload = async () => {
         const dataUrl = reader.result as string
-        handleCapture(blob, dataUrl)
+        handleCapture(blob, dataUrl, undefined, true)
       }
 
       reader.readAsDataURL(blob)
@@ -243,6 +278,33 @@ export function CaptureFlow() {
       speak('Error loading demo image. Please try capturing instead.')
     }
   }, [step.demoUrl, handleCapture])
+
+  const handleUsePreviousUpload = useCallback(async (asset: UserAsset) => {
+    if (!asset.public_url) return
+    speak(t('speak_analysing'))
+    setEvals(prev => ({ ...prev, [stepIdx]: { state: 'evaluating', dataUrl: undefined } }))
+    try {
+      const dataUrl = await urlToDataUrl(asset.public_url)
+      const res = await fetch(asset.public_url)
+      const blob = await res.blob()
+      addCapture({ type: step.type, blob, dataUrl, timestamp: Date.now() })
+      setCaptured(prev => new Set([...prev, stepIdx]))
+      // Mark as approved directly — these were already approved in a prior session
+      setEvals(prev => ({
+        ...prev,
+        [stepIdx]: {
+          state: 'approved',
+          dataUrl,
+          result: { approved: true, quality_score: 0.95, feedback: 'Using previously approved image.', issues: [], detected: {} },
+        },
+      }))
+      speak('Previous image loaded successfully.')
+    } catch (err) {
+      console.error('[CaptureFlow] Failed to load previous upload:', err)
+      setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle', dataUrl: undefined } }))
+      speak('Could not load previous image. Please capture a new one.')
+    }
+  }, [step.type, stepIdx, addCapture, t])
 
   const next = () => {
     if (stepIdx < STEPS.length - 1) {
@@ -328,16 +390,32 @@ export function CaptureFlow() {
           </button>
         </div>
 
-        {/* Demo Button */}
-        {step.demoUrl && (
-          <div className="px-5 pb-2">
-            <button
-              onClick={() => setShowDemo(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-100 transition-colors font-medium"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
-              Enter Example Demo
-            </button>
+        {/* Demo / Previous Upload Buttons */}
+        {(step.demoUrl || previousForStep) && (
+          <div className="px-5 pb-2 flex gap-2">
+            {step.demoUrl && (
+              <button
+                onClick={() => setShowDemo(true)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-100 transition-colors font-medium"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
+                Enter Example Demo
+              </button>
+            )}
+            {previousForStep && step.type !== 'macro' && step.type !== 'selfie' && (
+              <button
+                onClick={() => handleUsePreviousUpload(previousForStep)}
+                disabled={evalState === 'evaluating'}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 hover:bg-emerald-100 transition-colors font-medium disabled:opacity-50"
+              >
+                <img
+                  src={previousForStep.public_url!}
+                  className="w-4 h-4 rounded object-cover"
+                  alt=""
+                />
+                Use Previous Upload
+              </button>
+            )}
           </div>
         )}
 

@@ -4,7 +4,7 @@ import { useSessionStore } from '../store/session'
 import { computeROI, getRepaymentTypes, getRepaymentLabel } from '../lib/roiEngine'
 import { computeEMI, type RepaymentType } from '../lib/emiEngine'
 import loanParams from '../data/loan_params.json'
-import { apiBase } from '../lib/api'
+import { apiBase, createUserSessionAPI, saveLoanPredictionAPI, uploadUserAssetAPI } from '../lib/api'
 import {
   ChevronRight, ChevronDown, ChevronUp, ArrowRight, TrendingUp,
   Calendar, IndianRupee, Info, CheckCircle, AlertTriangle, Zap,
@@ -36,6 +36,7 @@ export function GoldLoanApplication() {
     navigate('/final-eval')
     return null
   }
+  const activeEvalData = evalData
 
   const { available_months } = loanParams.tenure_options
   const minLoan = loanParams.loan_limits.min_inr
@@ -113,8 +114,8 @@ export function GoldLoanApplication() {
   useEffect(() => { fetchDeals() }, [fetchDeals])
 
   // ── Apply ────────────────────────────────────────────────────────────────────
-  function handleApply() {
-    setLoanAppData({
+  async function handleApply() {
+    const loanAppData = {
       requestedLoanInr: loanAmount,
       tenureMonths: tenure,
       repaymentType: repayType,
@@ -130,7 +131,31 @@ export function GoldLoanApplication() {
       safeCustodyInr,
       disbursementInr,
       schedule: emiResult.schedule,
-    })
+    }
+    setLoanAppData(loanAppData)
+    if (state.authToken && state.sessionId && state.result) {
+      try {
+        const regionCode = state.userProfile?.region_code || activeEvalData.state
+        await createUserSessionAPI(state.authToken, state.sessionId, regionCode, 'loan_application')
+
+        await saveLoanPredictionAPI(state.authToken, {
+          session_id: state.sessionId,
+          status: 'completed',
+          region_code: regionCode,
+          estimated_weight_g: state.result.weight.estimated_g,
+          estimated_gold_value_inr: activeEvalData.cityGoldValueInr,
+          eligible_loan_inr: loanAmount,
+          ltv_pct: activeEvalData.ltvFinalPct,
+          result: {
+            assessment: state.result,
+            eligibility: activeEvalData,
+            loan_application: loanAppData,
+          },
+        })
+      } catch (err) {
+        console.warn('[history] failed to save loan prediction', err)
+      }
+    }
     navigate('/confirmation')
   }
 

@@ -25,7 +25,7 @@ export function Consent() {
     t('consent_privacy2'),
     t('consent_privacy3'),
   ]
-  const { setConsent, initSession, setSessionId } = useSessionStore()
+  const { setConsent, initSession, setSessionId, state } = useSessionStore()
   const [loading, setLoading] = useState(false)
   const [agreed, setAgreed] = useState(false)
 
@@ -34,7 +34,7 @@ export function Consent() {
     setLoading(true)
     const lang = localStorage.getItem('goldeye_lang') ?? 'en'
     try {
-      const { session_id } = await initSessionAPI(lang)
+      const { session_id } = await initSessionAPI(lang, state.userProfile?.phone ?? state.phone ?? undefined)
       setSessionId(session_id)
       recordConsentAPI(session_id).catch(() => {})
     } catch {
@@ -42,7 +42,7 @@ export function Consent() {
     } finally {
       setLoading(false)
       setConsent()
-      navigate('/otp')
+      navigate(state.authToken ? '/setup' : '/otp')
     }
   }
 
