@@ -45,9 +45,9 @@ def _split_keys(*names: str) -> list[str]:
     return keys
 
 
-GROQ_PRIMARY_API_KEYS = _split_keys("GROQ_PRIMARY_API_KEY_1", "GROQ_PRIMARY_API_KEY_2")
-GROQ_GUIDANCE_API_KEYS = _split_keys("GROQ_GUIDANCE_API_KEY")
-GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_KEY")
+GROQ_PRIMARY_API_KEYS = _split_keys("GROQ_PRIMARY_API_KEY_1", "GROQ_PRIMARY_API_KEY_2", "GROQ_API_KEY", "GROQ_API_KEY_2")
+GROQ_GUIDANCE_API_KEYS = _split_keys("GROQ_GUIDANCE_API_KEY", "GROQ_API_KEY")
+GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_KEY", "GROQ_API_KEY")
 
 COMPARE_FRAME_TYPES = {"top", "45deg", "side", "macro", "hallmark", "huid", "closeup", "selfie", "video"}
 LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup", "selfie"}
@@ -622,6 +622,8 @@ def _build_groq_compare_payload(
     }
 
 
+
+
 async def _groq_compare(
     reference_raw: bytes,
     candidate_raw: bytes,
@@ -723,6 +725,9 @@ async def _gemini_compare(
         )
     except Exception:
         ref_crop, cand_crop = reference_raw, candidate_raw
+    
+    ref_img = _resize_for_compare(ref_crop)
+    cand_img = _resize_for_compare(cand_crop)
 
     def _img(b: bytes) -> dict:
         return {"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(b).decode("utf-8")}}
@@ -731,13 +736,17 @@ async def _gemini_compare(
         "contents": [{
             "parts": [
                 {"text": prompt},
-                {"text": "IMAGE A FULL FRAME"}, _img(reference_raw),
-                {"text": "IMAGE A JEWELRY CLOSE-UP CROP"}, _img(ref_crop),
-                {"text": "IMAGE B FULL FRAME"}, _img(candidate_raw),
-                {"text": "IMAGE B JEWELRY CLOSE-UP CROP"}, _img(cand_crop),
+                {"text": "A (Reference):"},
+                _img(ref_img),
+                {"text": "B (Candidate):"},
+                _img(cand_img),
             ]
         }],
-        "generationConfig": {"temperature": 0.05, "maxOutputTokens": 600},
+        "generationConfig": {
+            "temperature": 0.05,
+            "maxOutputTokens": 200,
+            "responseMimeType": "application/json",
+        }
     }
     timeout = _float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 5.0, 2.0, 12.0)
     try:
@@ -964,16 +973,13 @@ async def compare_item_images(
 
     if use_remote:
         semantic_results: list[dict] = []
-        # Primary judge: Groq (fast, consistent). Fall back to Gemini only if
-        # Groq is unavailable/failed.
+
+        # Primary judge: Groq (fast, consistent)
         try:
             groq_result = await asyncio.wait_for(
                 _groq_compare(
-                    reference_raw,
-                    candidate_raw,
-                    reference_frame_type,
-                    candidate_frame_type,
-                    local_result,
+                    reference_raw, candidate_raw,
+                    reference_frame_type, candidate_frame_type, local_result,
                 ),
                 timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 4.0, 3.0, 26.0) + 1.0,
             )
@@ -986,6 +992,7 @@ async def compare_item_images(
         except Exception as exc:
             logger.warning("Groq item compare exception: %s", exc)
 
+        # Fallback: Gemini
         if not semantic_results:
             try:
                 gemini_result = await asyncio.wait_for(
@@ -1008,27 +1015,28 @@ async def compare_item_images(
             blocking_semantic = [item for item in semantic_results if is_blocking_mismatch(item)]
             if blocking_semantic:
                 if _local_supports_same_despite_semantic_block(local_result):
+                    # Try Gemini as tie-breaker if Llama blocks
                     try:
-                        groq_result = await asyncio.wait_for(
-                            _groq_compare(
+                        arb_result = await asyncio.wait_for(
+                            _gemini_compare(
                                 reference_raw,
                                 candidate_raw,
                                 reference_frame_type,
                                 candidate_frame_type,
                                 local_result,
                             ),
-                            timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 4.0, 3.0, 20.0) + 1.0,
+                            timeout=_float_env("ITEM_MATCH_GEMINI_TOTAL_TIMEOUT_S", 6.0, 3.0, 30.0) + 1.0,
                         )
-                        if groq_result:
-                            groq_result["reference_frame_type"] = reference_frame_type
-                            groq_result["candidate_frame_type"] = candidate_frame_type
-                            if not is_blocking_mismatch(groq_result):
-                                return groq_result
-                            blocking_semantic.append(groq_result)
+                        if arb_result:
+                            arb_result["reference_frame_type"] = reference_frame_type
+                            arb_result["candidate_frame_type"] = candidate_frame_type
+                            if not is_blocking_mismatch(arb_result):
+                                return arb_result
+                            blocking_semantic.append(arb_result)
                     except asyncio.TimeoutError:
-                        logger.warning("Groq arbitration timed out after semantic mismatch")
+                        logger.warning("Arbitration timed out after semantic mismatch")
                     except Exception as exc:
-                        logger.warning("Groq arbitration exception after semantic mismatch: %s", exc)
+                        logger.warning("Arbitration exception after semantic mismatch: %s", exc)
                     local_result["semantic_verdict"] = ",".join(str(item.get("verdict")) for item in blocking_semantic)
                     local_result["semantic_method"] = ",".join(str(item.get("method")) for item in blocking_semantic)
                     local_result["mismatch_reasons"] = list(local_result.get("mismatch_reasons") or [])[:5]

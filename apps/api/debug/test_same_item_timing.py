@@ -10,6 +10,17 @@ import time
 
 # Allow imports from app/
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load .env from apps/api/
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./goldeye.db")
 
 DEMO_DIR = os.path.join(
