@@ -110,6 +110,7 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
             </div>
           )}
         </div>
+        </div>
 
         {/* Hint text */}
         <div className="px-6 pt-5 pb-3">
