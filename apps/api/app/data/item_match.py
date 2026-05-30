@@ -2,31 +2,26 @@
 Same-item comparison for multi-step jewelry capture.
 
 The local scorer is intentionally conservative. It only produces a confident
-"different" verdict for strong visual conflicts. When Gemini keys are present,
-Gemini is used as the semantic judge because it handles top/side/macro angle
-changes better than pure pHash or shape descriptors.
+"different" verdict for strong visual conflicts. Groq vision is used as the
+semantic judge because it handles top/side/macro angle changes better than pure
+pHash or shape descriptors.
 """
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
+import json
 import logging
 import math
-from collections import OrderedDict
+import os
+import re
+import time
 from typing import Optional
 
 import numpy as np
 
 from app.data.color import analyze_color
-from app.data.gemini import (
-    GEMINI_AUDIO_VIDEO_API_KEYS,
-    GEMINI_GUIDANCE_FALLBACK_API_KEYS,
-    GEMINI_MODEL,
-    GROQ_PRIMARY_API_KEYS,
-    _gemini_request,
-    extract_gemini_text,
-    parse_json_response,
-)
 from app.data.image_utils import (
     classify_jewelry_geometry,
     detect_coin_hough,
@@ -38,29 +33,83 @@ from app.data.phash import compute_phash, hamming_distance
 
 logger = logging.getLogger("goldeye.item_match")
 
+
+def _split_keys(*names: str) -> list[str]:
+    keys: list[str] = []
+    for name in names:
+        raw = os.getenv(name, "")
+        for key in raw.split(","):
+            key = key.strip()
+            if key and key not in keys:
+                keys.append(key)
+    return keys
+
+
+GROQ_PRIMARY_API_KEYS = _split_keys("GROQ_PRIMARY_API_KEY_1", "GROQ_PRIMARY_API_KEY_2")
+GROQ_GUIDANCE_API_KEYS = _split_keys("GROQ_GUIDANCE_API_KEY")
+GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_KEY")
+
 COMPARE_FRAME_TYPES = {"top", "45deg", "side", "macro", "hallmark", "huid", "closeup", "selfie", "video"}
 LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup", "selfie"}
 ANGLE_VARIANT_FRAME_TYPES = {"45deg", "side"}
+_IMAGE_BYTES_CACHE: dict[str, tuple[float, bytes]] = {}
+_IMAGE_BYTES_CACHE_MAX = 48
+_IMAGE_BYTES_CACHE_TTL_S = 15 * 60
 
 
-# ── Fingerprint cache (LRU, max 32 entries) ──────────────────────────────────
-# The reference image fingerprint gets computed on every comparison call.
-# Caching avoids re-running OpenCV decode + bbox + color + pHash (~1-2s each).
-_FP_CACHE: OrderedDict[str, dict] = OrderedDict()
-_FP_CACHE_MAX = 32
+def _float_env(name: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(os.getenv(name, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
 
 
-def _fingerprint_cached(raw: bytes) -> dict:
-    key = hashlib.md5(raw[:4096]).hexdigest()
-    if key in _FP_CACHE:
-        _FP_CACHE.move_to_end(key)
-        return _FP_CACHE[key]
-    fp = _fingerprint(raw)
-    _FP_CACHE[key] = fp
-    _FP_CACHE.move_to_end(key)
-    while len(_FP_CACHE) > _FP_CACHE_MAX:
-        _FP_CACHE.popitem(last=False)
-    return fp
+def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def parse_json_response(text: str) -> dict:
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    cleaned = text
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    cleaned = cleaned.strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    cleaned_fuzzy = re.sub(r",\s*([\]\}])", r"\1", cleaned)
+    match_fuzzy = re.search(r"(\{.*\})", cleaned_fuzzy, re.DOTALL)
+    if match_fuzzy:
+        try:
+            return json.loads(match_fuzzy.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    raise json.JSONDecodeError("Could not extract or parse valid JSON from LLM response", text, 0)
 
 
 def _frame_context(frame_type: str | None) -> dict:
@@ -73,11 +122,58 @@ def _frame_context(frame_type: str | None) -> dict:
     }
 
 
+def _cache_key(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8", "ignore")).hexdigest()
+
+
+def _get_cached_bytes(source: str) -> Optional[bytes]:
+    key = _cache_key(source)
+    cached = _IMAGE_BYTES_CACHE.get(key)
+    if not cached:
+        return None
+    now = time.monotonic()
+    cached_at, raw = cached
+    if now - cached_at > _IMAGE_BYTES_CACHE_TTL_S:
+        _IMAGE_BYTES_CACHE.pop(key, None)
+        return None
+    _IMAGE_BYTES_CACHE[key] = (now, raw)
+    return raw
+
+
+def _set_cached_bytes(source: str, raw: Optional[bytes]) -> Optional[bytes]:
+    if not raw:
+        return raw
+    now = time.monotonic()
+    _IMAGE_BYTES_CACHE[_cache_key(source)] = (now, raw)
+    if len(_IMAGE_BYTES_CACHE) > _IMAGE_BYTES_CACHE_MAX:
+        oldest = sorted(_IMAGE_BYTES_CACHE.items(), key=lambda item: item[1][0])
+        for key, _ in oldest[: len(_IMAGE_BYTES_CACHE) - _IMAGE_BYTES_CACHE_MAX]:
+            _IMAGE_BYTES_CACHE.pop(key, None)
+    return raw
+
+
 async def _load_bytes(source: str) -> Optional[bytes]:
     if not source:
         return None
-    if source.startswith("data:") or source.startswith("http://") or source.startswith("https://") or source.startswith("local://"):
-        return await fetch_image_bytes(source)
+    cached = _get_cached_bytes(source)
+    if cached is not None:
+        return cached
+    if source.startswith("data:"):
+        return _set_cached_bytes(source, await asyncio.to_thread(_decode_data_url, source))
+    if source.startswith("http://") or source.startswith("https://") or source.startswith("local://"):
+        return _set_cached_bytes(source, await fetch_image_bytes(source))
+    return _set_cached_bytes(source, await asyncio.to_thread(_decode_base64, source))
+
+
+def _decode_data_url(source: str) -> Optional[bytes]:
+    try:
+        _, encoded = source.split(",", 1)
+        return base64.b64decode(encoded)
+    except Exception:
+        return None
+
+
+def _decode_base64(source: str) -> Optional[bytes]:
     try:
         return base64.b64decode(source, validate=True)
     except Exception:
@@ -169,6 +265,23 @@ def _fingerprint(raw: bytes) -> dict:
     }
 
 
+def _local_compare_raw(
+    reference_raw: bytes,
+    candidate_raw: bytes,
+    reference_frame_type: str,
+    candidate_frame_type: str,
+) -> dict:
+    local_result = _local_compare(
+        _fingerprint(reference_raw),
+        _fingerprint(candidate_raw),
+        reference_frame_type,
+        candidate_frame_type,
+    )
+    local_result["reference_frame_type"] = reference_frame_type
+    local_result["candidate_frame_type"] = candidate_frame_type
+    return local_result
+
+
 def _crop_jewelry_bytes(raw: bytes) -> bytes:
     img = _decode_image(raw)
     if img is None:
@@ -206,6 +319,15 @@ def _crop_jewelry_bytes(raw: bytes) -> bytes:
         return raw
 
     return raw
+
+
+def _groq_item_api_keys() -> list[str]:
+    keys: list[str] = []
+    for group in (GROQ_PRIMARY_API_KEYS, GROQ_GUIDANCE_API_KEYS, GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS):
+        for key in group:
+            if key and key not in keys:
+                keys.append(key)
+    return keys
 
 
 def _bounded_log_ratio(a: Optional[float], b: Optional[float], denominator: float) -> float:
@@ -354,9 +476,12 @@ def _local_compare(ref: dict, cand: dict, reference_frame_type: str, candidate_f
     if reference_weak and mismatch_signal_count < 2:
         confidence = min(confidence, 0.52)
 
-    same_confidence_threshold = 0.40 if (
-        frame_context["is_low_context"] or frame_context["is_video"] or frame_context["is_angle_variant"]
-    ) else 0.45
+    if frame_context["is_angle_variant"]:
+        same_confidence_threshold = 0.56
+    elif frame_context["is_low_context"] or frame_context["is_video"]:
+        same_confidence_threshold = 0.58
+    else:
+        same_confidence_threshold = 0.45
     if same_item_score >= 0.66 and confidence >= same_confidence_threshold:
         verdict = "same"
         same_item = True
@@ -395,7 +520,7 @@ def _local_compare(ref: dict, cand: dict, reference_frame_type: str, candidate_f
     }
 
 
-def _normalize_gemini_result(raw: dict, local_result: dict) -> dict:
+def _normalize_semantic_result(raw: dict, local_result: dict) -> dict:
     verdict = str(raw.get("verdict") or "").strip().lower()
     same_item = raw.get("same_item")
     if verdict not in ("same", "different", "inconclusive"):
@@ -423,58 +548,12 @@ def _normalize_gemini_result(raw: dict, local_result: dict) -> dict:
         "verdict": verdict,
         "same_item_score": round(max(0.0, min(1.0, float(score))), 3),
         "confidence": round(confidence, 3),
-        "method": "gemini_multimodal_compare",
+        "method": "semantic_multimodal_compare",
         "reference_view_partial": bool(local_result.get("reference_view_partial")),
         "matching_signals": list(raw.get("matching_signals") or [])[:5],
         "mismatch_reasons": list(raw.get("mismatch_reasons") or [])[:5],
         "local_fingerprint": local_result,
     }
-
-
-async def _gemini_compare(
-    reference_raw: bytes,
-    candidate_raw: bytes,
-    reference_frame_type: str,
-    candidate_frame_type: str,
-    local_result: dict,
-) -> Optional[dict]:
-    keys = GEMINI_GUIDANCE_FALLBACK_API_KEYS or GEMINI_AUDIO_VIDEO_API_KEYS
-    if not keys:
-        return None
-
-    prompt = _identity_prompt(reference_frame_type, candidate_frame_type)
-    reference_crop = _crop_jewelry_bytes(reference_raw)
-    candidate_crop = _crop_jewelry_bytes(candidate_raw)
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {"text": "IMAGE A FULL FRAME"},
-                {"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(reference_raw).decode("utf-8")}},
-                {"text": "IMAGE A JEWELRY CLOSE-UP CROP"},
-                {"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(reference_crop).decode("utf-8")}},
-                {"text": "IMAGE B FULL FRAME"},
-                {"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(candidate_raw).decode("utf-8")}},
-                {"text": "IMAGE B JEWELRY CLOSE-UP CROP"},
-                {"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(candidate_crop).decode("utf-8")}},
-            ]
-        }],
-        "generationConfig": {
-            "temperature": 0.05,
-            "maxOutputTokens": 1200,
-            "responseMimeType": "application/json",
-        },
-    }
-
-    data, success = await _gemini_request(payload, timeout=15, api_keys=keys, max_retries=1)
-    if not success:
-        return None
-
-    text = extract_gemini_text(data)
-    parsed = parse_json_response(text)
-    result = _normalize_gemini_result(parsed, local_result)
-    result["model"] = GEMINI_MODEL
-    return result
 
 
 def _identity_prompt(reference_frame_type: str, candidate_frame_type: str) -> str:
@@ -504,24 +583,17 @@ If the baseline top-view image appears partial or cropped, do not infer a mismat
 For macro, hallmark, selfie, and individual video frames, use "inconclusive" unless a distinctive item-level difference is clearly visible."""
 
 
-async def _groq_compare(
+def _build_groq_compare_payload(
+    *,
+    model: str,
+    prompt: str,
     reference_raw: bytes,
     candidate_raw: bytes,
-    reference_frame_type: str,
-    candidate_frame_type: str,
-    local_result: dict,
-) -> Optional[dict]:
-    if not GROQ_PRIMARY_API_KEYS:
-        return None
-
-    import aiohttp
-    from app.data.groq_client import GROQ_API_URL, GROQ_MODEL
-
-    prompt = _identity_prompt(reference_frame_type, candidate_frame_type)
+) -> dict:
     reference_crop = _crop_jewelry_bytes(reference_raw)
     candidate_crop = _crop_jewelry_bytes(candidate_raw)
-    payload = {
-        "model": GROQ_MODEL,
+    return {
+        "model": model,
         "messages": [{
             "role": "user",
             "content": [
@@ -553,35 +625,139 @@ async def _groq_compare(
         "max_tokens": 1200,
     }
 
+
+async def _groq_compare(
+    reference_raw: bytes,
+    candidate_raw: bytes,
+    reference_frame_type: str,
+    candidate_frame_type: str,
+    local_result: dict,
+) -> Optional[dict]:
+    keys = _groq_item_api_keys()
+    if not keys:
+        return None
+
+    import aiohttp
+    from app.data.groq_client import GROQ_API_URL, GROQ_MODEL
+
+    per_key_timeout = _float_env("ITEM_MATCH_GROQ_PER_KEY_TIMEOUT_S", 4.0, 2.0, 20.0)
+    total_timeout = _float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 10.0, 4.0, 26.0)
+    max_keys = _int_env("ITEM_MATCH_GROQ_MAX_KEYS", 2, 1, 5)
+    keys = keys[:max_keys]
+    deadline = time.monotonic() + total_timeout
+
+    prompt = _identity_prompt(reference_frame_type, candidate_frame_type)
+    try:
+        payload = await asyncio.wait_for(
+            asyncio.to_thread(
+                _build_groq_compare_payload,
+                model=GROQ_MODEL,
+                prompt=prompt,
+                reference_raw=reference_raw,
+                candidate_raw=candidate_raw,
+            ),
+            timeout=_float_env("ITEM_MATCH_PAYLOAD_TIMEOUT_S", 2.0, 1.0, 8.0),
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Groq item compare payload preparation timed out")
+        return None
+
     last_error = None
-    for idx, key in enumerate([k for k in GROQ_PRIMARY_API_KEYS if k]):
-        try:
-            async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession() as session:
+        for idx, key in enumerate(keys):
+            remaining = deadline - time.monotonic()
+            if remaining <= 1.0:
+                last_error = "groq_item_compare_budget_exhausted"
+                break
+            request_timeout = min(per_key_timeout, remaining)
+            try:
                 async with session.post(
                     GROQ_API_URL,
                     json=payload,
                     headers={"Authorization": f"Bearer {key}"},
-                    timeout=aiohttp.ClientTimeout(total=15),
+                    timeout=aiohttp.ClientTimeout(total=request_timeout),
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         text = data["choices"][0]["message"]["content"]
                         parsed = parse_json_response(text)
-                        result = _normalize_gemini_result(parsed, local_result)
+                        result = _normalize_semantic_result(parsed, local_result)
                         result["method"] = "groq_multimodal_compare"
                         result["model"] = GROQ_MODEL
                         if idx:
-                            logger.info("Groq item compare succeeded with fallback key #%s", idx + 1)
+                            logger.info("Groq item compare succeeded with fallback Groq key #%s", idx + 1)
                         return result
 
                     body = await resp.text()
                     last_error = f"groq_http_{resp.status}: {body[:160]}"
-        except Exception as exc:
-            last_error = str(exc)
+            except asyncio.TimeoutError:
+                last_error = f"groq_item_compare_timeout_after_{request_timeout:.1f}s"
+            except Exception as exc:
+                last_error = str(exc)
 
     if last_error:
         logger.warning("Groq item compare failed: %s", last_error)
     return None
+
+
+async def _gemini_compare(
+    reference_raw: bytes,
+    candidate_raw: bytes,
+    reference_frame_type: str,
+    candidate_frame_type: str,
+    local_result: dict,
+) -> Optional[dict]:
+    """Same-item judge using Gemini (stronger fine-grained visual ID than the
+    Groq scout model, and on a separate quota). Sends 4 images: ref full, ref
+    crop, cand full, cand crop."""
+    try:
+        from app.data.gemini import _gemini_request, _split_keys
+    except Exception:
+        return None
+
+    keys = _split_keys("GEMINI_GUIDANCE_FALLBACK_API_KEY", "GEMINI_API_KEY", "GEMINI_AUDIO_VIDEO_API_KEY")
+    if not keys:
+        return None
+
+    prompt = _identity_prompt(reference_frame_type, candidate_frame_type)
+    try:
+        ref_crop, cand_crop = await asyncio.gather(
+            asyncio.to_thread(_crop_jewelry_bytes, reference_raw),
+            asyncio.to_thread(_crop_jewelry_bytes, candidate_raw),
+        )
+    except Exception:
+        ref_crop, cand_crop = reference_raw, candidate_raw
+
+    def _img(b: bytes) -> dict:
+        return {"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(b).decode("utf-8")}}
+
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {"text": "IMAGE A FULL FRAME"}, _img(reference_raw),
+                {"text": "IMAGE A JEWELRY CLOSE-UP CROP"}, _img(ref_crop),
+                {"text": "IMAGE B FULL FRAME"}, _img(candidate_raw),
+                {"text": "IMAGE B JEWELRY CLOSE-UP CROP"}, _img(cand_crop),
+            ]
+        }],
+        "generationConfig": {"temperature": 0.05, "maxOutputTokens": 600},
+    }
+    timeout = _float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 5.0, 2.0, 12.0)
+    try:
+        data, ok = await _gemini_request(payload, timeout=int(timeout), api_keys=keys, max_retries=0)
+        if not ok:
+            return None
+        from app.data.gemini import extract_gemini_text
+        parsed = parse_json_response(extract_gemini_text(data))
+        result = _normalize_semantic_result(parsed, local_result)
+        result["method"] = "gemini_multimodal_compare"
+        result["reference_frame_type"] = reference_frame_type
+        result["candidate_frame_type"] = candidate_frame_type
+        return result
+    except Exception as exc:
+        logger.warning("Gemini item compare failed: %s", exc)
+        return None
 
 
 def _semantic_result_priority(result: dict) -> tuple[int, float]:
@@ -603,10 +779,56 @@ def _same_verdict_has_visual_conflict(semantic_result: dict) -> bool:
     candidate_type = str(local_result.get("candidate_frame_type") or "").lower()
     if reference_type != "45deg" or candidate_type not in {"top", "side"}:
         return False
+    local_score = float(local_result.get("same_item_score", 0.5))
+    color_score = float(debug.get("color_score", 1.0))
+    shape_score = float(debug.get("shape_score", 1.0))
+    phash_score = float(debug.get("phash_score", 1.0))
+    mismatch_count = int(debug.get("mismatch_signal_count") or 0)
+    # 45-degree to top-view comparisons are noisy for the local geometry
+    # detector: the coin and the tilted ring can get merged into one bbox.
+    # If the semantic judge says "same", only veto it for a truly severe
+    # local conflict.
+    if reference_type == "45deg" and candidate_type == "top":
+        return (
+            mismatch_count >= 2
+            and local_score <= 0.42
+            and (shape_score <= 0.50 or color_score <= 0.32 or phash_score <= 0.30)
+        )
+    if (
+        mismatch_count >= 2
+        and local_score <= 0.55
+        and (shape_score <= 0.62 or color_score <= 0.36 or phash_score <= 0.32)
+    ):
+        return True
+    if color_score <= 0.28 and shape_score <= 0.68 and local_score <= 0.58:
+        return True
     return (
         bool(debug.get("distinct_type_mismatch"))
-        and float(local_result.get("same_item_score", 0.5)) <= 0.56
-        and float(debug.get("shape_score", 1.0)) <= 0.64
+        and local_score <= 0.62
+        and shape_score <= 0.68
+    )
+
+
+def _local_supports_same_despite_semantic_block(local_result: dict) -> bool:
+    reference_type = str(local_result.get("reference_frame_type") or "").lower()
+    candidate_type = str(local_result.get("candidate_frame_type") or "").lower()
+    if reference_type != "45deg" or candidate_type not in {"top", "side"}:
+        return False
+    if is_blocking_mismatch(local_result):
+        return False
+
+    debug = local_result.get("debug") or {}
+    local_score = float(local_result.get("same_item_score", 0.5))
+    shape_score = float(debug.get("shape_score", 0.0))
+    phash_score = float(debug.get("phash_score", 0.0))
+    mismatch_count = int(debug.get("mismatch_signal_count") or 0)
+    angle_conflict = bool(debug.get("angle_identity_conflict"))
+    return (
+        local_score >= 0.62
+        and shape_score >= 0.72
+        and phash_score >= 0.42
+        and mismatch_count <= 1
+        and not angle_conflict
     )
 
 
@@ -643,7 +865,8 @@ async def compare_item_images(
     candidate_image: str,
     reference_frame_type: str = "top",
     candidate_frame_type: str = "unknown",
-    use_gemini: bool = True,
+    use_remote: bool = True,
+    local_first: bool = True,
 ) -> dict:
     reference_raw = await _load_bytes(reference_image)
     candidate_raw = await _load_bytes(candidate_image)
@@ -672,60 +895,148 @@ async def compare_item_images(
             "mismatch_reasons": [],
         }
 
-    local_result = _local_compare(
-        _fingerprint_cached(reference_raw),
-        _fingerprint_cached(candidate_raw),
-        reference_frame_type,
-        candidate_frame_type,
-    )
-    local_result["reference_frame_type"] = reference_frame_type
-    local_result["candidate_frame_type"] = candidate_frame_type
+    # Fast ORB short-circuit: many RANSAC-verified inliers on the cropped jewelry
+    # is a near-certain "same item" (different items score ~0 after cropping), so
+    # we can confirm same instantly without the slow VLM call. This is the common
+    # case for consecutive captures, near-duplicates, and same/near angles.
+    try:
+        from app.data.item_match_orb import orb_fingerprint, orb_inliers, STRONG_INLIERS
 
-    if use_gemini:
-        semantic_results: list[dict] = []
+        ref_fp, cand_fp = await asyncio.gather(
+            asyncio.to_thread(orb_fingerprint, _decode_image(reference_raw)),
+            asyncio.to_thread(orb_fingerprint, _decode_image(candidate_raw)),
+        )
+        orb_count, orb_ratio = await asyncio.to_thread(orb_inliers, ref_fp, cand_fp)
+        if orb_count >= STRONG_INLIERS:
+            return {
+                "same_item": True,
+                "verdict": "same",
+                "same_item_score": round(min(0.99, 0.90 + orb_ratio * 0.09), 3),
+                "confidence": round(min(0.99, 0.90 + min(orb_count, 200) / 2000.0), 3),
+                "method": "orb_strong_inliers",
+                "reference_frame_type": reference_frame_type,
+                "candidate_frame_type": candidate_frame_type,
+                "reference_view_partial": False,
+                "matching_signals": [f"orb_ransac_inliers_{orb_count}"],
+                "mismatch_reasons": [],
+                "orb_inliers": int(orb_count),
+            }
+    except Exception as exc:  # never let the fast path break the comparison
+        logger.debug("ORB short-circuit skipped: %s", exc)
+
+    if not local_first:
+        # Arbitration mode (e.g. S14): the caller already grouped frames with ORB,
+        # so skip the heavy local fingerprint and let the VLM judge directly.
+        local_result = {
+            "same_item": None,
+            "verdict": "inconclusive",
+            "same_item_score": 0.5,
+            "confidence": 0.0,
+            "method": "local_skipped_arbitration",
+            "reference_frame_type": reference_frame_type,
+            "candidate_frame_type": candidate_frame_type,
+            "reference_view_partial": False,
+            "matching_signals": [],
+            "mismatch_reasons": [],
+        }
+    else:
         try:
-            gemini_result = await _gemini_compare(
-                reference_raw,
-                candidate_raw,
-                reference_frame_type,
-                candidate_frame_type,
-                local_result,
+            local_result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _local_compare_raw,
+                    reference_raw,
+                    candidate_raw,
+                    reference_frame_type,
+                    candidate_frame_type,
+                ),
+                timeout=_float_env("ITEM_MATCH_LOCAL_TIMEOUT_S", 4.0, 1.0, 12.0),
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Local item fingerprint timed out")
+            local_result = {
+                "same_item": None,
+                "verdict": "inconclusive",
+                "same_item_score": 0.5,
+                "confidence": 0.0,
+                "method": "local_visual_fingerprint_timeout",
+                "reference_frame_type": reference_frame_type,
+                "candidate_frame_type": candidate_frame_type,
+                "reference_view_partial": False,
+                "matching_signals": [],
+                "mismatch_reasons": ["local_fingerprint_timeout"],
+            }
+
+    if use_remote:
+        semantic_results: list[dict] = []
+        # Primary judge: Gemini (stronger fine-grained visual ID). Fall back to
+        # Groq only if Gemini is unavailable/failed.
+        try:
+            gemini_result = await asyncio.wait_for(
+                _gemini_compare(
+                    reference_raw, candidate_raw,
+                    reference_frame_type, candidate_frame_type, local_result,
+                ),
+                timeout=_float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 5.0, 2.0, 12.0) + 1.0,
             )
             if gemini_result:
                 gemini_result["reference_frame_type"] = reference_frame_type
                 gemini_result["candidate_frame_type"] = candidate_frame_type
                 semantic_results.append(gemini_result)
+        except asyncio.TimeoutError:
+            logger.warning("Gemini item compare timed out inside same-item matcher")
         except Exception as exc:
-            logger.warning("Gemini item compare failed: %s", exc)
+            logger.warning("Gemini item compare exception: %s", exc)
 
-        should_try_groq = (
-            not semantic_results
-            or semantic_results[-1].get("verdict") == "inconclusive"
-            or (
-                semantic_results[-1].get("verdict") == "same"
-                and float(semantic_results[-1].get("confidence", 0.0)) < 0.82
-                and float(local_result.get("same_item_score", 0.5)) < 0.62
-            )
-        )
-        if should_try_groq:
+        if not semantic_results:
             try:
-                groq_result = await _groq_compare(
-                    reference_raw,
-                    candidate_raw,
-                    reference_frame_type,
-                    candidate_frame_type,
-                    local_result,
+                groq_result = await asyncio.wait_for(
+                    _groq_compare(
+                        reference_raw,
+                        candidate_raw,
+                        reference_frame_type,
+                        candidate_frame_type,
+                        local_result,
+                    ),
+                    timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 10.0, 4.0, 26.0) + 1.0,
                 )
                 if groq_result:
                     groq_result["reference_frame_type"] = reference_frame_type
                     groq_result["candidate_frame_type"] = candidate_frame_type
                     semantic_results.append(groq_result)
+            except asyncio.TimeoutError:
+                logger.warning("Groq item compare timed out inside same-item matcher")
             except Exception as exc:
                 logger.warning("Groq item compare exception: %s", exc)
 
         if semantic_results:
             blocking_semantic = [item for item in semantic_results if is_blocking_mismatch(item)]
             if blocking_semantic:
+                if _local_supports_same_despite_semantic_block(local_result):
+                    try:
+                        groq_result = await asyncio.wait_for(
+                            _groq_compare(
+                                reference_raw,
+                                candidate_raw,
+                                reference_frame_type,
+                                candidate_frame_type,
+                                local_result,
+                            ),
+                            timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 8.0, 4.0, 20.0) + 1.0,
+                        )
+                        if groq_result:
+                            groq_result["reference_frame_type"] = reference_frame_type
+                            groq_result["candidate_frame_type"] = candidate_frame_type
+                            if not is_blocking_mismatch(groq_result):
+                                return groq_result
+                            blocking_semantic.append(groq_result)
+                    except asyncio.TimeoutError:
+                        logger.warning("Groq arbitration timed out after semantic mismatch")
+                    except Exception as exc:
+                        logger.warning("Groq arbitration exception after semantic mismatch: %s", exc)
+                    local_result["semantic_verdict"] = ",".join(str(item.get("verdict")) for item in blocking_semantic)
+                    local_result["semantic_method"] = ",".join(str(item.get("method")) for item in blocking_semantic)
+                    local_result["mismatch_reasons"] = list(local_result.get("mismatch_reasons") or [])[:5]
+                    return local_result
                 return sorted(blocking_semantic, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
 
             visual_conflicts = [item for item in semantic_results if _same_verdict_has_visual_conflict(item)]
@@ -762,7 +1073,7 @@ def is_blocking_mismatch(result: Optional[dict]) -> bool:
         or (result.get("local_fingerprint") or {}).get("reference_view_partial")
     )
 
-    if method in {"gemini_multimodal_compare", "groq_multimodal_compare"}:
+    if method in ("groq_multimodal_compare", "gemini_multimodal_compare"):
         local_debug = ((result.get("local_fingerprint") or {}).get("debug") or {})
         local_distinct = bool(local_debug.get("distinct_type_mismatch"))
         if reference_weak:

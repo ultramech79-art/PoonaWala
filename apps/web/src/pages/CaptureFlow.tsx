@@ -30,23 +30,14 @@ interface StepEval {
   dataUrl?: string
 }
 
-/**
- * Only send reference images for macro and selfie steps where item-identity
- * verification actually matters. For angle shots (45deg, top, side) the quality
- * eval alone is sufficient — the same-item comparison was timing out (~12-35s)
- * on almost every request anyway, adding no value but huge latency.
- */
 function referenceForStep(
   stepType: CaptureType,
   captures: Partial<Record<CaptureType, { dataUrl: string }>>,
 ) {
-  // Angle variants: skip comparison entirely — just evaluate quality
-  const skipComparison = ['45deg', 'top', 'side']
-  if (skipComparison.includes(stepType)) {
+  if (stepType === '45deg') {
     return { referenceFrameType: 'top', referenceImageDataUrl: undefined }
   }
 
-  // macro / selfie: send reference for identity check
   const angleReference = captures['45deg']?.dataUrl
   if (angleReference) {
     return { referenceFrameType: '45deg', referenceImageDataUrl: angleReference }

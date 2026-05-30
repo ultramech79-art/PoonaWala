@@ -62,7 +62,12 @@ async def call_groq_vision(
                     }
                     return mock_gemini_resp, True
                 
-                elif resp.status in (429, 503) and retry_count < 2:
+                elif resp.status == 429:
+                    body = await resp.text()
+                    logger.warning(f"Groq API rate limited, trying next key if available: {body[:180]}")
+                    return {"error": "groq_rate_limited", "details": body[:200]}, False
+
+                elif resp.status == 503 and retry_count < 1:
                     # Exponential backoff retry for transient errors
                     wait_time = 1.5 * (retry_count + 1)
                     logger.warning(f"Groq API {resp.status}, retrying in {wait_time}s...")
@@ -134,7 +139,12 @@ async def call_groq_json(
                         }]
                     }, True
 
-                if resp.status in (429, 503) and retry_count < 2:
+                if resp.status == 429:
+                    body = await resp.text()
+                    logger.warning(f"Groq text API rate limited, trying next key if available: {body[:180]}")
+                    return {"error": "groq_rate_limited", "details": body[:200]}, False
+
+                if resp.status == 503 and retry_count < 1:
                     wait_time = 1.5 * (retry_count + 1)
                     logger.warning(f"Groq text API {resp.status}, retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
