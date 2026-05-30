@@ -57,6 +57,37 @@ export function recordConsentAPI(sessionId: string): Promise<unknown> {
   return post('/session/consent', { session_id: sessionId, version: 'v1.0' })
 }
 
+export interface AssistantAction {
+  label: string
+  route: string
+}
+
+export interface AssistantLink {
+  label: string
+  url: string
+}
+
+export interface AssistantMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AssistantChatResponse {
+  reply: string
+  suggestions: string[]
+  actions: AssistantAction[]
+  links: AssistantLink[]
+}
+
+export function assistantChatAPI(
+  message: string,
+  page?: string,
+  history: AssistantMessage[] = [],
+  pageContext?: Record<string, unknown>,
+): Promise<AssistantChatResponse> {
+  return post('/api/assistant-chat', { message, page, history, page_context: pageContext }, 25000)
+}
+
 export interface AssessRequest {
   session_id: string
   frames: string[]
