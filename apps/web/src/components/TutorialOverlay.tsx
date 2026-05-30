@@ -40,6 +40,7 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
 
   // Auto-dismiss after 4 seconds — cleared when video ends early
   useEffect(() => {
+    if (stepType === '45deg') return
     timerRef.current = setInterval(() => {
       setAutoTimer(t => {
         if (t <= 1) { clearTimer(); onDismiss(); return 0 }
@@ -47,28 +48,31 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
       })
     }, 1000)
     return clearTimer
-  }, [onDismiss])
+  }, [onDismiss, stepType])
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-stone-900/75 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md bg-white rounded-t-3xl shadow-2xl overflow-hidden animate-slide-up pb-safe">
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-stone-900/40 backdrop-blur-xl animate-backdrop-fade">
+      <div className="w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] border-t border-white/50 overflow-hidden animate-spring-up pb-safe relative">
+        {/* Pull handle */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300/60 rounded-full" />
+        
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+        <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div>
-            <p className="text-[10px] text-stone-400 uppercase tracking-widest font-semibold">Tutorial</p>
-            <p className="text-base font-bold text-stone-900 leading-tight">{TUTORIAL_LABELS[stepType] ?? stepType}</p>
+            <p className="text-[10px] text-brand-600 uppercase tracking-widest font-bold mb-0.5">Tutorial</p>
+            <p className="text-xl font-bold text-stone-900 tracking-tight leading-tight">{TUTORIAL_LABELS[stepType] ?? stepType}</p>
           </div>
           <button
             onClick={onDismiss}
-            className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors"
+            className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-95 transition-all"
             aria-label="Close tutorial"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Video or placeholder */}
-        <div className="mx-5 rounded-2xl overflow-hidden bg-stone-900 aspect-video flex items-center justify-center relative">
+        <div className={`mx-5 rounded-2xl overflow-hidden bg-stone-900 flex items-center justify-center relative ${stepType === '45deg' ? 'aspect-[9/16] max-h-[60vh]' : 'aspect-video'}`}>
           {!videoError ? (
             <video
               ref={videoRef}
@@ -77,8 +81,13 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
               autoPlay
               muted
               playsInline
-              loop={false}
-              onEnded={() => { clearTimer(); onDismiss() }}
+              loop={stepType === '45deg'}
+              onEnded={() => {
+                if (stepType !== '45deg') {
+                  clearTimer();
+                  onDismiss();
+                }
+              }}
               onError={() => setVideoError(true)}
             />
           ) : (
@@ -91,7 +100,7 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
           )}
 
           {/* Auto-dismiss countdown pill */}
-          {autoTimer > 0 && (
+          {autoTimer > 0 && stepType !== '45deg' && (
             <div className="absolute bottom-3 right-3 bg-black/60 rounded-full px-2.5 py-1 text-white/70 text-[11px] font-semibold tabular-nums">
               {autoTimer}s
             </div>
@@ -99,17 +108,16 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
         </div>
 
         {/* Hint text */}
-        <div className="px-5 pt-3 pb-2">
-          <p className="text-sm text-stone-600 leading-relaxed">{TUTORIAL_HINTS[stepType]}</p>
+        <div className="px-6 pt-4 pb-3">
+          <p className="text-sm font-medium text-stone-600 leading-relaxed">{TUTORIAL_HINTS[stepType]}</p>
         </div>
 
         {/* Actions */}
-        <div className="px-5 pt-2 pb-6 flex gap-3">
+        <div className="px-6 pt-2 pb-6 flex gap-3">
           <button
             onClick={onDismiss}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500 text-white font-bold text-sm active:scale-95 transition-transform shadow-lg shadow-amber-500/30"
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-900 text-white font-semibold text-sm active:scale-[0.97] transition-all shadow-xl shadow-stone-900/20 hover:bg-stone-800"
           >
-            <SkipForward className="w-4 h-4" />
             Got it — Start Capture
           </button>
         </div>
