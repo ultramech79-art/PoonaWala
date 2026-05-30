@@ -63,7 +63,7 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div>
             <p className="text-[10px] text-brand-600 uppercase tracking-widest font-bold mb-0.5">Tutorial</p>
-            <p className="text-xl font-bold text-stone-900 tracking-tight leading-tight">{title || TUTORIAL_LABELS[stepType] ?? stepType}</p>
+            <p className="text-xl font-bold text-stone-900 tracking-tight leading-tight">{(title || TUTORIAL_LABELS[stepType]) ?? stepType}</p>
           </div>
           <button
             onClick={onDismiss}
