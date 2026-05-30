@@ -40,6 +40,35 @@ class VerifyOtpResponse(BaseModel):
     error: Optional[str] = None
 
 
+async def verify_otp_code(session_id: str, otp: str) -> VerifyOtpResponse:
+    if not TWOFACTOR_API_KEY:
+        is_valid = len(otp) == 6 and otp.isdigit()
+        return VerifyOtpResponse(
+            success=True,
+            valid=is_valid,
+            message="Verified (dev mode)" if is_valid else "Invalid OTP",
+        )
+
+    if session_id == "dev_session":
+        is_valid = len(otp) == 6 and otp.isdigit()
+        return VerifyOtpResponse(success=True, valid=is_valid, message="Verified (dev mode)")
+
+    url = f"{_BASE}/{TWOFACTOR_API_KEY}/SMS/VERIFY/{session_id}/{otp}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json(content_type=None)
+                logger.info(f"2Factor verify response: {data}")
+
+                if data.get("Status") == "Success" and data.get("Details") == "OTP Matched":
+                    return VerifyOtpResponse(success=True, valid=True, message="OTP verified successfully")
+                detail = data.get("Details", "OTP mismatch")
+                return VerifyOtpResponse(success=True, valid=False, message=detail)
+    except Exception as e:
+        logger.exception(f"2Factor verify error: {e}")
+        return VerifyOtpResponse(success=False, valid=False, message="Verification service unavailable", error=str(e))
+
+
 @router.post("/otp/send-otp", response_model=SendOtpResponse)
 async def send_otp(req: SendOtpRequest):
     phone = req.phone.strip()
@@ -77,31 +106,4 @@ async def send_otp(req: SendOtpRequest):
 
 @router.post("/otp/verify-otp", response_model=VerifyOtpResponse)
 async def verify_otp(req: VerifyOtpRequest):
-    if not TWOFACTOR_API_KEY:
-        # Dev bypass: any 6-digit code is valid
-        is_valid = len(req.otp) == 6 and req.otp.isdigit()
-        return VerifyOtpResponse(
-            success=True,
-            valid=is_valid,
-            message="Verified (dev mode)" if is_valid else "Invalid OTP",
-        )
-
-    if req.session_id == "dev_session":
-        is_valid = len(req.otp) == 6 and req.otp.isdigit()
-        return VerifyOtpResponse(success=True, valid=is_valid, message="Verified (dev mode)")
-
-    url = f"{_BASE}/{TWOFACTOR_API_KEY}/SMS/VERIFY/{req.session_id}/{req.otp}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                data = await resp.json(content_type=None)
-                logger.info(f"2Factor verify response: {data}")
-
-                if data.get("Status") == "Success" and data.get("Details") == "OTP Matched":
-                    return VerifyOtpResponse(success=True, valid=True, message="OTP verified successfully")
-                else:
-                    detail = data.get("Details", "OTP mismatch")
-                    return VerifyOtpResponse(success=True, valid=False, message=detail)
-    except Exception as e:
-        logger.exception(f"2Factor verify error: {e}")
-        return VerifyOtpResponse(success=False, valid=False, message="Verification service unavailable", error=str(e))
+    return await verify_otp_code(req.session_id, req.otp)

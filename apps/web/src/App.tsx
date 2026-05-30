@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Home } from './pages/Home'
 import { LanguagePicker } from './pages/LanguagePicker'
+import { Auth } from './pages/Auth'
+import { Profile } from './pages/Profile'
 import { Welcome } from './pages/Welcome'
 import { Consent } from './pages/Consent'
 import { OTP } from './pages/OTP'
@@ -28,6 +30,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/language" element={<LanguagePicker />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/consent" element={<Consent />} />
           <Route path="/otp" element={<OTP />} />

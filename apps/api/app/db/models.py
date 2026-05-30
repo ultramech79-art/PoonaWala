@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, BigInteger, Float, LargeBinary
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, func, BigInteger, Float, LargeBinary, Text
 from .database import Base
 
 class HuidNode(Base):
@@ -74,3 +74,77 @@ class AuditLog(Base):
     event_type = Column(String, nullable=False)  # 'assessment_complete', 'dpdp_delete'
     payload = Column(String, nullable=False)     # JSON blob of the AssessmentResult or deletion proof
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, index=True)
+    phone = Column(String, unique=True, index=True, nullable=True)
+    email = Column(String, unique=True, index=True, nullable=True)
+    password_hash = Column(String, nullable=True)
+    google_sub = Column(String, unique=True, index=True, nullable=True)
+    full_name = Column(String, nullable=False)
+    dob = Column(String, nullable=False)
+    language = Column(String, default="en", nullable=False)
+    region_code = Column(String, index=True, nullable=False)
+    address = Column(Text, nullable=True)
+    city = Column(String, nullable=True)
+    pincode = Column(String, nullable=True)
+    profile_photo_url = Column(String, nullable=True)
+    profile_photo_public_id = Column(String, nullable=True)
+    is_phone_verified = Column(Boolean, default=False, nullable=False)
+    is_email_verified = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True, nullable=False)
+    session_id = Column(String, index=True, nullable=False)
+    status = Column(String, default="in_progress", nullable=False)
+    region_code = Column(String, index=True, nullable=True)
+    current_step = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class UserAsset(Base):
+    __tablename__ = "user_assets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True, nullable=False)
+    session_id = Column(String, index=True, nullable=True)
+    asset_kind = Column(String, index=True, nullable=False)
+    frame_type = Column(String, index=True, nullable=True)
+    source = Column(String, default="cloudinary", nullable=False)
+    cloudinary_public_id = Column(String, index=True, nullable=True)
+    public_url = Column(String, nullable=True)
+    content_sha256 = Column(String, index=True, nullable=True)
+    content_type = Column(String, nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    width_px = Column(Integer, nullable=True)
+    height_px = Column(Integer, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class LoanPrediction(Base):
+    __tablename__ = "loan_predictions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True, nullable=False)
+    session_id = Column(String, index=True, nullable=False)
+    status = Column(String, default="draft", index=True, nullable=False)
+    region_code = Column(String, index=True, nullable=False)
+    estimated_weight_g = Column(Float, nullable=True)
+    estimated_gold_value_inr = Column(Float, nullable=True)
+    eligible_loan_inr = Column(Float, nullable=True)
+    ltv_pct = Column(Float, nullable=True)
+    result_json = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
