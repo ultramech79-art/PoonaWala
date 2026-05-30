@@ -150,8 +150,8 @@ async def _evaluate_compare_store(
     quality_score = float(result.get("quality_score", 0.5))
 
     if compare_task is not None:
-        # Give at most 3 extra seconds; compare is likely already done.
-        done, _pending = await asyncio.wait({compare_task}, timeout=3.0)
+        # Give at most 5 extra seconds after eval (deployed servers are slower).
+        done, _pending = await asyncio.wait({compare_task}, timeout=5.0)
         if compare_task not in done:
             compare_task.cancel()
             compare_task.add_done_callback(_consume_task_exception)

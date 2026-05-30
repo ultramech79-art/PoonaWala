@@ -954,7 +954,7 @@ async def compare_item_images(
                     reference_frame_type,
                     candidate_frame_type,
                 ),
-                timeout=_float_env("ITEM_MATCH_LOCAL_TIMEOUT_S", 1.5, 1.0, 12.0),
+                timeout=_float_env("ITEM_MATCH_LOCAL_TIMEOUT_S", 3.0, 1.0, 12.0),
             )
         except asyncio.TimeoutError:
             logger.warning("Local item fingerprint timed out")
