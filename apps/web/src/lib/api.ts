@@ -231,6 +231,123 @@ export async function verifyHuidAPI(huid: string): Promise<HuidVerificationResul
   return res.json() as Promise<HuidVerificationResult>
 }
 
+export type JewelryType = 'auto' | 'ring' | 'bangle' | 'bracelet' | 'necklace' | 'pendant' | 'chain' | 'irregular'
+export type GoldKarat = 24 | 22 | 18
+
+export interface WeightVlmRoi {
+  valid_image: boolean
+  jewellery_present: boolean
+  coin_present: boolean
+  item_type: string
+  jewellery_point: { x: number; y: number }
+  confidence: number
+  issues: string[]
+  provider: string
+  model: string
+}
+
+export interface WeightEstimateResult {
+  ok: boolean
+  jewelry_type: string
+  requested_jewelry_type: JewelryType
+  karat: GoldKarat
+  reference_object: 'rs10_coin'
+  scale: {
+    mm_per_pixel: number
+    pixels_per_mm: number
+    coin_diameter_px: number
+    coin_confidence: number
+  }
+  dimensions: {
+    width_mm: number
+    height_mm: number
+    projected_area_mm2: number
+    hole_area_mm2: number
+    estimated_depth_mm: number
+    thickness_source?: string
+  }
+  geometry: {
+    hole_ratio: number
+    aspect_ratio: number
+    circularity: number
+    multiple_item_risk: number
+    segmentation_method: string
+    depth_method: string
+    contour_count: number
+    volume_model?: {
+      model: string
+      major_radius_mm?: number
+      minor_radius_mm?: number
+      effective_thickness_mm: number
+      band_width_mm?: number
+      profile_input_mm?: number | null
+      profile_source?: string | null
+      cross_section?: {
+        candidates: Array<{ source: string; minor_radius_mm: number; weight: number }>
+        selected_minor_radius_mm: number
+      }
+      solidness: number
+    }
+    profile_measurement?: {
+      thickness_mm: number
+      width_mm: number
+      confidence: number
+      method: string
+      view: string
+      scale_source: string
+      side_thickness_mm: number
+      angle_45_thickness_mm: number
+    }
+  }
+  physics: {
+    density_g_cm3: number
+    volume_cm3: number
+    formula: string
+  }
+  weight: {
+    estimated_g: number
+    low_g: number
+    high_g: number
+  }
+  confidence: {
+    score: number
+    components: Record<string, number>
+    issues: string[]
+  }
+  visualizations: {
+    segmentation_mask?: string
+    depth_map?: string
+    contour_overlay?: string
+    scale_visualization?: string
+  }
+  vlm_roi?: WeightVlmRoi | null
+  angle_vlm_roi?: WeightVlmRoi | null
+  side_vlm_roi?: WeightVlmRoi | null
+}
+
+export function estimateWeightAPI(
+  imageDataUrl: string,
+  image45DataUrl: string,
+  sideImageDataUrl: string,
+  jewelryType: JewelryType,
+  karat: GoldKarat,
+  jewelryPoint?: { x: number; y: number } | null,
+  timeoutMs = 90000,
+): Promise<WeightEstimateResult> {
+  return post('/api/weight-estimate', {
+    image_data_url: imageDataUrl,
+    image_45_data_url: image45DataUrl,
+    side_image_data_url: sideImageDataUrl,
+    jewelry_type: jewelryType,
+    karat,
+    reference_object: 'rs10_coin',
+    include_visualizations: false,
+    include_mask_preview: true,
+    jewelry_point: jewelryPoint ?? null,
+    use_vlm_roi: true,
+  }, timeoutMs)
+}
+
 // ─── 2Factor.in OTP API ──────────────────────────────────
 export interface OtpSendResponse {
   success: boolean

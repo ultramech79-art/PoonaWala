@@ -3,11 +3,17 @@ GoldEye FastAPI — main entry point.
 Provides the stateless POST /api/assess endpoint plus session management.
 All signal workers run as async Celery tasks fanned out from /api/assess.
 """
+import asyncio
 import os
+import sys
 import uuid
 import time
 import logging
 from contextlib import asynccontextmanager
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI, Request
@@ -30,6 +36,7 @@ from app.routes.gold_price_regional import router as regional_price_router
 from app.routes.certificate_ocr import router as certificate_ocr_router
 from app.routes.video_eval import router as video_eval_router
 from app.routes.audio_eval import router as audio_eval_router
+from app.routes.weight_estimation import router as weight_estimation_router
 from app.decision.ibja import price_metadata, _refresh_async
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -105,6 +112,7 @@ app.include_router(regional_price_router, prefix="/api",           tags=["Prices
 app.include_router(certificate_ocr_router,prefix="/api",           tags=["OCR"])
 app.include_router(video_eval_router,     prefix="/api",           tags=["VideoEval"])
 app.include_router(audio_eval_router,     prefix="/api",           tags=["AudioEval"])
+app.include_router(weight_estimation_router, prefix="/api",        tags=["WeightEstimation"])
 
 
 @app.get("/health", tags=["Infra"])

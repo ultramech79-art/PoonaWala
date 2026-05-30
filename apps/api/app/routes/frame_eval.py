@@ -75,6 +75,16 @@ def _candidate_data_url(image_b64: str) -> str:
     return f"data:image/jpeg;base64,{image_b64}"
 
 
+def _is_normal_ws_close(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return (
+        "1005" in text
+        or "1000" in text
+        or "websocket is not connected" in text
+        or "cannot call" in text and "send" in text and "close" in text
+    )
+
+
 def _same_item_unverified(same_item: Optional[dict], frame_type: str) -> bool:
     if str(frame_type or "").strip().lower() not in {"top", "side"}:
         return False
@@ -251,10 +261,19 @@ async def evaluate_frame_ws(websocket: WebSocket):
                 f"score={response.quality_score}"
             )
 
-            await websocket.send_json(response.dict())
+            try:
+                await websocket.send_json(response.dict())
+            except Exception as send_exc:
+                if _is_normal_ws_close(send_exc):
+                    logger.info("Client disconnected before frame evaluation response could be sent")
+                    return
+                raise
     except WebSocketDisconnect:
         logger.info("Client disconnected from evaluation websocket")
     except Exception as e:
+        if _is_normal_ws_close(e):
+            logger.info(f"Frame evaluation websocket closed: {e}")
+            return
         logger.error(f"WebSocket evaluation error: {e}")
         try:
             await websocket.send_json({
@@ -293,17 +312,26 @@ async def live_guidance_ws(websocket: WebSocket):
                 f"Live guidance [{frame_type}]: provider={result.get('provider', 'unknown')} "
                 f"approved={result.get('approved')} score={result.get('quality_score')}"
             )
-            await websocket.send_json({
-                "text": result.get("feedback", "Hold the ornament steady in good light."),
-                "approved": result.get("approved", True),
-                "quality_score": float(result.get("quality_score", 0.5)),
-                "issues": result.get("issues", []),
-                "detected": result.get("detected", {}),
-                "provider": result.get("provider"),
-            })
+            try:
+                await websocket.send_json({
+                    "text": result.get("feedback", "Hold the ornament steady in good light."),
+                    "approved": result.get("approved", True),
+                    "quality_score": float(result.get("quality_score", 0.5)),
+                    "issues": result.get("issues", []),
+                    "detected": result.get("detected", {}),
+                    "provider": result.get("provider"),
+                })
+            except Exception as send_exc:
+                if _is_normal_ws_close(send_exc):
+                    logger.info("Client disconnected before live guidance response could be sent")
+                    return
+                raise
     except WebSocketDisconnect:
         logger.info("Client disconnected from live guidance websocket")
     except Exception as e:
+        if _is_normal_ws_close(e):
+            logger.info(f"Live guidance websocket closed: {e}")
+            return
         logger.error(f"Live guidance websocket error: {e}")
         try:
             await websocket.send_json({

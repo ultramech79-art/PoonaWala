@@ -1,145 +1,396 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
+import {
+  AlertCircle,
+  ArrowRight,
+  ChevronRight,
+  Coins,
+  FileImage,
+  ImageUp,
+  Loader2,
+  Scale,
+  Sparkles,
+} from 'lucide-react'
+import { estimateWeightAPI, type GoldKarat, type JewelryType, type WeightEstimateResult } from '../lib/api'
 import { useSessionStore } from '../store/session'
-import { Scale, ChevronRight, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react'
+
+const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'ring', label: 'Ring' },
+  { value: 'bangle', label: 'Bangle' },
+  { value: 'bracelet', label: 'Bracelet' },
+  { value: 'necklace', label: 'Necklace' },
+  { value: 'pendant', label: 'Pendant' },
+  { value: 'chain', label: 'Chain' },
+  { value: 'irregular', label: 'Irregular' },
+]
+
+const KARATS: GoldKarat[] = [22, 24, 18]
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Could not read image file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function compressImageFile(file: File, maxSide = 900, quality = 0.68): Promise<string> {
+  const original = await readFileAsDataUrl(file)
+  const image = new Image()
+  image.decoding = 'async'
+  image.src = original
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('Could not decode image file'))
+  })
+
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return original
+  ctx.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', quality)
+}
+
+function errorMessage(error: unknown) {
+  const text = error instanceof Error ? error.message : 'Weight estimation failed'
+  try {
+    const jsonText = text.slice(text.indexOf('{'))
+    const parsed = JSON.parse(jsonText)
+    return parsed?.detail?.message || text
+  } catch {
+    return text.replace('/api/weight-estimate -> 422:', '').trim()
+  }
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">{label}</p>
+      <p className="mt-0.5 text-sm font-bold text-stone-900">{value}</p>
+    </div>
+  )
+}
+
+function Visualization({ title, src }: { title: string; src: string }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <img src={src} alt={title} className="aspect-[4/3] w-full object-contain bg-stone-950" />
+      <p className="px-3 py-2 text-xs font-semibold text-stone-600">{title}</p>
+    </div>
+  )
+}
 
 export function WeightEntry() {
   const navigate = useNavigate()
-  const { t } = useTranslation()
-  const { state, setWeight, setHuid } = useSessionStore()
+  const { setWeight } = useSessionStore()
+  const [topImageDataUrl, setTopImageDataUrl] = useState<string | null>(null)
+  const [angleImageDataUrl, setAngleImageDataUrl] = useState<string | null>(null)
+  const [sideImageDataUrl, setSideImageDataUrl] = useState<string | null>(null)
+  const [fileNames, setFileNames] = useState({ top: '', angle: '', side: '' })
+  const [jewelryType, setJewelryType] = useState<JewelryType>('auto')
+  const [karat, setKarat] = useState<GoldKarat>(22)
+  const [dragActive, setDragActive] = useState<'top' | 'angle' | 'side' | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState<WeightEstimateResult | null>(null)
+  const [jewelryPoint, setJewelryPoint] = useState<{ x: number; y: number } | null>(null)
 
-  const [value, setValue] = useState(state.weightG?.toString() ?? state.certificateData?.weightG?.toString() ?? '')
-  const [huid, setHuidValue] = useState(state.huidCode ?? state.certificateData?.huid ?? '')
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [skipped, setSkipped] = useState(false)
+  const confidencePct = useMemo(() => Math.round((result?.confidence.score ?? 0) * 100), [result])
 
-  const grams = parseFloat(value)
-  const valid = !isNaN(grams) && grams >= 0.5 && grams <= 500
+  async function loadFile(slot: 'top' | 'angle' | 'side', file: File | undefined) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Upload a JPG, PNG, or HEIC image.')
+      return
+    }
+    setError('')
+    setResult(null)
+    if (slot === 'top') setJewelryPoint(null)
+    setFileNames((current) => ({ ...current, [slot]: file.name }))
+    const dataUrl = await compressImageFile(file)
+    if (slot === 'top') setTopImageDataUrl(dataUrl)
+    if (slot === 'angle') setAngleImageDataUrl(dataUrl)
+    if (slot === 'side') setSideImageDataUrl(dataUrl)
+  }
 
-  const proceed = (w: number | null) => {
-    setWeight(w)
-    setHuid(huid || null)
+  async function runEstimate() {
+    if (!topImageDataUrl || !angleImageDataUrl || !sideImageDataUrl) {
+      setError('Upload all three required photos: top view, 45-degree view, and side view. Keep the Rs 10 coin visible in each.')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const estimate = await estimateWeightAPI(topImageDataUrl, angleImageDataUrl, sideImageDataUrl, jewelryType, karat, jewelryPoint)
+      setResult(estimate)
+      setWeight(estimate.weight.estimated_g)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function continueFlow() {
+    setWeight(result?.weight.estimated_g ?? null)
     navigate('/processing')
   }
 
-  const ACCURACY_ROWS = [
-    { label: t('weight_accuracy_scale'), band: '±8%', pct: '85%', color: 'bg-emerald-500' },
-    { label: t('weight_accuracy_video'), band: '±22%', pct: '55%', color: 'bg-gold-400' },
-    { label: t('weight_accuracy_none'), band: '±35%', pct: '30%', color: 'bg-orange-400' },
-  ]
+  function UploadSlot({
+    slot,
+    title,
+    hint,
+    src,
+    fileName,
+  }: {
+    slot: 'top' | 'angle' | 'side'
+    title: string
+    hint: string
+    src: string | null
+    fileName: string
+  }) {
+    const isTop = slot === 'top'
+    return (
+      <label
+        onDragOver={(event) => {
+          event.preventDefault()
+          setDragActive(slot)
+        }}
+        onDragLeave={() => setDragActive(null)}
+        onDrop={(event) => {
+          event.preventDefault()
+          setDragActive(null)
+          loadFile(slot, event.dataTransfer.files[0])
+        }}
+        className={[
+          'flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-white px-4 py-5 text-center transition',
+          dragActive === slot ? 'border-brand-500 bg-brand-50' : 'border-stone-200 hover:border-gold-300',
+        ].join(' ')}
+      >
+        {src ? (
+          <div
+            className="relative max-h-52 w-full"
+            onClick={(event) => {
+              if (!isTop) return
+              const rect = event.currentTarget.getBoundingClientRect()
+              setJewelryPoint({
+                x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+                y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+              })
+              setResult(null)
+            }}
+          >
+            <img src={src} alt={`${title} preview`} className="max-h-52 w-full rounded-xl object-contain" />
+            {isTop && jewelryPoint && (
+              <div
+                className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-brand-600 shadow-lg ring-2 ring-brand-600/30"
+                style={{ left: `${jewelryPoint.x * 100}%`, top: `${jewelryPoint.y * 100}%` }}
+              />
+            )}
+          </div>
+        ) : (
+          <>
+            <ImageUp className="mb-3 h-8 w-8 text-gold-700" />
+            <p className="text-sm font-bold text-stone-900">{title}</p>
+            <p className="mt-1 max-w-xs text-xs leading-relaxed text-stone-500">{hint}</p>
+          </>
+        )}
+        <input type="file" accept="image/*" className="hidden" onChange={(event) => loadFile(slot, event.target.files?.[0])} />
+        {fileName && (
+          <div className="mt-3 flex max-w-full items-center gap-2 text-xs text-stone-500">
+            <FileImage className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate">{fileName}</span>
+          </div>
+        )}
+      </label>
+    )
+  }
 
   return (
     <div className="page animate-slide-up">
-      {/* Header */}
       <div className="page-header">
         <button id="weight-back" onClick={() => navigate('/video-eval')} className="btn-icon">
-          <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
+          <ChevronRight className="h-5 w-5 rotate-180 text-stone-500" />
         </button>
-        <span className="text-sm font-semibold text-stone-700">Weight Entry</span>
+        <span className="text-sm font-semibold text-stone-700">AI Weight Estimate</span>
         <div className="w-11" />
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-6">
-        {/* Icon */}
-        <div className="flex flex-col items-center pt-6 pb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gold-50 border border-gold-200 flex items-center justify-center mb-5">
-            <Scale className="w-8 h-8 text-gold-600" strokeWidth={1.8} />
-          </div>
-          <h1 className="font-display font-bold text-2xl text-stone-900 text-center mb-1.5">
-            {t('weight_heading')}
-          </h1>
-          <p className="text-sm text-stone-500 text-center leading-relaxed max-w-xs">
-            {t('weight_body')}
-          </p>
-        </div>
-
-        {/* Input */}
-        <div className="mb-5">
-          <label className="label mb-2 block">{t('weight_label')}</label>
-          <div className="relative">
-            <input
-              id="weight-input"
-              type="number"
-              value={value}
-              onChange={e => setValue(e.target.value)}
-              placeholder={t('weight_placeholder')}
-              className="input-field pr-20 text-xl font-mono font-bold"
-              step="0.1"
-              min="0.5"
-              max="500"
-              inputMode="decimal"
-              autoFocus
-            />
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-stone-400 font-medium">
-              grams
-            </div>
-          </div>
-          {value && !valid && (
-            <p className="text-xs text-red-500 mt-2 flex items-center gap-1.5">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Weight must be between 0.5g and 500g
-            </p>
-          )}
-          {valid && (
-            <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1.5">
-              <CheckCircle className="w-3.5 h-3.5" />
-              {grams}g entered — this improves accuracy significantly
-              {state.certificateData?.weightG === grams && <span className="ml-1">(from document)</span>}
-            </p>
-          )}
-        </div>
-
-        {/* HUID input moved to Hallmark screen */}
-        {/* How to weigh tip */}
-        <div className="card p-4 mb-6">
-
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-stone-100 flex items-center justify-center flex-shrink-0">
-              <Scale className="w-4.5 h-4.5 text-stone-500" strokeWidth={2} />
+      <div className="flex-1 overflow-y-auto px-5 pb-6">
+        <div className="py-5">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gold-200 bg-gold-50">
+              <Scale className="h-6 w-6 text-gold-700" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-stone-900 mb-0.5">Kitchen scale tip</p>
-              <p className="text-xs text-stone-500 leading-relaxed">
-                A kitchen scale (₹200–400 online) gives accurate readings. Remove clasps if possible, write down in grams.
-              </p>
+              <h1 className="font-display text-xl font-bold text-stone-950">Estimate from three views</h1>
+              <p className="text-xs leading-relaxed text-stone-500">Top, 45-degree, and side photos are required. Keep the Rs 10 coin visible in each.</p>
             </div>
           </div>
-        </div>
 
-        {/* Accuracy chart */}
-        <div className="card-gold p-4 mb-2">
-          <h3 className="text-xs font-semibold text-gold-700 uppercase tracking-wider mb-3">
-            Impact on loan band width
-          </h3>
-          {ACCURACY_ROWS.map(row => (
-            <div key={row.label} className="flex items-center gap-3 mb-2.5">
-              <p className="text-xs text-stone-600 w-32 flex-shrink-0">{row.label}</p>
-              <div className="flex-1 band-track">
-                <div className={`${row.color} band-fill`} style={{ width: row.pct }} />
-              </div>
-              <span className="text-xs font-mono text-stone-600 w-9 text-right">{row.band}</span>
+          <div className="space-y-3">
+            <UploadSlot
+              slot="top"
+              title="Top view"
+              hint="Flat overhead photo for diameter and outline. Coin must be fully visible."
+              src={topImageDataUrl}
+              fileName={fileNames.top}
+            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <UploadSlot
+                slot="angle"
+                title="45-degree view"
+                hint="Tilted photo to validate profile and reflective edges."
+                src={angleImageDataUrl}
+                fileName={fileNames.angle}
+              />
+              <UploadSlot
+                slot="side"
+                title="Side view"
+                hint="Profile photo for actual thickness. Coin must stay in frame."
+                src={sideImageDataUrl}
+                fileName={fileNames.side}
+              />
             </div>
-          ))}
+          </div>
+
+          {topImageDataUrl && (
+            <p className="mt-2 text-xs font-medium text-stone-500">
+              Optional: tap the jewellery in the top view if the automatic selector misses it. Avoid tapping the coin.
+            </p>
+          )}
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div>
+              <label className="label mb-2 block">Jewellery type</label>
+              <select className="input-field py-3 text-sm" value={jewelryType} onChange={(event) => setJewelryType(event.target.value as JewelryType)}>
+                {JEWELRY_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label mb-2 block">Gold karat</label>
+              <select className="input-field py-3 text-sm" value={karat} onChange={(event) => setKarat(Number(event.target.value) as GoldKarat)}>
+                {KARATS.map((value) => (
+                  <option key={value} value={value}>{value}K</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
+            <div className="flex gap-3">
+              <Coins className="mt-0.5 h-5 w-5 flex-shrink-0 text-gold-700" />
+              <div>
+                <p className="text-sm font-bold text-stone-900">Reference object</p>
+                <p className="mt-1 text-xs leading-relaxed text-stone-500">
+                  Rs 10 Indian coin, detected by Hough Circle Transform, diameter fixed at 27 mm.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="mt-4 flex gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {result && (
+            <div className="mt-5 space-y-4">
+              <div className="rounded-2xl border border-gold-200 bg-gold-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gold-700">Estimated weight</p>
+                    <p className="mt-1 font-display text-3xl font-black text-stone-950">{result.weight.estimated_g}g</p>
+                    <p className="text-xs text-stone-600">Range {result.weight.low_g}g to {result.weight.high_g}g</p>
+                  </div>
+                  <div className="rounded-full bg-white px-3 py-1 text-xs font-bold text-stone-700">
+                    {confidencePct}% confidence
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Metric label="Detected type" value={result.jewelry_type} />
+                <Metric label="Volume" value={`${result.physics.volume_cm3} cm3`} />
+                <Metric label="Width" value={`${result.dimensions.width_mm} mm`} />
+                <Metric label="Height" value={`${result.dimensions.height_mm} mm`} />
+                <Metric label="Thickness" value={`${result.dimensions.estimated_depth_mm} mm`} />
+                <Metric label="Density" value={`${result.physics.density_g_cm3} g/cm3`} />
+                <Metric label="Mask method" value={result.geometry.segmentation_method} />
+                {result.geometry.profile_measurement && (
+                  <Metric label="Depth source" value={result.geometry.profile_measurement.method} />
+                )}
+                {result.geometry.profile_measurement && (
+                  <Metric label="Side/45 thickness" value={`${result.geometry.profile_measurement.side_thickness_mm} / ${result.geometry.profile_measurement.angle_45_thickness_mm} mm`} />
+                )}
+                {result.geometry.volume_model?.minor_radius_mm && (
+                  <Metric label="Torus radii" value={`${result.geometry.volume_model.major_radius_mm} / ${result.geometry.volume_model.minor_radius_mm} mm`} />
+                )}
+                {result.geometry.volume_model?.band_width_mm && (
+                  <Metric label="Band/profile" value={`${result.geometry.volume_model.band_width_mm} / ${result.geometry.volume_model.profile_input_mm ?? '-'} mm`} />
+                )}
+                {result.geometry.volume_model?.cross_section && (
+                  <Metric
+                    label="Thickness model"
+                    value={result.geometry.volume_model.cross_section.candidates.map((item) => `${item.source}:${item.weight}`).join(' ')}
+                  />
+                )}
+              </div>
+
+              {result.vlm_roi && (
+                <div className="rounded-2xl border border-stone-200 bg-white p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-stone-400">VLM validation</p>
+                  <p className="mt-1 text-xs text-stone-600">
+                    Top, 45-degree, and side views validated by {result.vlm_roi.provider}. Top ROI confidence {Math.round(result.vlm_roi.confidence * 100)}%.
+                  </p>
+                </div>
+              )}
+
+              {result.visualizations.segmentation_mask && !result.visualizations.contour_overlay && (
+                <Visualization title="Jewellery mask" src={result.visualizations.segmentation_mask} />
+              )}
+
+              {result.visualizations.contour_overlay && result.visualizations.segmentation_mask && result.visualizations.depth_map && (
+                <div className="grid grid-cols-2 gap-3">
+                  <Visualization title="Contour and scale" src={result.visualizations.contour_overlay} />
+                  <Visualization title="Segmentation mask" src={result.visualizations.segmentation_mask} />
+                  <Visualization title="Depth map" src={result.visualizations.depth_map} />
+                  {result.visualizations.scale_visualization && (
+                    <Visualization title="Scale detection" src={result.visualizations.scale_visualization} />
+                  )}
+                </div>
+              )}
+
+              {result.confidence.issues.length > 0 && (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-orange-700">Quality notes</p>
+                  <p className="mt-1 text-xs leading-relaxed text-orange-800">{result.confidence.issues.join(', ')}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="px-5 pb-6 pt-4 border-t border-stone-200 space-y-3">
-        <button
-          id="weight-continue"
-          onClick={() => proceed(grams)}
-          disabled={!valid}
-          className={valid ? 'btn-primary w-full' : 'btn-secondary w-full opacity-50 cursor-not-allowed'}
-        >
-          {t('weight_continue')}
-          <ArrowRight className="w-5 h-5" />
+      <div className="space-y-3 border-t border-stone-200 px-5 pb-6 pt-4">
+        <button onClick={runEstimate} disabled={loading || !topImageDataUrl || !angleImageDataUrl || !sideImageDataUrl} className="btn-primary w-full disabled:opacity-50">
+          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+          {loading ? 'Estimating weight' : 'Estimate weight'}
         </button>
-        <button
-          id="weight-skip"
-          onClick={() => proceed(null)}
-          className="btn-secondary w-full text-sm"
-        >
-          {t('weight_skip')}
+        <button onClick={continueFlow} disabled={!result} className="btn-secondary w-full text-sm disabled:opacity-50">
+          Continue with estimate
+          <ArrowRight className="h-5 w-5" />
         </button>
       </div>
     </div>
