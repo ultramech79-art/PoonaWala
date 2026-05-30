@@ -40,6 +40,7 @@ from app.data.audio_features import (
 from app.data.gemini import (
     GEMINI_AUDIO_VIDEO_API_KEYS,
     GEMINI_MODEL,
+    GEMINI_AUDIO_MODEL,
     _gemini_request,
     extract_gemini_text,
     parse_json_response,
@@ -368,14 +369,18 @@ async def _gemini_audio_eval(
             "it fades? A lingering ring favours gold; an instant cut-off favours fake.\n"
             "3. RESONANCE: is there a clear, pitched, sustained tone (an 'echo' that rings on), "
             "or only a dull broadband thud with no pitch?\n"
-            "4. A small ring rings SHORTER than a heavy bangle — judge the PRESENCE and CLARITY "
-            "of a sustained resonant tone, not just absolute duration.\n\n"
-            f"Reference measurements from signal processing (item: {item_type}):\n"
-            f"  resonant ring-down time: {physics.get('res_decay_ms', 0):.0f} ms\n"
-            f"  resonant tone energy:    {physics.get('res_tonality', 0):.0%}\n"
-            f"  dominant frequency:      {physics.get('res_f0_hz', physics.get('dom_freq_hz', 0)):.0f} Hz\n\n"
-            "Rate the likelihood this is SOLID GOLD from 0 to 100 "
-            "(100 = clear sustained gold-like ring/echo on the glass, 0 = dead thud / no resonance). "
+            "4. CRITICAL: judge mainly by WHAT YOU HEAR, not by duration. A small light "
+            "ring rings only briefly even when it is SOLID GOLD — a short ring-down does "
+            "NOT mean fake. What matters is whether a clear, pitched, metallic resonant tone "
+            "is present at all (gold) versus a flat dull dead click with no pitch (fake).\n\n"
+            f"Rough signal-processing references for the item ({item_type}) — use as weak "
+            "hints only, your own listening is the primary evidence:\n"
+            f"  resonant tone energy (is a tone present?): {physics.get('res_tonality', 0):.0%}\n"
+            f"  dominant frequency: {physics.get('res_f0_hz', physics.get('dom_freq_hz', 0)):.0f} Hz\n\n"
+            "Rate the likelihood this is SOLID GOLD from 0 to 100, where:\n"
+            "  80-100 = a clear, pitched, ringing/echoing metallic tone after the impact\n"
+            "  40-60  = some metallic ring but brief or partly damped (typical small gold ring)\n"
+            "  0-25   = a flat dead click/thud with no sustained pitched tone\n"
             f"Then explain your reasoning in 2-3 sentences ({lang_out}). "
             "Set low_confidence true ONLY for genuine signal problems (no clear drop impact, "
             "very noisy, or more than one drop detected). "
@@ -401,7 +406,9 @@ async def _gemini_audio_eval(
                 },
             },
         }
-        data, success = await _gemini_request(payload, timeout=45, api_keys=GEMINI_AUDIO_VIDEO_API_KEYS)
+        data, success = await _gemini_request(
+            payload, timeout=45, api_keys=GEMINI_AUDIO_VIDEO_API_KEYS, model=GEMINI_AUDIO_MODEL
+        )
         if success and "candidates" in data:
             g = parse_json_response(extract_gemini_text(data))
             explanation = str(g.get("explanation", "")).strip()
@@ -409,7 +416,7 @@ async def _gemini_audio_eval(
             gscore = g.get("gold_score")
             gscore = max(0, min(100, int(gscore))) if gscore is not None else None
             if explanation:
-                logger.info(f"Gemini audio eval ok [{item_type}/{mode}] gold_score={gscore} model={GEMINI_MODEL}")
+                logger.info(f"Gemini audio eval ok [{item_type}/{mode}] gold_score={gscore} model={GEMINI_AUDIO_MODEL}")
                 return explanation, low_conf, gscore
     except Exception as e:
         logger.warning(f"Gemini audio eval failed [{item_type}/{mode}]: {e}")

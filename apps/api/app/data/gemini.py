@@ -42,6 +42,10 @@ GEMINI_GUIDANCE_FALLBACK_API_KEYS = _split_keys("GEMINI_GUIDANCE_FALLBACK_API_KE
 # Gemini API Configuration. Keep this env-driven so local and Render deployments
 # can pin a released multimodal model without code changes.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+# Best model for AUDIO analysis (the drop-test gold check). Pro reasons over the
+# actual waveform far better than flash, which just parroted the reference numbers.
+# Env-overridable so the deployment can pin whatever Pro model its key can access.
+GEMINI_AUDIO_MODEL = os.getenv("GEMINI_AUDIO_MODEL", "gemini-2.5-pro").strip() or "gemini-2.5-pro"
 GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1beta").strip() or "v1beta"
 GEMINI_THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "minimal").strip() or "minimal"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
@@ -134,16 +138,25 @@ async def _gemini_request(
     retry_count: int = 0,
     api_keys: Optional[list[str]] = None,
     max_retries: int = 3,
+    model: Optional[str] = None,
 ) -> tuple[dict, bool]:
     """
     Make a Gemini API request with fallback to other API keys and retries.
     Returns (response_data, success).
+
+    `model` overrides the default GEMINI_MODEL for this call only (e.g. a Pro model
+    for audio analysis) — the request URL is built per-call when it is set.
     """
     keys = api_keys if api_keys is not None else GEMINI_GUIDANCE_FALLBACK_API_KEYS
     if attempt >= len(keys):
         return {"error": "all_keys_failed"}, False
 
     current_key = keys[attempt]
+    effective_model = model or GEMINI_MODEL
+    req_url = (
+        f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{effective_model}:generateContent"
+        if model else GEMINI_API_URL
+    )
     
     # REST v1 accepts proto-style snake_case; v1beta accepts camelCase.
     # Normalize in one place so route code can use the familiar Gemini SDK names.
@@ -154,7 +167,7 @@ async def _gemini_request(
         max_tokens = gc.get("maxOutputTokens") or gc.get("max_output_tokens")
         response_mime = gc.get("responseMimeType") or gc.get("response_mime_type")
         thinking = gc.get("thinkingConfig") or gc.get("thinking_config")
-        if not thinking and GEMINI_MODEL.startswith("gemini-3"):
+        if not thinking and effective_model.startswith("gemini-3"):
             thinking = {"thinkingLevel": GEMINI_THINKING_LEVEL}
 
         if GEMINI_API_VERSION == "v1":
@@ -206,7 +219,7 @@ async def _gemini_request(
     try:
         session = await _get_session()
         async with session.post(
-            f"{GEMINI_API_URL}?key={current_key}",
+            f"{req_url}?key={current_key}",
             json=payload,
             timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
@@ -226,25 +239,25 @@ async def _gemini_request(
                     wait_time = (2 ** retry_count) * 2
                     logger.warning(f"Gemini API {resp.status} (key #{attempt+1}), retrying in {wait_time}s... Error: {body[:200]}")
                     await asyncio.sleep(wait_time)
-                    return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys, max_retries)
-                
+                    return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys, max_retries, model)
+
                 logger.warning(f"Gemini API {resp.status} exhausted for key #{attempt+1}, trying next key")
-                return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
-            
+                return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries, model)
+
             else:
                 logger.error(f"Gemini API Critical Error {resp.status} (key #{attempt+1}): {body[:500]}")
                 # Fallback to next key on any failure
-                return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
+                return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries, model)
 
     except asyncio.TimeoutError:
         if retry_count < 1:
-             return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys, max_retries)
+             return await _gemini_request(payload, timeout, attempt, retry_count + 1, keys, max_retries, model)
         logger.warning(f"Gemini API timeout with key #{attempt+1}, trying next key")
-        return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
+        return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries, model)
     except Exception as e:
         logger.error(f"Gemini client-side exception with key #{attempt+1}: {str(e)}")
         # Try next key if possible
-        return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries)
+        return await _gemini_request(payload, timeout, attempt + 1, 0, keys, max_retries, model)
 
 
 async def analyze_audio_gold_detection(
