@@ -49,7 +49,12 @@ GROQ_PRIMARY_API_KEYS = _split_keys("GROQ_PRIMARY_API_KEY_1", "GROQ_PRIMARY_API_
 GROQ_GUIDANCE_API_KEYS = _split_keys("GROQ_GUIDANCE_API_KEY", "GROQ_API_KEY")
 GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_KEY", "GROQ_API_KEY")
 
-COMPARE_FRAME_TYPES = {"top", "45deg", "side", "macro", "hallmark", "huid", "closeup", "selfie", "video"}
+# Frame types that get same-item comparison against the reference (45° / top) view.
+# "hallmark" is intentionally EXCLUDED: it is an extreme close-up of the BIS stamp
+# that looks nothing like the 45°/full-item reference, so comparing them produced
+# false "different item" mismatches. Quality of the hallmark image is still
+# evaluated — it just isn't cross-view compared. selfie/video stay compared.
+COMPARE_FRAME_TYPES = {"top", "45deg", "side", "macro", "huid", "closeup", "selfie", "video"}
 LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup", "selfie"}
 ANGLE_VARIANT_FRAME_TYPES = {"45deg", "side"}
 _IMAGE_BYTES_CACHE: dict[str, tuple[float, bytes]] = {}
