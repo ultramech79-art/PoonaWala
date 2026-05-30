@@ -102,11 +102,7 @@ export function Profile() {
   return (
     <div className="page bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30 animate-slide-up">
       <div className="page-header">
-        <button onClick={() => {
-          const from = (location.state as { from?: string } | null)?.from
-          if (from && from !== '/profile') navigate(from)
-          else navigate(-1)
-        }} className="btn-icon">
+        <button onClick={() => navigate(-1)} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
         <span className="text-sm font-semibold text-stone-700">Profile</span>

@@ -111,32 +111,37 @@ async def upload_asset(
         raise HTTPException(status_code=413, detail="image is larger than 8MB")
 
     meta = image_metadata(raw)
-    upload = await upload_image_bytes(
+    meta = image_metadata(raw)
+    
+    from app.data.capture_assets import _upload_object
+    ts = int(time.time() * 1000)
+    storage_path = f"users/{user.id}/sessions/{session_id or 'unknown'}/{ts}_{asset_kind}.jpg"
+    
+    upload = await _upload_object(
         raw,
-        user_id=user.id,
-        session_id=session_id,
-        asset_kind=asset_kind,
+        storage_path=storage_path,
         content_type=content_type,
     )
+    if upload.get("error"):
+        raise HTTPException(status_code=500, detail=f"Upload failed: {upload.get('error')}")
 
     asset = UserAsset(
         user_id=user.id,
         session_id=session_id,
         asset_kind=asset_kind,
         frame_type=frame_type,
-        source="cloudinary",
-        cloudinary_public_id=upload.get("public_id"),
-        public_url=upload.get("secure_url") or upload.get("url"),
+        source="supabase" if "supabase" in (upload.get("public_url") or "") else "cloudinary",
+        cloudinary_public_id=upload.get("storage_path"),
+        public_url=upload.get("public_url"),
         content_sha256=meta.sha256,
         content_type=content_type,
         size_bytes=len(raw),
-        width_px=meta.width_px or upload.get("width"),
-        height_px=meta.height_px or upload.get("height"),
+        width_px=meta.width_px,
+        height_px=meta.height_px,
         metadata_json=json.dumps(
             {
                 "original_filename": file.filename,
-                "format": upload.get("format"),
-                "resource_type": upload.get("resource_type"),
+                "storage_enabled": upload.get("storage_enabled"),
             }
         ),
     )

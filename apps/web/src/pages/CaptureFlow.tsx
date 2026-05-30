@@ -107,8 +107,17 @@ export function CaptureFlow() {
     t('step_label_selfie'), t('step_label_hallmark'),
   ]
 
-  const [stepIdx, setStepIdx] = useState(0)
-  const [captured, setCaptured] = useState<Set<number>>(new Set())
+  const getInitialStep = () => {
+    for (let i = 0; i < STEPS.length; i++) {
+      if (!state.captures[STEPS[i].type]) return i
+    }
+    return STEPS.length - 1
+  }
+
+  const [stepIdx, setStepIdx] = useState(getInitialStep)
+  const [captured, setCaptured] = useState<Set<number>>(new Set(
+    STEPS.map((s, i) => state.captures[s.type] ? i : -1).filter(i => i !== -1)
+  ))
   const [evals, setEvals] = useState<Record<number, StepEval>>({})
   const [cameraKey, setCameraKey] = useState(0)
   const [showDemo, setShowDemo] = useState(false)
