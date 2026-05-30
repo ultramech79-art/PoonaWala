@@ -25,6 +25,14 @@ def _supabase_configured() -> bool:
     return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 
 
+def _cloudinary_configured() -> bool:
+    return bool(
+        os.getenv("CLOUDINARY_CLOUD_NAME")
+        and os.getenv("CLOUDINARY_API_KEY")
+        and os.getenv("CLOUDINARY_API_SECRET")
+    )
+
+
 def _bucket() -> str:
     return os.getenv("SUPABASE_STORAGE_BUCKET", "jewelry-captures").strip() or "jewelry-captures"
 
@@ -131,6 +139,49 @@ async def _upload_to_supabase(raw: bytes, storage_path: str, content_type: str) 
         }
 
 
+async def _upload_to_cloudinary(raw: bytes, storage_path: str, content_type: str) -> dict:
+    if not _cloudinary_configured():
+        return {
+            "storage_enabled": False,
+            "storage_path": None,
+            "public_url": None,
+            "error": "cloudinary_env_missing",
+        }
+    try:
+        from app.data.cloudinary_storage import upload_image_bytes
+
+        parts = storage_path.split("/")
+        session_id = parts[1] if len(parts) > 1 else "unknown"
+        uploaded = await upload_image_bytes(
+            raw,
+            user_id="session-captures",
+            session_id=session_id,
+            asset_kind=parts[-1].rsplit(".", 1)[0],
+            content_type=content_type,
+        )
+        return {
+            "storage_enabled": True,
+            "storage_path": uploaded.get("public_id"),
+            "public_url": uploaded.get("secure_url") or uploaded.get("url"),
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "storage_enabled": True,
+            "storage_path": None,
+            "public_url": None,
+            "error": str(exc),
+        }
+
+
+async def _upload_object(raw: bytes, storage_path: str, content_type: str) -> dict:
+    if _cloudinary_configured():
+        uploaded = await _upload_to_cloudinary(raw, storage_path, content_type)
+        if not uploaded.get("error"):
+            return uploaded
+    return await _upload_to_supabase(raw, storage_path, content_type)
+
+
 async def store_capture_asset(
     session_id: Optional[str],
     frame_type: str,
@@ -148,7 +199,7 @@ async def store_capture_asset(
     meta = _image_metadata(raw)
     ts = int(time.time() * 1000)
     storage_path = f"sessions/{session_id}/{ts}_{_safe_frame_type(frame_type)}.jpg"
-    upload = await _upload_to_supabase(raw, storage_path, content_type)
+    upload = await _upload_object(raw, storage_path, content_type)
     stored_path = upload.get("storage_path") if upload.get("storage_enabled") and not upload.get("error") else None
 
     asset = ImageAsset(

@@ -1,7 +1,7 @@
 import { Suspense, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Spline from '@splinetool/react-spline'
-import { Loader2, Zap, Shield, Clock, Home as HomeIcon, ArrowRight } from 'lucide-react'
+import { Loader2, Zap, Shield, Clock, Home as HomeIcon, ArrowRight, UserRound } from 'lucide-react'
 import { useSessionStore } from '../store/session'
 import i18n from '../i18n'
 import { useTranslation } from 'react-i18next'
@@ -84,6 +84,11 @@ export function Home() {
             <img src="/assets/poonawala-logo.png" alt="Poonawala" className="w-8 h-8" />
             <p className="text-xs font-display font-bold text-stone-900">Poonawalla</p>
           </div>
+          {state.authToken && (
+            <button onClick={() => navigate('/profile', { state: { from: '/' } })} className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center shadow-sm">
+              <UserRound className="w-4 h-4 text-stone-600" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -191,6 +196,14 @@ export function Home() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+          {!state.authToken && (
+            <button
+              onClick={() => navigate('/auth?mode=login')}
+              className="mt-3 text-sm font-bold text-brand-700 underline underline-offset-4"
+            >
+              {state.lang === 'hi' ? 'लॉगिन करें' : 'Login'}
+            </button>
+          )}
 
           <p
             className="mt-5 text-[8px] font-bold bg-gradient-to-r from-stone-400 to-stone-500 bg-clip-text text-transparent uppercase tracking-[0.15em] opacity-70 animate-fade-in"

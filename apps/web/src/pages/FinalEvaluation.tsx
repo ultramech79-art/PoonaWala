@@ -9,6 +9,7 @@ import { getCibilTierKey, getCibilTierInfo } from '../lib/roiEngine'
 import { validatePAN, getPANKYCStatus, deriveScoreFromPAN } from '../lib/panEngine'
 import { apiBase } from '../lib/api'
 import loanParams from '../data/loan_params.json'
+import regionsData from '../data/regions.json'
 import {
   ChevronRight, ChevronDown, ChevronUp, MapPin,
   ArrowRight, CheckCircle, AlertTriangle, Info, Shield, CreditCard, Loader,
@@ -42,8 +43,17 @@ export function FinalEvaluation() {
     return null
   }
 
+  const defaultStateName = useMemo(() => {
+    const code = state.userProfile?.region_code
+    if (!code) return ''
+    const match = loanParams.rbi_rules ? undefined : undefined // dummy check
+    const states = (regionsData as any).states
+    const s = states.find((x: any) => x.code === code)
+    return s?.name || ''
+  }, [state.userProfile?.region_code])
+
   // ── Location state ──────────────────────────────────────────────────────────
-  const [selectedState, setSelectedState] = useState('')
+  const [selectedState, setSelectedState] = useState(defaultStateName)
   const [selectedCity, setSelectedCity]   = useState('')
   const allStates = useMemo(() => getAllStates(), [])
   const cities    = useMemo(() => selectedState ? getCitiesForState(selectedState) : [], [selectedState])

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
@@ -11,7 +11,7 @@ import {
   Scale,
   Sparkles,
 } from 'lucide-react'
-import { estimateWeightAPI, type GoldKarat, type JewelryType, type WeightEstimateResult } from '../lib/api'
+import { estimateWeightAPI, urlToDataUrl, type GoldKarat, type JewelryType, type WeightEstimateResult } from '../lib/api'
 import { useSessionStore } from '../store/session'
 
 const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
@@ -89,18 +89,79 @@ function Visualization({ title, src }: { title: string; src: string }) {
 
 export function WeightEntry() {
   const navigate = useNavigate()
-  const { setWeight } = useSessionStore()
+  const { setWeight, state } = useSessionStore()
   const [topImageDataUrl, setTopImageDataUrl] = useState<string | null>(null)
   const [angleImageDataUrl, setAngleImageDataUrl] = useState<string | null>(null)
   const [sideImageDataUrl, setSideImageDataUrl] = useState<string | null>(null)
   const [fileNames, setFileNames] = useState({ top: '', angle: '', side: '' })
   const [jewelryType, setJewelryType] = useState<JewelryType>('auto')
-  const [karat, setKarat] = useState<GoldKarat>(22)
+  const [karat, setKarat] = useState<GoldKarat>((state.scannedKarat as GoldKarat) || 22)
   const [dragActive, setDragActive] = useState<'top' | 'angle' | 'side' | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<WeightEstimateResult | null>(null)
   const [jewelryPoint, setJewelryPoint] = useState<{ x: number; y: number } | null>(null)
+
+  // Auto-populate from CaptureFlow captures (top, 45deg, side)
+  useEffect(() => {
+    const captures = state.captures
+    let mounted = true
+
+    async function prefill() {
+      // Top view
+      if (captures.top?.dataUrl && !topImageDataUrl) {
+        const du = captures.top.dataUrl
+        if (du.startsWith('data:')) {
+          setTopImageDataUrl(du)
+          setFileNames(prev => ({ ...prev, top: 'capture_top.jpg' }))
+        } else {
+          try {
+            const converted = await urlToDataUrl(du)
+            if (mounted) {
+              setTopImageDataUrl(converted)
+              setFileNames(prev => ({ ...prev, top: 'capture_top.jpg' }))
+            }
+          } catch { /* user can upload manually */ }
+        }
+      }
+      // 45-degree view
+      if (captures['45deg']?.dataUrl && !angleImageDataUrl) {
+        const du = captures['45deg'].dataUrl
+        if (du.startsWith('data:')) {
+          setAngleImageDataUrl(du)
+          setFileNames(prev => ({ ...prev, angle: 'capture_45deg.jpg' }))
+        } else {
+          try {
+            const converted = await urlToDataUrl(du)
+            if (mounted) {
+              setAngleImageDataUrl(converted)
+              setFileNames(prev => ({ ...prev, angle: 'capture_45deg.jpg' }))
+            }
+          } catch { /* user can upload manually */ }
+        }
+      }
+      // Side view
+      if (captures.side?.dataUrl && !sideImageDataUrl) {
+        const du = captures.side.dataUrl
+        if (du.startsWith('data:')) {
+          setSideImageDataUrl(du)
+          setFileNames(prev => ({ ...prev, side: 'capture_side.jpg' }))
+        } else {
+          try {
+            const converted = await urlToDataUrl(du)
+            if (mounted) {
+              setSideImageDataUrl(converted)
+              setFileNames(prev => ({ ...prev, side: 'capture_side.jpg' }))
+            }
+          } catch { /* user can upload manually */ }
+        }
+      }
+    }
+
+    prefill()
+
+    return () => { mounted = false }
+  }, [state.captures, topImageDataUrl, angleImageDataUrl, sideImageDataUrl])
 
   const confidencePct = useMemo(() => Math.round((result?.confidence.score ?? 0) * 100), [result])
 
@@ -143,6 +204,11 @@ export function WeightEntry() {
     navigate('/processing')
   }
 
+  function skipWeightEstimate() {
+    setWeight(null)
+    navigate('/processing')
+  }
+
   function UploadSlot({
     slot,
     title,
@@ -158,21 +224,8 @@ export function WeightEntry() {
   }) {
     const isTop = slot === 'top'
     return (
-      <label
-        onDragOver={(event) => {
-          event.preventDefault()
-          setDragActive(slot)
-        }}
-        onDragLeave={() => setDragActive(null)}
-        onDrop={(event) => {
-          event.preventDefault()
-          setDragActive(null)
-          loadFile(slot, event.dataTransfer.files[0])
-        }}
-        className={[
-          'flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-white px-4 py-5 text-center transition',
-          dragActive === slot ? 'border-brand-500 bg-brand-50' : 'border-stone-200 hover:border-gold-300',
-        ].join(' ')}
+      <div
+        className="flex min-h-40 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-200 bg-white px-4 py-5 text-center"
       >
         {src ? (
           <div
@@ -197,26 +250,25 @@ export function WeightEntry() {
           </div>
         ) : (
           <>
-            <ImageUp className="mb-3 h-8 w-8 text-gold-700" />
-            <p className="text-sm font-bold text-stone-900">{title}</p>
-            <p className="mt-1 max-w-xs text-xs leading-relaxed text-stone-500">{hint}</p>
+            <ImageUp className="mb-3 h-8 w-8 text-stone-300" />
+            <p className="text-sm font-bold text-stone-400">Not Captured</p>
+            <p className="mt-1 max-w-xs text-xs leading-relaxed text-stone-400">This view was skipped during capture.</p>
           </>
         )}
-        <input type="file" accept="image/*" className="hidden" onChange={(event) => loadFile(slot, event.target.files?.[0])} />
-        {fileName && (
+        {fileName && src && (
           <div className="mt-3 flex max-w-full items-center gap-2 text-xs text-stone-500">
             <FileImage className="h-4 w-4 flex-shrink-0" />
             <span className="truncate">{fileName}</span>
           </div>
         )}
-      </label>
+      </div>
     )
   }
 
   return (
     <div className="page animate-slide-up">
       <div className="page-header">
-        <button id="weight-back" onClick={() => navigate('/video-eval')} className="btn-icon">
+        <button id="weight-back" onClick={() => navigate('/certificate-scan')} className="btn-icon">
           <ChevronRight className="h-5 w-5 rotate-180 text-stone-500" />
         </button>
         <span className="text-sm font-semibold text-stone-700">AI Weight Estimate</span>
@@ -230,10 +282,18 @@ export function WeightEntry() {
               <Scale className="h-6 w-6 text-gold-700" />
             </div>
             <div>
-              <h1 className="font-display text-xl font-bold text-stone-950">Estimate from three views</h1>
-              <p className="text-xs leading-relaxed text-stone-500">Top, 45-degree, and side photos are required. Keep the Rs 10 coin visible in each.</p>
+              <h1 className="font-display text-xl font-bold text-stone-950">Optional weight estimate</h1>
+              <p className="text-xs leading-relaxed text-stone-500">Use top, 45-degree, and side photos for a better estimate, or skip and continue with visual/certificate evidence.</p>
             </div>
           </div>
+
+          {/* Auto-populated notice */}
+          {(fileNames.top === 'capture_top.jpg' || fileNames.angle === 'capture_45deg.jpg' || fileNames.side === 'capture_side.jpg') && (
+            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Images pre-filled from your capture session. You can replace any by tapping.
+            </div>
+          )}
 
           <div className="space-y-3">
             <UploadSlot
@@ -390,6 +450,10 @@ export function WeightEntry() {
         </button>
         <button onClick={continueFlow} disabled={!result} className="btn-secondary w-full text-sm disabled:opacity-50">
           Continue with estimate
+          <ArrowRight className="h-5 w-5" />
+        </button>
+        <button onClick={skipWeightEstimate} disabled={loading} className="btn-secondary w-full text-sm disabled:opacity-50">
+          Skip weight estimate
           <ArrowRight className="h-5 w-5" />
         </button>
       </div>

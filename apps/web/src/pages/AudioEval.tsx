@@ -654,7 +654,7 @@ export function AudioEval() {
                   <p className="text-xs font-semibold text-emerald-700">Acoustic test complete — next: Bill scan</p>
                 </div>
                 <button onClick={() => navigate('/certificate-scan')} className="w-full btn-primary">
-                  Continue to Weight Entry <ChevronRight className="w-5 h-5" />
+                  Continue to Bill Scan <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
 
