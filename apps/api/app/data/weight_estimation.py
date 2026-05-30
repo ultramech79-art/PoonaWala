@@ -141,14 +141,22 @@ def _validate_quality(q: ImageQuality) -> list[str]:
 
 
 def _detect_rs10_coin(img: np.ndarray) -> CoinDetection:
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h0, w0 = img.shape[:2]
+    detect_scale = min(1.0, 640.0 / float(max(h0, w0)))
+    work = img if detect_scale >= 0.999 else cv2.resize(
+        img,
+        (max(1, int(round(w0 * detect_scale))), max(1, int(round(h0 * detect_scale)))),
+        interpolation=cv2.INTER_AREA,
+    )
+    gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
+    hsv = cv2.cvtColor(work, cv2.COLOR_BGR2HSV)
     gray = cv2.equalizeHist(gray)
     gray = cv2.medianBlur(gray, 5)
     h, w = gray.shape[:2]
     min_side = min(h, w)
     found: list[np.ndarray] = []
-    for param2 in (34, 28, 22, 16):
+    edge = cv2.Canny(gray, 80, 160)
+    for param2 in (32, 24, 18):
         circles = cv2.HoughCircles(
             gray,
             cv2.HOUGH_GRADIENT,
@@ -181,14 +189,20 @@ def _detect_rs10_coin(img: np.ndarray) -> CoinDetection:
         if inside.size < 50:
             continue
         sat_inside = hsv[:, :, 1][circle_mask > 0]
-        edge = cv2.Canny(gray, 80, 160)
         edge_support = float(np.mean(edge[ring_mask > 0] > 0)) if np.any(ring_mask > 0) else 0.0
         texture = min(1.0, float(np.std(inside)) / 70.0)
         neutral_metal = max(0.0, min(1.0, 1.0 - float(np.mean(sat_inside)) / 95.0))
         size_prior = 1.0 - min(1.0, abs((2 * radius / min_side) - 0.14) / 0.22)
         score = 0.34 * edge_support + 0.22 * texture + 0.22 * size_prior + 0.22 * neutral_metal
         if score > best_score:
-            best = CoinDetection((int(cx), int(cy)), float(radius), max(0.2, min(0.98, score)))
+            if detect_scale < 0.999:
+                inv = 1.0 / detect_scale
+                center = (int(round(cx * inv)), int(round(cy * inv)))
+                scaled_radius = float(radius) * inv
+            else:
+                center = (int(cx), int(cy))
+                scaled_radius = float(radius)
+            best = CoinDetection(center, scaled_radius, max(0.2, min(0.98, score)))
             best_score = score
 
     if best is None:
@@ -196,7 +210,11 @@ def _detect_rs10_coin(img: np.ndarray) -> CoinDetection:
             "reference_object_missing",
             "Could not localize the Rs 10 coin. Use a flat coin fully visible in the frame.",
         )
-    best = _refine_rs10_outer_coin_radius(img, gray, hsv, best)
+    full_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    full_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    full_gray = cv2.equalizeHist(full_gray)
+    full_gray = cv2.medianBlur(full_gray, 5)
+    best = _refine_rs10_outer_coin_radius(img, full_gray, full_hsv, best)
     if best.confidence < 0.42:
         raise WeightEstimationError(
             "reference_object_missing",
