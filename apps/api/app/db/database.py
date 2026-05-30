@@ -10,6 +10,11 @@ if _raw_url.startswith("postgres://"):
     _raw_url = _raw_url.replace("postgres://", "postgresql+psycopg://", 1)
 elif _raw_url.startswith("postgresql://") and "+psycopg" not in _raw_url:
     _raw_url = _raw_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
+# Supabase direct connections (5432) resolve to IPv6, which often fails in Docker/Render. Use pooler (6543).
+if ".supabase.co:5432" in _raw_url:
+    _raw_url = _raw_url.replace(".supabase.co:5432", ".supabase.co:6543")
+
 DATABASE_URL = _raw_url
 
 # SQLite async driver needs different connection args than Postgres
