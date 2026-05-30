@@ -51,8 +51,8 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
   }, [onDismiss, stepType])
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-stone-900/40 backdrop-blur-xl animate-backdrop-fade">
-      <div className="w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] border-t border-white/50 overflow-hidden animate-spring-up pb-safe relative">
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-stone-900/40 backdrop-blur-xl">
+      <div className="w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] border-t border-white/50 overflow-hidden pb-safe relative">
         {/* Pull handle */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300/60 rounded-full" />
         

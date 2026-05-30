@@ -294,6 +294,9 @@ export function FloatingAssistant() {
     recognition.start()
   }
 
+  const showAssistant = ['/', '/language', '/auth', '/profile', '/welcome', '/consent', '/otp', '/setup'].includes(location.pathname)
+  if (!showAssistant) return null
+
   if (!open) {
     return (
       <button
