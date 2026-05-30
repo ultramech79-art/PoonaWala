@@ -168,6 +168,13 @@ def _invalid_response(reason: str, mode: str = "tap") -> AudioEvalResponse:
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
+# Weighted result = physics signal-processing + Gemini perceptual audio judgment.
+# Both look at the same thing (resonant ring vs dead thud) from different angles;
+# blending them is more robust than either alone, especially for light rings where
+# the physics decay is weak but Gemini can still hear a clear ringing tone.
+PHYS_WEIGHT   = 0.5
+GEMINI_WEIGHT = 0.5
+
 _ORNAMENT_RANGES = {
     "ring":     {"decay_lo": 60,  "decay_hi": 300, "centroid_lo": 400, "centroid_hi": 1000},
     "bangle":   {"decay_lo": 100, "decay_hi": 600, "centroid_lo": 200, "centroid_hi": 600},
@@ -200,37 +207,40 @@ def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[
     classifier, which could not generalise to new recordings and was the source of
     the wild score swings.
     """
-    decay_ms   = physics["decay_ms"]
-    gold_ratio = physics["gold_ratio"]
-    decay_r2   = physics["decay_r2"]
-    snr_db     = physics.get("snr_db", 30.0)
-
-    clean = decay_r2 >= 0.55          # clean exponential ring-down (single material)
+    # Use the RESONANT ring-down (what the ear hears), not full-band decay_ms which
+    # is dominated by room noise and pegs at 3000ms. res_decay = how long the
+    # ringing tone persists after the impact; res_tonality = is there a clear tone
+    # at all. Gold sustains a clear ring; base metal / wood-damped thuds die fast.
+    res_decay = physics.get("res_decay_ms", 0.0)
+    tonality  = physics.get("res_tonality", 0.0)
+    snr_db    = physics.get("snr_db", 30.0)
     reasons: list[str] = []
 
-    if decay_ms >= 1200:
-        score = 88
-        reasons.append(f"Long sustained metallic ring {decay_ms:.0f}ms — solid-gold-like resonance")
-    elif decay_ms >= 250 and clean:
-        score = 82
-        reasons.append(f"Clean sustained ring {decay_ms:.0f}ms (R²={decay_r2:.2f}) — gold-like")
-    elif decay_ms >= 250:
-        score = 72
-        reasons.append(f"Sustained ring {decay_ms:.0f}ms — gold-like (decay envelope a little noisy)")
-    elif decay_ms >= 120 and clean:
-        score = 64
-        reasons.append(f"Short but clean ring {decay_ms:.0f}ms (R²={decay_r2:.2f}) — borderline")
-    elif decay_ms >= 120:
+    if res_decay >= 600:
+        score = 90
+        reasons.append(f"Long resonant ring {res_decay:.0f}ms — sustained gold-like tone")
+    elif res_decay >= 300:
+        score = 76
+        reasons.append(f"Sustained resonant ring {res_decay:.0f}ms")
+    elif res_decay >= 150:
+        score = 60
+        reasons.append(f"Moderate resonant ring {res_decay:.0f}ms — borderline")
+    elif res_decay >= 70:
         score = 45
-        reasons.append(f"Short ring {decay_ms:.0f}ms — mixed evidence")
+        reasons.append(f"Short resonant ring {res_decay:.0f}ms — fades quickly")
     else:
-        score = 26
-        reasons.append(f"Dead / instantly-damped strike {decay_ms:.0f}ms — base-metal-like")
+        score = 30
+        reasons.append(f"Dead thud {res_decay:.0f}ms — little sustained resonance (base-metal-like)")
 
-    # Small nudges (kept small so they cannot flip the verdict)
-    if gold_ratio >= 0.20:
-        score += 4
-        reasons.append(f"Strong dense-metal band energy {gold_ratio:.0%}")
+    # Resonance presence: a clear ringing tone (echo) raises gold confidence; a
+    # broadband thud with no tone lowers it.
+    if tonality >= 0.25:
+        score += 8
+        reasons.append(f"Clear ringing tone present ({tonality:.0%} resonant energy)")
+    elif tonality < 0.05:
+        score -= 8
+        reasons.append(f"No clear ringing tone ({tonality:.0%}) — broadband thud")
+
     if snr_db < 15:
         score -= 6
         reasons.append(f"Low SNR {snr_db:.0f}dB — recording quality reduces certainty")
@@ -317,62 +327,55 @@ def _verdict_and_confidence(score: int, mode: str, item_type: str, low_conf_flag
     return verdict, conf
 
 
-# ── Gemini explanation (explanation only, never affects score) ────────────────
+# ── Gemini audio evaluation (LISTENS to the clip, contributes to the score) ───
 
-async def _gemini_explain(
-    arr: np.ndarray, sr: int, physics: dict, score: int,
+async def _gemini_audio_eval(
+    arr: np.ndarray, sr: int, physics: dict, phys_score: int,
     item_type: str, mode: str, lang: str,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, Optional[int]]:
     """
-    Ask Gemini to explain the measured parameters in plain language.
-    Returns (explanation_text, low_confidence_flag).
-    On any failure, returns a templated explanation — score is unaffected.
+    Gemini actually LISTENS to the drop recording and rates gold likelihood.
+
+    It is told to: locate the first impact, then judge the DECAY and whether a
+    sustained resonant/ringing tone (an "echo" that lingers) follows — solid gold
+    rings; base metal / plated / wood-damped pieces thud and die fast.
+
+    Returns (explanation, low_confidence_flag, gemini_gold_score 0-100 | None).
+    The gemini_gold_score is blended with the physics score by the caller (weighted
+    result). On any failure returns (templated_text, False, None) → physics-only.
     """
     if not GEMINI_AUDIO_VIDEO_API_KEYS:
-        return _templated_explanation(physics, score, item_type, mode), False
+        return _templated_explanation(physics, phys_score, item_type, mode), False, None
 
     lang_out = "Hindi (Devanagari)" if lang == "hi" else "English"
     try:
         wav_b64 = base64.b64encode(_float32_to_wav(arr, sr)).decode()
 
-        # Mode-specific context: critical because Gemini's prior for gold is
-        # free-air ring (1–3 seconds). Phone recordings on glass are much shorter.
-        # Without this context Gemini calls 120–300ms "extremely short" which is WRONG.
-        if mode == "drop":
-            mode_ctx = (
-                "DROP TEST — phone recording on glass surface:\n"
-                "  Real solid gold (2–15g jewelry): decay 100–2000 ms depending on mass.\n"
-                "  Imitation/plated (brass, zinc): decay 50–160 ms — shorter, more damped.\n"
-                "  Gold internal damping = 3e-4 (very low) → LONGER ring. Brass 3–10× higher.\n"
-                "  LONGER decay = more gold-like. High-freq ratio 60–90% is NORMAL on glass.\n"
-                "  Do NOT call a decay of 100–500 ms 'short' — it is typical for phone tests.\n"
-            )
-        else:
-            mode_ctx = (
-                "TAP TEST — phone held near ornament:\n"
-                "  Gold-band energy >15% and decay >80 ms favour real gold.\n"
-                "  High-freq ratio 60–90% is normal for glass surface — not an indicator.\n"
-            )
-
         prompt = (
-            f"You are an acoustic-analysis assistant for jewelry authentication. "
-            f"A separate physics classifier scored this {item_type} at {score}/100. "
-            f"You ONLY explain the measured parameters — you do NOT change the score.\n\n"
-            f"{mode_ctx}\n"
-            f"Measured parameters:\n"
-            f"  Decay time: {physics['decay_ms']:.0f} ms\n"
-            f"  Dominant freq: {physics['dom_freq_hz']:.0f} Hz\n"
-            f"  Spectral centroid: {physics['centroid_hz']:.0f} Hz\n"
-            f"  Gold-band energy: {physics['gold_ratio']:.0%}\n"
-            f"  High-freq ratio: {physics['hf_ratio']:.0%}\n"
-            f"  Decay R²: {physics['decay_r2']:.2f}\n"
-            f"  SNR: {physics['snr_db']:.0f} dB\n\n"
-            f"In 2–3 sentences ({lang_out}), explain what these parameters suggest. "
-            f"Set low_confidence to true ONLY for genuine signal quality problems: "
-            f"SNR < 20 dB, or no clear impact detected. "
-            f"Do NOT set low_confidence based on physics interpretation — the classifier handles that.\n"
-            f"Respond ONLY with JSON: "
-            '{"explanation": "<text>", "low_confidence": true/false}'
+            "You are an expert acoustic gold authenticator. You are given a DROP-TEST "
+            "recording: the jewellery item was dropped once on a hard surface.\n\n"
+            "Analyse the SOUND ITSELF:\n"
+            "1. Find the first impact (the drop).\n"
+            "2. After that impact, judge the DECAY — how long does the ringing tone last "
+            "before it dies away?\n"
+            "3. Judge the RESONANCE — is there a clear, sustained, bell-like ringing/echoing "
+            "tone (a pitch that lingers), or just a short dull 'thud'?\n\n"
+            "Physics of the test:\n"
+            "  • Solid gold (and dense precious metal) rings with a CLEAR SUSTAINED TONE that "
+            "lingers/echoes after the impact → high gold likelihood.\n"
+            "  • Plated / hollow / base-metal (brass, zinc), or a piece that lands on a soft or "
+            "damping surface, makes a SHORT DEAD THUD with little or no sustained ring → low gold likelihood.\n"
+            "  • A small ring naturally rings shorter than a heavy bangle — weight the PRESENCE and "
+            "CLARITY of a resonant tone, not just absolute duration.\n\n"
+            f"Reference measurements from signal processing (item: {item_type}, mode: {mode}):\n"
+            f"  resonant ring-down: {physics.get('res_decay_ms', 0):.0f} ms\n"
+            f"  resonant tone energy: {physics.get('res_tonality', 0):.0%}\n"
+            f"  dominant frequency: {physics.get('res_f0_hz', physics.get('dom_freq_hz', 0)):.0f} Hz\n\n"
+            f"Rate the likelihood this is SOLID GOLD from 0 to 100 "
+            "(100 = clear sustained gold-like ring/echo, 0 = dead thud, no resonance). "
+            f"Then explain your reasoning in 2-3 sentences ({lang_out}). "
+            "Set low_confidence true ONLY for genuine signal problems (no clear impact, very noisy). "
+            'Respond ONLY with JSON: {"gold_score": 0-100, "explanation": "<text>", "low_confidence": true/false}'
         )
         payload = {
             "contents": [{"parts": [
@@ -386,10 +389,11 @@ async def _gemini_explain(
                 "responseSchema": {
                     "type": "OBJECT",
                     "properties": {
+                        "gold_score":      {"type": "INTEGER"},
                         "explanation":     {"type": "STRING"},
                         "low_confidence":  {"type": "BOOLEAN"},
                     },
-                    "required": ["explanation", "low_confidence"],
+                    "required": ["gold_score", "explanation", "low_confidence"],
                 },
             },
         }
@@ -398,13 +402,15 @@ async def _gemini_explain(
             g = parse_json_response(extract_gemini_text(data))
             explanation = str(g.get("explanation", "")).strip()
             low_conf    = bool(g.get("low_confidence", False))
+            gscore = g.get("gold_score")
+            gscore = max(0, min(100, int(gscore))) if gscore is not None else None
             if explanation:
-                logger.info(f"Gemini explanation ok [{item_type}/{mode}] model={GEMINI_MODEL}")
-                return explanation, low_conf
+                logger.info(f"Gemini audio eval ok [{item_type}/{mode}] gold_score={gscore} model={GEMINI_MODEL}")
+                return explanation, low_conf, gscore
     except Exception as e:
-        logger.warning(f"Gemini explanation failed [{item_type}/{mode}]: {e}")
+        logger.warning(f"Gemini audio eval failed [{item_type}/{mode}]: {e}")
 
-    return _templated_explanation(physics, score, item_type, mode), False
+    return _templated_explanation(physics, phys_score, item_type, mode), False, None
 
 
 def _templated_explanation(physics: dict, score: int, item_type: str, mode: str) -> str:
@@ -475,18 +481,28 @@ async def audio_eval(req: AudioEvalRequest):
     # The 33-clip classifier could not generalise to new recordings (the same ring
     # scored 16↔87 across drops), so scoring is the explainable _physics_score:
     # same input → same score, real gold reliably high. See _physics_score.
-    final_score, reasons = _physics_score(physics, item_type, mode)
-    score_source = "physics_rule"
+    phys_score, reasons = _physics_score(physics, item_type, mode)
     physics["_reasons"] = reasons
+
+    # ── Gemini LISTENS to the clip and rates gold likelihood (0-100) ───────────
+    explanation, low_conf, gemini_score = await _gemini_audio_eval(
+        arr, sr, physics, phys_score, item_type, mode, lang
+    )
+
+    # ── Weighted result: physics signal-processing + Gemini perceptual judgment ─
+    if gemini_score is not None:
+        final_score = int(round(PHYS_WEIGHT * phys_score + GEMINI_WEIGHT * gemini_score))
+        score_source = f"weighted(phys={phys_score}*{PHYS_WEIGHT:g}+gemini={gemini_score}*{GEMINI_WEIGHT:g})"
+    else:
+        final_score = phys_score
+        score_source = f"physics_only(phys={phys_score}; gemini_unavailable)"
+    final_score = max(3, min(97, final_score))
 
     logger.info(
         f"audio_eval [{item_type}/{mode}] source={score_source} score={final_score} "
-        f"decay={physics['decay_ms']}ms centroid={physics['centroid_hz']}Hz "
-        f"r2={physics['decay_r2']:.2f} snr={physics['snr_db']:.0f}dB"
+        f"res_decay={physics.get('res_decay_ms', 0)}ms tonality={physics.get('res_tonality', 0):.2f} "
+        f"full_decay={physics['decay_ms']}ms snr={physics['snr_db']:.0f}dB"
     )
-
-    # ── Gemini explanation (never blocks, never changes score) ─────────────────
-    explanation, low_conf = await _gemini_explain(arr, sr, physics, final_score, item_type, mode, lang)
 
     # ── Verdict + confidence ───────────────────────────────────────────────────
     verdict, confidence = _verdict_and_confidence(final_score, mode, item_type, low_conf)

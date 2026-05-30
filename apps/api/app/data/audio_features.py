@@ -145,6 +145,70 @@ def measure_decay(post: np.ndarray, sr: int, drop_db: float = 26.0) -> tuple:
     return decay_ms, tau_ms, r2, True
 
 
+def resonant_decay(arr: np.ndarray, sr: int) -> tuple:
+    """
+    Decay of the RESONANT ring (bandpass around the dominant mode) — what the ear
+    actually hears — NOT full-band energy.
+
+    Full-band Schroeder decay includes room reverb + background noise that never
+    decays, so it pegged at its 3000 ms ceiling for everything (real and fake, on
+    glass and on wood). This isolates the ringing tone: gold sustains a clear tone
+    (long resonant decay), base metal / plated / a ring on wood thuds and dies fast.
+
+    Returns (decay_ms, f0_hz, tonality):
+      decay_ms  — time for the resonant-band envelope to fall to 10 % (−20 dB) of
+                  its post-impact peak. Clamped to [0, 3000].
+      f0_hz     — dominant resonant frequency the ring-down was measured at.
+      tonality  — fraction of segment energy carried by that resonant band
+                  (the "is there a clear ringing tone at all?" indicator).
+    """
+    arr = arr.astype(np.float64)
+    arr = arr - float(np.mean(arr))
+    n = len(arr)
+    if n < int(sr * 0.06):
+        return 0.0, 0.0, 0.0
+
+    energy = arr ** 2
+    w = max(1, int(sr * 0.005))
+    sm = np.convolve(energy, np.ones(w) / w, mode="same")
+    pk = int(np.argmax(sm[:max(1, int(sr * 1.5))]))
+    seg = arr[pk:pk + int(sr * 2.0)]
+    if len(seg) < int(sr * 0.05):
+        return 0.0, 0.0, 0.0
+
+    # Dominant resonant frequency in the metallic range, from the first 120 ms.
+    hlen = min(len(seg), int(sr * 0.12))
+    head = seg[:hlen] * np.hanning(hlen)
+    spec = np.abs(np.fft.rfft(head))
+    fr = np.fft.rfftfreq(hlen, 1.0 / sr)
+    band = (fr >= 800) & (fr <= 9000)
+    if not band.any() or float(np.max(spec[band])) <= 0:
+        return 0.0, 0.0, 0.0
+    f0 = float(fr[band][int(np.argmax(spec[band]))])
+
+    lo = max(200.0, f0 / 1.13)
+    hi = min(sr / 2.0 - 100.0, f0 * 1.13)
+    if hi <= lo:
+        return 0.0, f0, 0.0
+    try:
+        sos = ss.butter(4, [lo, hi], btype="band", fs=sr, output="sos")
+        filt = ss.sosfiltfilt(sos, seg)
+        env = np.abs(ss.hilbert(filt))
+    except Exception:
+        return 0.0, f0, 0.0
+
+    ew = max(1, int(sr * 0.004))
+    env = np.convolve(env, np.ones(ew) / ew, mode="same")
+    pkidx = int(np.argmax(env[:max(1, int(sr * 0.05))]))
+    peak = float(env[pkidx]) or 1e-9
+    after = env[pkidx:]
+    below = np.where(after < 0.1 * peak)[0]
+    decay_ms = float((below[0] / sr * 1000.0) if len(below) else len(after) / sr * 1000.0)
+    decay_ms = float(np.clip(decay_ms, 0.0, 3000.0))
+    tonality = float(np.clip(np.sum(env ** 2) / (np.sum(seg ** 2) + 1e-12), 0.0, 1.0))
+    return decay_ms, f0, tonality
+
+
 def spectral_flatness(spectrum: np.ndarray) -> float:
     safe = np.maximum(spectrum, 1e-10)
     return float(np.clip(np.exp(np.mean(np.log(safe))) / (np.mean(safe) + 1e-10), 0.0, 1.0))
@@ -373,6 +437,13 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
         tau_ms = decay_ms_val
         decay_r2_val = min(decay_r2_val, 0.2)
 
+    # ── STEP 3b: Resonant ring-down (bandpass around dominant mode) ───────────
+    # This is the decay the EAR hears — the sustained ringing tone — as opposed to
+    # full-band Schroeder decay (decay_ms_val) which is dominated by room noise and
+    # pegs near the 3000ms ceiling. res_decay separates a sustained gold ring from a
+    # short base-metal thud; res_tonality says whether a clear ringing tone exists.
+    res_decay_ms, res_f0_hz, res_tonality = resonant_decay(arr, sr)
+
     # ── STEP 4: Spectral metrics ────────────────────────────────────────────
     ANALYSIS_HZ_MAX = 8000.0
     analysis_mask = (freqs >= 120) & (freqs <= ANALYSIS_HZ_MAX)
@@ -408,6 +479,9 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
     return {
         "decay_ms":     round(decay_ms_val, 1),
         "tau_ms":       round(tau_ms, 1),       # exponential time constant (primary drop discriminator)
+        "res_decay_ms": round(res_decay_ms, 1), # resonant ring-down (what the ear hears) — primary
+        "res_f0_hz":    round(res_f0_hz, 1),    # frequency the resonant decay was measured at
+        "res_tonality": round(res_tonality, 4), # fraction of energy in the resonant band (ring present?)
         "dom_freq_hz":  round(dom_freq, 1),
         "centroid_hz":  round(centroid, 1),
         "gold_ratio":   round(gold_ratio, 4),
