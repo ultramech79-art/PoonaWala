@@ -160,6 +160,7 @@ export function CaptureFlow() {
         sessionId,
         referenceFrameType,
         referenceImageDataUrl,
+        language: localStorage.getItem('goldeye_lang') || 'en',
       }
 
       let result;
@@ -669,7 +670,11 @@ export function CaptureFlow() {
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-emerald-700">{currentEval.result.feedback}</p>
+                  <p className="text-sm font-medium text-emerald-700">
+                    {currentEval.result.feedback.split(/\*\*(.*?)\*\*/g).map((part, i) =>
+                      i % 2 === 1 ? <strong key={i} className="font-bold">{part}</strong> : <span key={i}>{part}</span>
+                    )}
+                  </p>
                   {currentEval.result.quality_score > 0 && (
                     <div className="flex items-center gap-2 mt-2">
                       <div className="flex-1 progress-bar">

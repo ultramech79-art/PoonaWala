@@ -36,9 +36,9 @@ _EVAL_CACHE: OrderedDict[str, dict] = OrderedDict()
 _EVAL_CACHE_MAX = 64
 
 
-def _eval_cache_key(image_b64: str, frame_type: str) -> str:
-    # Hash first 2048 chars of image data + frame_type — fast and collision-resistant
-    sample = (image_b64[:2048] + "|" + frame_type).encode()
+def _eval_cache_key(image_b64: str, frame_type: str, language: str) -> str:
+    # Hash first 2048 chars of image data + frame_type + language — fast and collision-resistant
+    sample = (image_b64[:2048] + "|" + frame_type + "|" + language).encode()
     return hashlib.md5(sample).hexdigest()
 
 
@@ -64,6 +64,7 @@ class FrameEvalRequest(BaseModel):
     reference_frame_type: str = "top"
     reference_image_data_url: Optional[str] = None
     reference_image_url: Optional[str] = None
+    language: str = "en"
 
 
 class FrameEvalResponse(BaseModel):
@@ -97,15 +98,16 @@ async def _evaluate_compare_store(
     reference_frame_type: str = "top",
     reference_image_data_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
+    language: str = "en",
 ) -> FrameEvalResponse:
     # ── Check evaluation cache first ──────────────────────────────────────────
-    cache_key = _eval_cache_key(image_b64, frame_type)
+    cache_key = _eval_cache_key(image_b64, frame_type, language)
     cached = _eval_cache_get(cache_key)
     if cached is not None:
-        logger.info("eval cache HIT [%s] — returning instantly", frame_type)
+        logger.info("eval cache HIT [%s:%s] — returning instantly", frame_type, language)
         result = cached
     else:
-        result = await evaluate_frame(image_b64, frame_type)
+        result = await evaluate_frame(image_b64, frame_type, language)
         _eval_cache_put(cache_key, result)
 
     detected = result.get("detected", {}) or {}
@@ -203,6 +205,7 @@ async def evaluate_frame_endpoint(req: FrameEvalRequest):
         reference_frame_type=req.reference_frame_type,
         reference_image_data_url=req.reference_image_data_url,
         reference_image_url=req.reference_image_url,
+        language=req.language,
     )
 
 
@@ -236,6 +239,7 @@ async def evaluate_frame_ws(websocket: WebSocket):
                 reference_frame_type=req.get("reference_frame_type", "top"),
                 reference_image_data_url=req.get("reference_image_data_url"),
                 reference_image_url=req.get("reference_image_url"),
+                language=req.get("language", "en"),
             )
             logger.info(
                 f"WS eval [{frame_type}]: approved={response.approved}, "

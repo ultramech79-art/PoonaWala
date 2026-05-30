@@ -642,11 +642,17 @@ Respond with JSON:
 
 
 
-def _build_frame_prompts(gold_price_24k: float = 0.0) -> dict:
+def _build_frame_prompts(gold_price_24k: float = 0.0, language: str = "en") -> dict:
     """Build per-step evaluation prompts, optionally embedding the live gold price."""
     price_line = ""
     if gold_price_24k > 0:
         price_line = f"\nCurrent live gold price (IBJA): ₹{gold_price_24k:,.0f}/g for 24K gold.\n"
+
+    lang_instruction = (
+        "\nIMPORTANT: Write the 'feedback' sentence in Hindi (Devanagari script). Use markdown **bolding** to highlight important keywords, values, approvals, or errors. (Keep JSON keys in English)."
+        if language == "hi" else
+        "\nIMPORTANT: Write the 'feedback' sentence in English. Use markdown **bolding** to highlight important keywords, values, approvals, or errors. (Keep JSON keys in English)."
+    )
 
     return {
         "top": f"""You are a strict gold loan assessment agent evaluating a photo for a gold appraisal service.
@@ -691,7 +697,7 @@ Return ONLY valid JSON (no markdown fences):
 {{
   "approved": boolean,
   "quality_score": 0.0-1.0,
-  "feedback": "One direct sentence. If approved, compliment and note any hallmarks/item type seen. If rejected, explain exactly why (not gold jewelry, too blurry, not visible, etc.)",
+  "feedback": "One direct sentence. If approved, compliment and note any hallmarks/item type seen. If rejected, explain exactly why (not gold jewelry, too blurry, not visible, etc.).",
   "issues": ["list real blocking issues"],
   "detected": {{
     "gold_jewelry_present": boolean,
@@ -702,7 +708,7 @@ Return ONLY valid JSON (no markdown fences):
     "top_down_angle": boolean,
     "item_type": "ring|bangle|chain|pendant|earring|bracelet|other|unknown|none"
   }}
-}}""",
+}}{lang_instruction}""",
 
         "45deg": f"""You are a strict gold loan assessment agent evaluating a 45-DEGREE ANGLE photo of gold jewelry.
 CRITICAL: This image MUST contain gold jewelry. Reject if it does not.
@@ -726,7 +732,7 @@ Return ONLY valid JSON:
 {{
   "approved": boolean,
   "quality_score": 0.0-1.0,
-  "feedback": "One direct sentence. If rejected, explain why (not gold jewelry, wrong angle, not visible, etc.)",
+  "feedback": "One direct sentence. If rejected, explain why (not gold jewelry, wrong angle, not visible, etc.).",
   "issues": [],
   "detected": {{
     "gold_jewelry_present": boolean,
@@ -736,7 +742,7 @@ Return ONLY valid JSON:
     "in_focus": boolean,
     "good_lighting": boolean
   }}
-}}""",
+}}{lang_instruction}""",
 
         "side": f"""You are a strict gold loan assessment agent evaluating a SIDE/PROFILE view of gold jewelry.
 CRITICAL: This image MUST contain gold jewelry. Reject if it does not.
@@ -760,7 +766,7 @@ Return ONLY valid JSON:
 {{
   "approved": boolean,
   "quality_score": 0.0-1.0,
-  "feedback": "One direct sentence. If rejected, explain why (not gold jewelry, wrong angle, not visible, etc.)",
+  "feedback": "One direct sentence. If rejected, explain why (not gold jewelry, wrong angle, not visible, etc.).",
   "issues": [],
   "detected": {{
     "gold_jewelry_present": boolean,
@@ -769,7 +775,7 @@ Return ONLY valid JSON:
     "thickness_visible": boolean,
     "in_focus": boolean
   }}
-}}""",
+}}{lang_instruction}""",
 
         "macro": f"""You are a strict expert gold hallmark examiner evaluating a MACRO/CLOSE-UP photo.
 CRITICAL: This image MUST show gold jewelry with a visible hallmark/marking area. Reject if not gold.
@@ -815,7 +821,7 @@ Return ONLY valid JSON:
     "readable": boolean,
     "estimated_price_per_g": number or null
   }}
-}}""",
+}}{lang_instruction}""",
 
         "selfie": f"""You are a strict gold loan assessment agent evaluating a SELFIE photo for identity + anti-fraud.
 CRITICAL: This image MUST show BOTH a person's face AND visible gold jewelry. Reject if either is missing.
@@ -840,7 +846,7 @@ Return ONLY valid JSON:
 {{
   "approved": boolean,
   "quality_score": 0.0-1.0,
-  "feedback": "One direct sentence. If rejected, explain why (no face, no jewelry, not gold, etc.)",
+  "feedback": "One direct sentence. If rejected, explain why (no face, no jewelry, not gold, etc.).",
   "issues": [],
   "detected": {{
     "face_visible": boolean,
@@ -849,7 +855,7 @@ Return ONLY valid JSON:
     "good_lighting": boolean,
     "appears_live": boolean
   }}
-}}""",
+}}{lang_instruction}""",
 
         "video": """{
   "approved": true,
@@ -873,7 +879,7 @@ Return ONLY valid JSON:
 _FRAME_PROMPTS = _build_frame_prompts(gold_price_24k=0.0)
 
 
-async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
+async def evaluate_frame(image_base64: str, frame_type: str, language: str = "en") -> dict:
     """
     Capture validation routing:
       - image frames (top/45deg/side/macro/selfie/bill): Groq PRIMARY → Gemini STRICT fallback
@@ -888,6 +894,7 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
                 frame_type,
                 GEMINI_AUDIO_VIDEO_API_KEYS,
                 "gemini_audio_video",
+                language=language,
             )
             if result.get("provider") != "error":
                 return result
@@ -897,7 +904,7 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         if GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS:
             try:
                 from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
-                prompts = _build_frame_prompts(gold_price_24k=0)
+                prompts = _build_frame_prompts(gold_price_24k=0, language=language)
                 prompt = prompts.get(frame_type, prompts["top"])
                 data, success = await call_groq_vision_with_keys(
                     prompt, image_base64, GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS, "image/jpeg", timeout=45,
@@ -918,7 +925,7 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         return {"approved": True, "quality_score": 0.5, "feedback": "Captured", "issues": [], "detected": {}, "provider": "passthrough"}
 
     # ── Image frames: Groq PRIMARY → Gemini STRICT fallback ──────────────────
-    prompts = _build_frame_prompts(gold_price_24k=0)
+    prompts = _build_frame_prompts(gold_price_24k=0, language=language)
     prompt = prompts.get(frame_type, prompts["top"])
 
     if GROQ_PRIMARY_API_KEYS:
@@ -950,6 +957,7 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         frame_type,
         GEMINI_GUIDANCE_FALLBACK_API_KEYS,
         "gemini_strict_fallback",
+        language=language,
     )
 
 
@@ -1014,6 +1022,7 @@ async def _evaluate_frame_gemini(
     api_keys: list[str],
     provider_name: str,
     max_retries: int = 3,
+    language: str = "en",
 ) -> dict:
     """
     Gemini evaluates a captured frame for quality and correctness.
@@ -1046,7 +1055,7 @@ async def _evaluate_frame_gemini(
     except Exception:
         live_price = 0.0
 
-    prompts = _build_frame_prompts(gold_price_24k=live_price)
+    prompts = _build_frame_prompts(gold_price_24k=live_price, language=language)
     prompt = prompts.get(frame_type, prompts["top"])
 
     payload = {

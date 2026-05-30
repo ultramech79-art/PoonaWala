@@ -112,6 +112,7 @@ export interface EvaluateFrameOptions {
   referenceFrameType?: string
   referenceImageDataUrl?: string | null
   referenceImageUrl?: string | null
+  language?: string
 }
 
 // WebSocket-based evaluation (primary — avoids HTTP proxy timeouts)
@@ -140,6 +141,7 @@ function evaluateFrameWS(frameType: string, imageDataUrl: string, options: Evalu
         reference_frame_type: options.referenceFrameType ?? 'top',
         reference_image_data_url: options.referenceImageDataUrl ?? undefined,
         reference_image_url: options.referenceImageUrl ?? undefined,
+        language: options.language ?? 'en',
       }))
     }
 
@@ -174,6 +176,7 @@ function evaluateFrameHTTP(frameType: string, imageDataUrl: string, timeoutMs = 
     reference_frame_type: options.referenceFrameType ?? 'top',
     reference_image_data_url: options.referenceImageDataUrl ?? undefined,
     reference_image_url: options.referenceImageUrl ?? undefined,
+    language: options.language ?? 'en',
   }, timeoutMs)
 }
 

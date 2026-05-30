@@ -62,10 +62,12 @@ function webSpeak(text: string, lang: string): void {
 
 export function speak(text: string, lang?: string): void {
   if (!text) return
+  // Strip markdown ** bolding before speaking
+  const cleanText = text.replace(/\*\*/g, '')
   const language = lang ?? localStorage.getItem('goldeye_lang') ?? 'en'
   if (language === 'hi') {
-    sarvamSpeak(text).catch(() => webSpeak(text, 'hi-IN'))
+    sarvamSpeak(cleanText).catch(() => webSpeak(cleanText, 'hi-IN'))
     return
   }
-  webSpeak(text, 'en-US')
+  webSpeak(cleanText, 'en-US')
 }
