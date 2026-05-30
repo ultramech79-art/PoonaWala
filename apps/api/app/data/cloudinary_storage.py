@@ -85,3 +85,27 @@ async def upload_image_bytes(
         )
 
     return await asyncio.to_thread(_upload)
+
+
+async def delete_image(public_id: str) -> bool:
+    """Delete an image from Cloudinary by its public_id. Returns True if deleted."""
+    if not cloudinary_configured() or not public_id:
+        return False
+
+    def _delete() -> bool:
+        import cloudinary
+        import cloudinary.uploader
+
+        cloudinary.config(
+            cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+            api_key=os.getenv("CLOUDINARY_API_KEY"),
+            api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+            secure=True,
+        )
+        result = cloudinary.uploader.destroy(public_id, resource_type="image")
+        return result.get("result") == "ok"
+
+    try:
+        return await asyncio.to_thread(_delete)
+    except Exception:
+        return False

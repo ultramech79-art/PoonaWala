@@ -72,7 +72,7 @@ export function Home() {
   }
 
   const handleGetStarted = () => {
-    navigate(state.authToken ? '/language' : '/auth')
+    navigate('/language')
   }
 
   return (
@@ -85,7 +85,7 @@ export function Home() {
             <p className="text-xs font-display font-bold text-stone-900">Poonawalla</p>
           </div>
           {state.authToken && (
-            <button onClick={() => navigate('/profile')} className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center shadow-sm">
+            <button onClick={() => navigate('/profile', { state: { from: '/' } })} className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center shadow-sm">
               <UserRound className="w-4 h-4 text-stone-600" />
             </button>
           )}
@@ -196,6 +196,14 @@ export function Home() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+          {!state.authToken && (
+            <button
+              onClick={() => navigate('/auth?mode=login')}
+              className="mt-3 text-sm font-bold text-brand-700 underline underline-offset-4"
+            >
+              {state.lang === 'hi' ? 'लॉगिन करें' : 'Login'}
+            </button>
+          )}
 
           <p
             className="mt-5 text-[8px] font-bold bg-gradient-to-r from-stone-400 to-stone-500 bg-clip-text text-transparent uppercase tracking-[0.15em] opacity-70 animate-fade-in"

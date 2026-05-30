@@ -476,6 +476,10 @@ export function otpLoginAPI(phone: string, otpSessionId: string, otp: string): P
   return authPost('/api/auth/login/otp', { phone, otp_session_id: otpSessionId, otp })
 }
 
+export function googleLoginAPI(idToken: string): Promise<AuthResponse> {
+  return authPost('/api/auth/login/google', { id_token: idToken })
+}
+
 export interface UserAsset {
   id: number
   session_id: string | null
@@ -545,4 +549,29 @@ export function listLoanPredictionsAPI(token: string): Promise<Array<{
   created_at: string
 }>> {
   return authGet('/api/me/loan-predictions', token)
+}
+
+export async function deleteUserAssetAPI(token: string, assetId: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/me/assets/${assetId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`/api/me/assets/${assetId} → ${res.status}: ${(await res.text()).slice(0, 500)}`)
+  }
+}
+
+/**
+ * Convert a remote image URL to a data URL by fetching and reading as base64.
+ * Useful for reusing Cloudinary-stored images in APIs that expect data URLs.
+ */
+export async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
 }

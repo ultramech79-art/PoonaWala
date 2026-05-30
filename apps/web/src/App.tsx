@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Home } from './pages/Home'
 import { LanguagePicker } from './pages/LanguagePicker'
 import { Auth } from './pages/Auth'
@@ -22,11 +22,31 @@ import { Confirmation } from './pages/Confirmation'
 import { VideoEval } from './pages/VideoEval'
 import { AudioEval } from './pages/AudioEval'
 import { useSessionStore } from './store/session'
+import { UserRound } from 'lucide-react'
+
+function ProfileShortcut() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { state } = useSessionStore()
+  if (!state.authToken || location.pathname === '/profile' || location.pathname === '/auth') return null
+  return (
+    <button
+      onClick={() => navigate('/profile', { state: { from: location.pathname } })}
+      className="fixed right-4 top-4 z-[200] h-10 w-10 rounded-full border border-stone-200 bg-white/95 shadow-lg backdrop-blur flex items-center justify-center"
+      aria-label="Open profile"
+    >
+      {state.userProfile?.profile_photo_url
+        ? <img src={state.userProfile.profile_photo_url} className="h-full w-full rounded-full object-cover" alt="" />
+        : <UserRound className="h-4 w-4 text-stone-600" />}
+    </button>
+  )
+}
 
 function App() {
   return (
     <BrowserRouter>
       <div className="max-w-md mx-auto relative w-full" style={{ height: '100dvh' }}>
+        <ProfileShortcut />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/language" element={<LanguagePicker />} />

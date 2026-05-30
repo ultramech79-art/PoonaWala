@@ -287,14 +287,79 @@ async def login_google(req: GoogleLoginRequest, db: AsyncSession = Depends(get_d
         user = (await db.execute(select(User).where(User.google_sub == sub))).scalar_one_or_none()
     if not user and email:
         user = (await db.execute(select(User).where(User.email == email.lower()))).scalar_one_or_none()
+
     if not user:
-        raise HTTPException(status_code=404, detail="user_not_registered")
-    if sub and not user.google_sub:
-        user.google_sub = sub
-    user.is_email_verified = bool(payload.get("email_verified"))
+        # Auto-register new Google users with a minimal profile
+        user = User(
+            id=str(uuid.uuid4()),
+            email=email.lower() if email else None,
+            google_sub=sub,
+            full_name=payload.get("name") or payload.get("given_name") or "User",
+            dob="2000-01-01",
+            language="en",
+            region_code="MH",
+            profile_photo_url=payload.get("picture"),
+            is_email_verified=bool(payload.get("email_verified")),
+        )
+        db.add(user)
+    else:
+        if sub and not user.google_sub:
+            user.google_sub = sub
+        user.is_email_verified = bool(payload.get("email_verified"))
+        # Update profile photo from Google if user doesn't have one
+        if not user.profile_photo_url and payload.get("picture"):
+            user.profile_photo_url = payload.get("picture")
+
     return await _issue(user, db)
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    dob: Optional[str] = None
+    language: Optional[str] = None
+    region_code: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+
+
+@router.patch("/auth/me", response_model=UserProfile)
+async def update_profile(
+    req: UpdateProfileRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the current user's profile fields. Only non-null fields are updated."""
+    if req.full_name is not None:
+        name = req.full_name.strip()
+        if len(name) < 2:
+            raise HTTPException(status_code=422, detail="full_name must be at least 2 characters")
+        user.full_name = name
+    if req.dob is not None:
+        user.dob = req.dob
+    if req.language is not None:
+        user.language = req.language
+    if req.region_code is not None:
+        code = req.region_code.upper().strip()
+        if not is_valid_region_code(code):
+            raise HTTPException(status_code=422, detail="invalid region_code")
+        user.region_code = code
+    if req.address is not None:
+        user.address = req.address
+    if req.city is not None:
+        user.city = req.city
+    if req.pincode is not None:
+        user.pincode = req.pincode
+    if req.profile_photo_url is not None:
+        user.profile_photo_url = req.profile_photo_url
+
+    await db.commit()
+    await db.refresh(user)
+    return _profile(user)
 
 
 @router.get("/auth/me", response_model=UserProfile)
 async def me(user: User = Depends(get_current_user)):
     return _profile(user)
+

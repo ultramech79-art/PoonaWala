@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -8,10 +9,12 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.data.cloudinary_storage import image_metadata, upload_image_bytes
+from app.data.cloudinary_storage import delete_image, image_metadata, upload_image_bytes
 from app.db.database import get_db
 from app.db.models import LoanPrediction, User, UserAsset, UserSession
 from app.routes.auth import get_current_user
+
+logger = logging.getLogger("goldeye.user_assets")
 
 router = APIRouter()
 
@@ -263,3 +266,30 @@ async def my_loan_predictions(user: User = Depends(get_current_user), db: AsyncS
         )
         for prediction in result.scalars().all()
     ]
+
+
+@router.delete("/me/assets/{asset_id}", status_code=204)
+async def delete_asset(
+    asset_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an uploaded asset. Removes from database and Cloudinary."""
+    asset = await db.get(UserAsset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="asset_not_found")
+    if asset.user_id != user.id:
+        raise HTTPException(status_code=403, detail="not_your_asset")
+
+    # Delete from Cloudinary first
+    if asset.cloudinary_public_id:
+        deleted = await delete_image(asset.cloudinary_public_id)
+        if not deleted:
+            logger.warning(
+                "Cloudinary delete failed for public_id=%s (asset=%d, user=%s)",
+                asset.cloudinary_public_id, asset_id, user.id,
+            )
+
+    await db.delete(asset)
+    await db.commit()
+

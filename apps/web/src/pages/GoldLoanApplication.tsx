@@ -137,10 +137,7 @@ export function GoldLoanApplication() {
       try {
         const regionCode = state.userProfile?.region_code || activeEvalData.state
         await createUserSessionAPI(state.authToken, state.sessionId, regionCode, 'loan_application')
-        const uploadable = Object.entries(state.captures).filter(([, capture]) => capture?.blob)
-        await Promise.all(uploadable.map(([type, capture]) =>
-          uploadUserAssetAPI(state.authToken!, capture!.blob, 'jewellery_capture', state.sessionId, type)
-        ))
+
         await saveLoanPredictionAPI(state.authToken, {
           session_id: state.sessionId,
           status: 'completed',
