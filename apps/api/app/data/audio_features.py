@@ -171,7 +171,11 @@ def resonant_decay(arr: np.ndarray, sr: int) -> tuple:
     energy = arr ** 2
     w = max(1, int(sr * 0.005))
     sm = np.convolve(energy, np.ones(w) / w, mode="same")
-    pk = int(np.argmax(sm[:max(1, int(sr * 1.5))]))
+    # ONE-DROP-ON-GLASS protocol: the single loudest event IS the drop, and it can
+    # happen anywhere in the ~5 s clip — search the whole recording (leaving room
+    # for the ring-down), not just the first 1.5 s.
+    search_end = max(1, len(sm) - int(sr * 0.25))
+    pk = int(np.argmax(sm[:search_end]))
     seg = arr[pk:pk + int(sr * 2.0)]
     if len(seg) < int(sr * 0.05):
         return 0.0, 0.0, 0.0
@@ -405,12 +409,12 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
     total_power = val["total_power"]
     abs_arr  = np.abs(arr)
 
-    # ── STEP 1: Find the true first impact (earliest + strongest in first 1s) ────
+    # ── STEP 1: Find the single drop impact (loudest event anywhere in the clip) ─
     if is_drop:
-        # Use a moderately smoothed envelope to find the physical impact
+        # ONE-DROP-ON-GLASS protocol: one drop, recorded in a ~5 s clip, can land at
+        # any time — the loudest event is the drop. Search the whole recording.
         env6 = smooth_abs(arr, sr, 6.0)
-        # Limit search to first 1.5s — drops happen immediately
-        search_end = min(len(env6), int(sr * 1.5))
+        search_end = max(1, len(env6) - int(sr * 0.25))
         first_peak_idx = int(np.argmax(env6[:search_end]))
         peak_idx = first_peak_idx
         peak = float(env6[peak_idx])
