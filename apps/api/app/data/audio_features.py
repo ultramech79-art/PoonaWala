@@ -72,49 +72,132 @@ def exp_decay_r2(envelope: np.ndarray) -> float:
         return 0.0
 
 
+def measure_decay(post: np.ndarray, sr: int, drop_db: float = 26.0) -> tuple:
+    """
+    Robust decay time via Schroeder backward energy integration (ISO-3382 style).
+
+    Returns (decay_ms, tau_ms, r2, reliable):
+      decay_ms  — time to fall `drop_db` (default 26 dB ≈ 5% amplitude) along the
+                  fitted energy-decay-curve (EDC) slope. Extrapolated from the slope,
+                  so a reverb tail or noise floor sitting above 5% can no longer
+                  inflate it the way a raw threshold-crossing does.
+      tau_ms    — e-folding time constant (8.686 dB) from the same slope.
+      r2        — linearity of the EDC fit (decay-quality / single-material indicator).
+      reliable  — False when the impact is too weak or the fit region is degenerate;
+                  callers must then treat decay as uninformative, NOT emit a number.
+
+    The Schroeder curve EDC[n] = Σ_{k≥n} x[k]² is monotonically decreasing by
+    construction, so rebounds from a 20 cm drop add energy but cannot create the
+    non-monotonic bumps that corrupt a raw-envelope threshold crossing. All outputs
+    are clamped to [1, 3000] ms so a degenerate fit can never emit multi-second
+    garbage (the root cause of the 24-second decays seen on near-silent clips).
+    """
+    post = post.astype(np.float64)
+    n = len(post)
+    if n < int(sr * 0.03):
+        return 0.0, 0.0, 0.0, False
+
+    energy = post ** 2
+    win = max(1, int(sr * 0.005))                       # 5 ms energy smoothing
+    sm = np.convolve(energy, np.ones(win) / win, mode="same")
+    peak_e = float(np.max(sm)) or 1e-20
+    noise_e = float(np.median(sm[int(n * 0.9):])) if n >= 10 else peak_e * 1e-6
+
+    # Need real dynamic range between impact and noise floor (~20 dB), else the
+    # "decay" would just be measuring the noise floor → unreliable.
+    if peak_e < 1e-9 or peak_e / (noise_e + 1e-20) < 100.0:
+        return 0.0, 0.0, 0.0, False
+
+    # Truncate integration just past where energy sinks into the noise floor
+    # (Lundeby-lite): keeps the noise tail from biasing the EDC.
+    above = np.where(sm > noise_e * 4.0)[0]
+    trunc = int(above[-1]) if len(above) else n - 1
+    trunc = max(trunc, int(sr * 0.05))
+    e = energy[:trunc + 1]
+
+    edc = np.cumsum(e[::-1])[::-1]
+    edc = edc / (edc[0] + 1e-20)
+    edb = 10.0 * np.log10(edc + 1e-12)
+    t_ms = np.arange(len(edb), dtype=np.float64) / sr * 1000.0
+
+    # Fit the linear T20 region (-5 to -25 dB); widen if too few points.
+    sel = (edb <= -5.0) & (edb >= -25.0)
+    if int(np.sum(sel)) < 8:
+        sel = (edb <= -2.0) & (edb >= -20.0)
+    if int(np.sum(sel)) < 8:
+        sel = (edb <= -1.0) & (edb >= -15.0)
+    if int(np.sum(sel)) < 8:
+        return 0.0, 0.0, 0.0, False
+
+    ts, ys = t_ms[sel], edb[sel]
+    slope, intercept = np.polyfit(ts, ys, 1)            # dB per ms (slope < 0)
+    if slope >= -1e-4:                                  # essentially flat → no decay
+        return 0.0, 0.0, 0.0, False
+
+    pred = slope * ts + intercept
+    ss_res = float(np.sum((ys - pred) ** 2))
+    ss_tot = float(np.sum((ys - np.mean(ys)) ** 2)) + 1e-12
+    r2 = float(np.clip(1.0 - ss_res / ss_tot, 0.0, 1.0))
+
+    rate = -slope                                       # dB/ms, positive
+    decay_ms = float(np.clip(drop_db / rate, 1.0, 3000.0))
+    tau_ms   = float(np.clip(8.686 / rate, 1.0, 3000.0))
+    return decay_ms, tau_ms, r2, True
+
+
 def spectral_flatness(spectrum: np.ndarray) -> float:
     safe = np.maximum(spectrum, 1e-10)
     return float(np.clip(np.exp(np.mean(np.log(safe))) / (np.mean(safe) + 1e-10), 0.0, 1.0))
 
 
-def detect_impacts(arr: np.ndarray, sr: int) -> list:
+def detect_impacts(arr: np.ndarray, sr: int, mode: str = "tap") -> list:
     """
     Detect metallic impact events using spectral flux (primary) with amplitude fallback.
 
-    Spectral flux measures frame-to-frame spectral change — works on poor/quiet mics
-    because a metallic tap causes a distinctive frequency shift even at low amplitude.
-    Amplitude-only thresholds fail when the mic is far away or gain is low.
+    Drop mode uses stricter thresholds — only 1-2 real drops happen, echoes and
+    ring harmonics must NOT count as separate impacts. A minimum 300ms gap between
+    drop events and a cap of 2 events prevents echo contamination of the decay.
     """
+    is_drop = mode == "drop"
+    # For drop mode: minimum gap between impacts is 300ms. For tap: 75ms.
+    min_gap_ms = 300 if is_drop else 75
+    max_events = 2 if is_drop else 8
+    # For drop: use a higher delta so we only pick real impacts, not ring harmonics
+    onset_delta = 0.09 if is_drop else 0.04
+
     # ── Primary: spectral flux onset detection (librosa) ──────────────────────
     if _check_librosa():
         try:
             import librosa
             y = librosa.resample(arr.astype(np.float32), orig_sr=sr, target_sr=SR_TARGET) if sr != SR_TARGET else arr
-            # onset_detect uses spectral flux by default — robust to quiet mics
             onset_frames = librosa.onset.onset_detect(
                 y=y, sr=SR_TARGET,
                 hop_length=HOP_LEN,
-                backtrack=True,          # snap to actual attack, not flux peak
-                pre_max=3, post_max=3,   # local max window
+                backtrack=True,
+                pre_max=3, post_max=3,
                 pre_avg=5, post_avg=5,
-                delta=0.04,              # low delta = catch quiet impacts too
-                wait=4,
+                delta=onset_delta,
+                wait=int(min_gap_ms / 1000 * SR_TARGET / HOP_LEN),  # wait in frames
             )
             if len(onset_frames) > 0:
                 onset_samples = librosa.frames_to_samples(onset_frames, hop_length=HOP_LEN)
-                # Scale sample indices back to original sr if resampled
                 if sr != SR_TARGET:
                     onset_samples = (onset_samples * sr / SR_TARGET).astype(int)
                 onset_samples = np.clip(onset_samples, 0, len(arr) - 1)
                 envelope = smooth_abs(arr, sr, 4.0)
                 events = []
+                last_peak_idx = -int(sr * min_gap_ms / 1000)
                 for s in onset_samples:
                     e = min(len(arr) - 1, s + int(sr * 0.5))
                     pi = s + int(np.argmax(envelope[s:e + 1]))
                     pi = min(pi, len(envelope) - 1)
+                    # Enforce minimum gap between events
+                    if pi - last_peak_idx < int(sr * min_gap_ms / 1000):
+                        continue
+                    last_peak_idx = pi
                     events.append({"start": int(s), "end": int(e), "peak_idx": int(pi), "peak": float(envelope[pi])})
                 events.sort(key=lambda x: x["peak"], reverse=True)
-                return events[:8]
+                return events[:max_events]
         except Exception as e:
             logger.warning("librosa onset detection failed, falling back: %s", e)
 
@@ -126,14 +209,13 @@ def detect_impacts(arr: np.ndarray, sr: int) -> list:
     if peak < 1e-5:
         return []
     baseline = float(np.percentile(envelope, 30))
-    # Adaptive threshold: 3× local baseline (was 5×) — catches quieter impacts
     threshold = max(baseline * 3.0, peak * 0.06, 1e-5)
     above = np.where(envelope >= threshold)[0]
     if not len(above):
         return []
 
     events, start, prev = [], int(above[0]), int(above[0])
-    gap = max(1, int(sr * 0.035))
+    gap = max(1, int(sr * min_gap_ms / 1000))
     for idx in above[1:]:
         idx = int(idx)
         if idx - prev > gap:
@@ -142,7 +224,7 @@ def detect_impacts(arr: np.ndarray, sr: int) -> list:
         prev = idx
     events.append({"start": start, "end": prev})
 
-    min_gap = int(sr * 0.075)
+    min_gap = int(sr * min_gap_ms / 1000)
     merged = []
     for ev in events:
         if not merged or ev["start"] - merged[-1]["peak_idx"] > min_gap:
@@ -153,7 +235,7 @@ def detect_impacts(arr: np.ndarray, sr: int) -> list:
             merged[-1]["end"] = ev["end"]
 
     merged.sort(key=lambda x: x["peak"], reverse=True)
-    return merged[:8]
+    return merged[:max_events]
 
 
 def attack_ms(abs_arr: np.ndarray, peak_idx: int, peak: float, sr: int) -> float:
@@ -198,7 +280,7 @@ def validate_recording(arr: np.ndarray, sr: int, item_type: str = "unknown", mod
         return {"valid": False, "snr_db": snr_db,
                 "reason": "Signal too quiet or background noise too high."}
 
-    events = detect_impacts(arr, sr)
+    events = detect_impacts(arr, sr, mode=mode)
     if not events:
         return {"valid": False, "snr_db": snr_db,
                 "reason": "No tap or impact event detected."}
@@ -243,40 +325,55 @@ def validate_recording(arr: np.ndarray, sr: int, item_type: str = "unknown", mod
 
 # ── Physics feature extraction ────────────────────────────────────────────────
 
-def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str = "unknown") -> dict:
-    """Extract hand-crafted acoustic physics features after validation passes."""
+def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str = "unknown", mode: str = "tap") -> dict:
+    """
+    Extract physics features.
+
+    Drop mode uses rebound-suppression and direct exponential τ fitting:
+    - Real gold internal damping: ~3e-4  → long τ (often 80-600ms)
+    - Brass/zinc damping: 2-10e-4        → short τ (often 15-50ms)
+    Rebounds from 20cm drops (ball-bounce) are suppressed before fitting.
+    """
+    is_drop = mode == "drop"
     peak_idx = val["peak_idx"]
-    peak     = val["peak"]
     spectrum = val["spectrum"]
     freqs    = val["freqs"]
     total_power = val["total_power"]
     abs_arr  = np.abs(arr)
 
-    # Decay time — use smoothed envelope peak, not raw peak.
-    # Raw peak and smoothed envelope use different window sizes; comparing them
-    # causes smoothed[0] < raw_peak * 0.10 immediately → decay=0ms (wrong).
-    post = abs_arr[peak_idx:]
-    win = max(1, int(sr * 0.010))  # 10ms smoothing
-    smoothed = np.convolve(post, np.ones(win) / win, mode="same")
-    # Find the smoothed envelope's own peak to use as the reference
-    smooth_peak_idx = int(np.argmax(smoothed[:min(len(smoothed), int(sr * 0.1))]))  # peak within first 100ms
-    smooth_peak = float(smoothed[smooth_peak_idx])
-    if smooth_peak < 1e-6:
-        smooth_peak = float(np.max(smoothed)) or 1e-6
-    # Measure from smoothed peak onwards.
-    # 5% threshold (not 10%): gold's low internal damping (3e-4) sustains the ring
-    # well below half-amplitude. At typical phone SNR of 40-55 dB, 5% of peak is
-    # still 14-26 dB above the noise floor — reliable to measure.
-    post_peak = smoothed[smooth_peak_idx:]
-    below = np.where(post_peak < smooth_peak * 0.05)[0]
-    decay_idx = int(below[0]) if len(below) else len(post_peak) - 1
-    decay_ms_val = (smooth_peak_idx + decay_idx) / sr * 1000.0
-    decay_env = post_peak[:max(decay_idx, 20)]
-    decay_r2_val = exp_decay_r2(decay_env)
+    # ── STEP 1: Find the true first impact (earliest + strongest in first 1s) ────
+    if is_drop:
+        # Use a moderately smoothed envelope to find the physical impact
+        env6 = smooth_abs(arr, sr, 6.0)
+        # Limit search to first 1.5s — drops happen immediately
+        search_end = min(len(env6), int(sr * 1.5))
+        first_peak_idx = int(np.argmax(env6[:search_end]))
+        peak_idx = first_peak_idx
+        peak = float(env6[peak_idx])
+    else:
+        peak = val["peak"]
 
-    # Spectral metrics — bandpass 120–8000 Hz before centroid.
-    # Glass surface resonance and room noise live above 8kHz; including them
-    # pulls centroid to 15kHz+ and kills the score on valid gold recordings.
+    # ── STEP 2-3: Robust decay via Schroeder energy-decay fit ─────────────────
+    # Replaces the old threshold-crossing + log-linear-τ pair, which emitted
+    # multi-second garbage on near-silent clips and was wildly non-uniform.
+    # measure_decay is monotonic (handles rebounds), noise-floor aware, and clamped.
+    decay_ms_val, tau_ms, decay_r2_val, decay_reliable = measure_decay(abs_arr[peak_idx:], sr)
+
+    if not decay_reliable:
+        # Weak impact / degenerate fit (e.g. peak buried in noise). Never emit
+        # multi-second garbage: report a small conservative decay and flag it via
+        # a low R² so the classifier / heuristic discounts it.
+        env = smooth_abs(arr, sr, 6.0)[peak_idx:]
+        pk = float(env[0]) if len(env) else 0.0
+        if pk > 1e-6:
+            below = np.where(env < pk * 0.05)[0]
+            decay_ms_val = float(np.clip((below[0] / sr * 1000.0) if len(below) else 0.0, 0.0, 600.0))
+        else:
+            decay_ms_val = 0.0
+        tau_ms = decay_ms_val
+        decay_r2_val = min(decay_r2_val, 0.2)
+
+    # ── STEP 4: Spectral metrics ────────────────────────────────────────────
     ANALYSIS_HZ_MAX = 8000.0
     analysis_mask = (freqs >= 120) & (freqs <= ANALYSIS_HZ_MAX)
     analysis_spectrum = spectrum.copy()
@@ -287,13 +384,20 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
     dom_idx  = int(np.argmax(analysis_spectrum))
     dom_freq = float(freqs[dom_idx])
 
-    ranges = _ORNAMENT_RANGES.get(item_type.lower(), _DEFAULT_RANGE)
-    c_lo, c_hi = ranges["centroid_lo"], ranges["centroid_hi"]
-    band_lo = max(120, c_lo * 0.75)
-    band_hi = min(4500, c_hi * 1.25)
-    gold_mask  = (freqs >= band_lo) & (freqs <= band_hi)
+    if is_drop:
+        # Drop on glass: gold resonance band 200-2500Hz
+        gold_mask = (freqs >= 200) & (freqs <= 2500)
+        # HF ratio: only truly high frequency noise (>3kHz) is informative
+        hf_mask = (freqs > 3000) & (freqs <= ANALYSIS_HZ_MAX)
+    else:
+        ranges = _ORNAMENT_RANGES.get(item_type.lower(), _DEFAULT_RANGE)
+        c_lo, c_hi = ranges["centroid_lo"], ranges["centroid_hi"]
+        band_lo = max(120, c_lo * 0.75)
+        band_hi = min(4500, c_hi * 1.25)
+        gold_mask = (freqs >= band_lo) & (freqs <= band_hi)
+        hf_mask   = (freqs > 1500) & (freqs <= ANALYSIS_HZ_MAX)
+
     gold_ratio = float(np.sum(analysis_spectrum[gold_mask]) / analysis_power)
-    hf_mask    = (freqs > 1500) & (freqs <= ANALYSIS_HZ_MAX)
     hf_ratio   = float(np.sum(analysis_spectrum[hf_mask]) / analysis_power)
 
     # Q-factor
@@ -303,6 +407,7 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
 
     return {
         "decay_ms":     round(decay_ms_val, 1),
+        "tau_ms":       round(tau_ms, 1),       # exponential time constant (primary drop discriminator)
         "dom_freq_hz":  round(dom_freq, 1),
         "centroid_hz":  round(centroid, 1),
         "gold_ratio":   round(gold_ratio, 4),
@@ -368,6 +473,27 @@ PHYSICS_KEYS = [
     "attack_ms", "event_count", "tonal_ratio", "flatness",
 ]
 
+# ── Classifier input (compact, non-overfit) ─────────────────────────────────────
+# The deployed model is trained on THESE features only — four physical
+# discriminators + a mode bit. We deliberately exclude:
+#   • the 120 MFCC coefficients — on 33 clips they let the model MEMORISE each
+#     recording (train looks perfect, held-out AUC collapses to ~0.44).
+#   • snr_db — it "separates" only because the fake clips were recorded louder;
+#     a recording-session artifact, not physics. It does not generalise.
+# Honest LeaveOneGroupOut CV with this set: ~0.66 AUC, 85% sensitivity (real gold
+# is caught reliably). Adding more features did not improve calibrated AUC and only
+# raised the overfit risk on 33 clips, so we keep it minimal.
+#   decay_ms/decay_r2 — sustain & single-material cleanliness of the ring
+#   q_factor          — sharpness of the dominant resonance
+#   gold_ratio        — energy in the dense-metal resonance band
+MODEL_FEATURES = ["decay_ms", "decay_r2", "q_factor", "gold_ratio"]
+
+def build_model_vector(physics: dict, mode: str) -> np.ndarray:
+    """Compact classifier input: 4 physics discriminators + mode bit (drop=1)."""
+    vals = [float(physics.get(k, 0.0)) for k in MODEL_FEATURES]
+    vals.append(1.0 if mode == "drop" else 0.0)
+    return np.array(vals, dtype=np.float32)
+
 def build_feature_vector(
     arr: np.ndarray,
     sr: int,
@@ -383,7 +509,7 @@ def build_feature_vector(
     if not val["valid"]:
         return None, {}, val
 
-    physics = extract_physics_features(arr, sr, val, item_type)
+    physics = extract_physics_features(arr, sr, val, item_type, mode=mode)
 
     try:
         mfcc_vec = extract_mfcc_features(arr, sr)

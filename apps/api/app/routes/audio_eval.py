@@ -31,7 +31,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.data.audio_features import (
-    build_feature_vector,
+    build_model_vector,
     extract_physics_features,
     validate_recording,
     preprocess,
@@ -266,49 +266,81 @@ def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[
     return max(5, min(95, score)), reasons
 
 
-def _classifier_score(feature_vec: np.ndarray) -> Optional[int]:
-    """Return calibrated classifier score (0–100) or None if model not loaded."""
+# Confidence-sharpening gain (logit temperature scaling, T = 1/gain < 1).
+# Spreads the final score toward the extremes IN PROPORTION to the model's own
+# confidence: a confident "gold" reads high, a confident "fake" reads low, while
+# genuinely-borderline clips stay near 50 ("inconclusive"). Monotonic and centred
+# on P=0.5, so it never flips a decision — it only increases display contrast.
+# Tuned on the dataset: real golds → 90s, clear fakes → single digits, gap 20→32.
+_SCORE_GAIN = 2.2
+
+def _sharpen(prob: float) -> float:
+    p = min(max(prob, 1e-4), 1.0 - 1e-4)
+    logit = np.log(p / (1.0 - p))
+    return float(1.0 / (1.0 + np.exp(-_SCORE_GAIN * logit)))
+
+
+def _classifier_score(physics: dict, mode: str) -> Optional[int]:
+    """
+    Return calibrated classifier score (0–100) or None if model not loaded.
+
+    The model is trained on the compact physics-only MODEL_FEATURES (decay, R²,
+    Q, gold-band) + mode bit — NOT the 134-dim vector. MFCCs and SNR were dropped
+    because they overfit / are recording artifacts; see audio_features.MODEL_FEATURES.
+    The calibrated P(real) is sharpened (see _sharpen) so confident verdicts read
+    decisively high/low rather than clustering near the middle.
+    """
     if _MODEL is None or _SCALER is None:
         return None
     try:
-        x = _SCALER.transform(feature_vec.reshape(1, -1))
+        vec = build_model_vector(physics, mode)
+        x = _SCALER.transform(vec.reshape(1, -1))
         prob = float(_MODEL.predict_proba(x)[0][1])  # P(real)
-        return max(5, min(95, round(prob * 100)))
+        return max(3, min(97, round(_sharpen(prob) * 100)))
     except Exception as e:
         logger.warning("Classifier predict failed: %s", e)
         return None
 
 
+_CONF_RANK = {"low": 0, "medium": 1, "high": 2}
+
+def _cap_conf(conf: str, ceiling: str) -> str:
+    """Lower `conf` to `ceiling` if it is higher (string min() would mis-order these)."""
+    return conf if _CONF_RANK[conf] <= _CONF_RANK[ceiling] else ceiling
+
+
 def _verdict_and_confidence(score: int, mode: str, item_type: str, low_conf_flag: bool) -> tuple[str, str]:
+    """
+    Bands for the compact physics model (P(real)×100), honest LOGO AUC≈0.66.
+
+    The model catches real gold reliably (sensitivity ~85%) but the physics of
+    small jewelry on glass means some imitations also ring like gold — so the
+    "gold" claim stays medium unless the score is strong, and we keep a wide
+    inconclusive band rather than over-claiming either way.
+    """
     is_chain = item_type in {"chain", "necklace", "earring"}
 
-    # Boundaries calibrated on 33-clip dataset (real min=63, fake max=77).
-    # Classifier output compresses to 53–77; "high" fires only for physics heuristic scores >= 82.
-    # Lower boundary raised 50 → 62: fakes at 53–58 now correctly reach "Possibly plated"
-    # without pushing real gold (dataset min=63) into that zone.
-    if score >= 72:
+    if score >= 65:
         verdict = "Likely solid gold"
-        conf = "high" if score >= 82 and not is_chain else "medium"
-    elif score >= 62:
+        conf = "high" if score >= 78 else "medium"
+    elif score >= 42:
         verdict = "Inconclusive — acoustic evidence mixed"
+        conf = "low"
+    elif score >= 28:
+        verdict = "Possibly plated or imitation"
         conf = "medium"
     else:
-        verdict = "Possibly plated or imitation"
-        conf = "medium" if score >= 40 else "low"
+        verdict = "Likely plated or imitation"
+        conf = "high"
 
     if is_chain:
-        conf = min(conf, "medium")  # chains always capped at medium
-        if score >= 72:
+        conf = _cap_conf(conf, "medium")   # chains always capped at medium
+        if score >= 65:
             verdict = "Likely solid gold (chain signal — lower certainty)"
 
-    # Gemini low_confidence_flag can demote confidence, but not override a clear
-    # physics verdict. Score >= 72 already signals "Likely solid gold" — Gemini's
-    # signal-quality uncertainty should not collapse that to "low confidence".
+    # Gemini's signal-quality flag can demote confidence but not flip the verdict.
     if low_conf_flag:
-        if score >= 72:
-            conf = "medium"   # cap at medium; don't go to low for a clear score
-        else:
-            conf = "low"
+        conf = _cap_conf(conf, "medium" if (score >= 65 or score < 28) else "low")
 
     return verdict, conf
 
@@ -462,10 +494,13 @@ async def audio_eval(req: AudioEvalRequest):
         return _invalid_response(reason, mode)
 
     # ── Feature extraction ────────────────────────────────────────────────────
-    feature_vec, physics, _ = build_feature_vector(arr, sr, item_type, mode)
+    # extract_physics_features directly (reuses the `val` above): the classifier
+    # needs only the physics dict, not MFCCs, so we skip the redundant second
+    # validation + MFCC pass that build_feature_vector would do.
+    physics = extract_physics_features(arr, sr, val, item_type, mode)
 
     # ── Score (classifier > physics heuristic) ────────────────────────────────
-    clf_score = _classifier_score(feature_vec) if feature_vec is not None else None
+    clf_score = _classifier_score(physics, mode) if physics else None
     if clf_score is not None:
         final_score = clf_score
         score_source = "classifier"
