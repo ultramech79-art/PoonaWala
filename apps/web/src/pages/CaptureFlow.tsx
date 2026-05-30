@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
-import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon } from 'lucide-react'
-import { speak } from '../lib/tts'
+import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon, PlayCircle } from 'lucide-react'
+import { speak, prefetchSpeech } from '../lib/tts'
 import { clsx } from 'clsx'
 import { evaluateFrameAPI, listMyAssetsAPI, urlToDataUrl, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
@@ -170,10 +170,14 @@ export function CaptureFlow() {
   const visibleIssues = currentEval?.result?.issues?.filter(issue => issue !== 'same_item_mismatch') ?? []
 
   useEffect(() => {
+    // Eagerly prefetch all voice guides to eliminate network delay
+    STEPS.forEach(s => prefetchSpeech(s.voiceGuide))
+  }, [t])
+
+  useEffect(() => {
     if (spokenStep.current === stepIdx) return
     spokenStep.current = stepIdx
-    const t = setTimeout(() => speak(step.voiceGuide), 400)
-    return () => clearTimeout(t)
+    speak(step.voiceGuide)
   }, [stepIdx, step.voiceGuide])
 
   const handleCapture = useCallback(async (blob: Blob, dataUrl: string, exif?: Record<string, unknown>, isDemo?: boolean) => {
@@ -872,11 +876,19 @@ export function CaptureFlow() {
               {t('capture_skip')}
             </button>
           )}
+          {!showTutorial && !step.isVideo && !step.isAudio && (
+            <button onClick={() => setShowTutorial(true)} className="w-full py-2 text-sm font-semibold text-brand-600 flex items-center justify-center gap-2 mt-1 active:scale-95 transition-transform">
+              <PlayCircle className="w-4 h-4" /> Watch Tutorial
+            </button>
+          )}
         </div>
         {/* Tutorial Overlay — auto-shows on each new step */}
         {showTutorial && !step.isVideo && !step.isAudio && (
           <TutorialOverlay
             stepType={step.type}
+            title={t(step.titleKey)}
+            hint={t(step.hintKey)}
+            buttonText={t('tutorial_got_it')}
             onDismiss={() => setShowTutorial(false)}
           />
         )}

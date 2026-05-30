@@ -50,9 +50,10 @@ export function CertificateScan() {
 
   // Speak voice guide on mount
   useEffect(() => {
-    const timer = setTimeout(() => speak(t('voice_certificate')), 500)
-    return () => clearTimeout(timer)
-  }, [t])
+    if (showTutorial) {
+      speak(t('voice_certificate'))
+    }
+  }, [t, showTutorial])
 
   const scanDocument = useCallback(async (blob: Blob, dataUrl: string, exif?: Record<string, unknown>) => {
     addCapture({ type: 'certificate', blob, dataUrl, timestamp: Date.now(), exif })
@@ -126,7 +127,13 @@ export function CertificateScan() {
     <div className="page overflow-y-auto no-scrollbar animate-slide-up bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
       {/* Tutorial overlay */}
       {showTutorial && (
-        <TutorialOverlay stepType="certificate" onDismiss={() => setShowTutorial(false)} />
+        <TutorialOverlay
+          stepType="certificate"
+          title={t('tutorial_title_certificate')}
+          hint={t('tutorial_hint_certificate')}
+          buttonText={t('tutorial_got_it')}
+          onDismiss={() => setShowTutorial(false)}
+        />
       )}
 
       <div className="page-header">
