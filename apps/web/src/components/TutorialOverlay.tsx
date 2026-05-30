@@ -24,7 +24,7 @@ const TUTORIAL_HINTS: Record<string, string> = {
   selfie:      'Hold the gold piece beside your face. Both your face and the gold must be clearly visible.',
   macro:       'Get very close to the BIS hallmark or purity stamp. The text should fill the frame.',
   video:       'Place gold on a white surface. Slowly rotate the piece during 15 seconds — show all edges, clasps, and the hallmark area.',
-  audio:       'Drop from ~20 cm onto glass (or tap with coin edge). Keep the room quiet so the mic captures the full ring decay.',
+  audio:       'One drop from 15–20 cm onto glass (or tap with coin edge), then leave it. The 5-second recording captures the full ring decay — keep the room quiet.',
   certificate: 'Scan the original purchase bill or authenticity certificate. Ensure the HUID and purity stamp are clearly visible.',
 }
 

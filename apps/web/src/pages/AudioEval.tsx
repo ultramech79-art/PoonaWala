@@ -1,8 +1,8 @@
 /**
- * AudioEval — 10-second acoustic gold authenticity test.
+ * AudioEval — 5-second acoustic gold authenticity test.
  *
  * Two modes:
- *   Drop — drop from ~20 cm onto a glass table top. Best discriminator.
+ *   Drop — ONE drop from 15–20 cm onto a glass table top. Best discriminator.
  *           Use only for sturdy pieces (ring, bangle, coin).
  *   Tap  — tap 4–5 times with a coin edge. Safer for delicate pieces.
  *
@@ -20,7 +20,7 @@ import { speak } from '../lib/tts'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { useTranslation } from 'react-i18next'
 
-const AUDIO_DURATION_MS = 10_000
+const AUDIO_DURATION_MS = 5_000   // 5 s: one drop from 15–20 cm on glass
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = ''
@@ -242,8 +242,8 @@ export function AudioEval() {
 
   const dropInstructions = [
     { icon: '🔵', step: 'Place phone flat on the glass table top, mic facing up', note: 'This picks up the ring directly through the glass surface' },
-    { icon: '📏', step: 'Hold the ornament ~20 cm above the glass and release', note: 'Keep fingers relaxed — let it fall freely' },
-    { icon: '⏱️', step: 'Wait until the ring sound fully stops — then drop once more', note: 'Max 2 drops total. Let each ring decay completely before the next.' },
+    { icon: '📏', step: 'Hold the ornament 15–20 cm above the glass and release', note: 'Keep fingers relaxed — let it fall freely' },
+    { icon: '⏱️', step: 'Drop ONCE, then leave it — do not touch or drop again', note: 'One drop only. The 5-second recording captures the full ring as it decays.' },
     { icon: '🔇', step: 'Keep the room quiet', note: 'Background noise shortens the measurable ring time' },
   ]
 
@@ -310,7 +310,7 @@ export function AudioEval() {
                 <div className="mt-4 flex gap-3">
                   <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5 text-center">
                     <p className="text-white font-bold text-sm">Drop test</p>
-                    <p className="text-blue-200 text-[10px] mt-0.5">Most accurate · ~20 cm on glass</p>
+                    <p className="text-blue-200 text-[10px] mt-0.5">Most accurate · one drop, 15–20 cm on glass</p>
                   </div>
                   <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5 text-center">
                     <p className="text-white font-bold text-sm">Tap test</p>
@@ -352,7 +352,7 @@ export function AudioEval() {
                     {!isFragile && <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">Best</span>}
                   </div>
                   <p className={clsx('text-[10px] leading-snug', mode === 'drop' ? 'text-blue-100' : 'text-stone-500')}>
-                    Drop ~20 cm onto glass. Gold's long resonance is the clearest discriminator. Recommended for rings and bangles.
+                    One drop from 15–20 cm onto glass. Gold's long resonance is the clearest discriminator. Recommended for rings and bangles.
                   </p>
                 </button>
                 {/* Tap */}
@@ -399,7 +399,7 @@ export function AudioEval() {
                   <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
                     <span className="text-sm">📐</span>
                     <p className="text-[10px] text-blue-700 font-medium">
-                      <strong>~20 cm drop, max 2 drops, wait between.</strong> Real gold rings for longer — its low internal damping sustains the resonance. Base metals damp and stop faster.
+                      <strong>One drop from 15–20 cm.</strong> Real gold rings for longer — its low internal damping sustains the resonance. Base metals damp and stop faster.
                     </p>
                   </div>
                 </div>
@@ -441,7 +441,7 @@ export function AudioEval() {
               <p className="text-stone-900 font-black text-5xl tabular-nums">{secondsLeft}<span className="text-2xl text-stone-400 font-semibold">s</span></p>
               <p className="text-stone-500 text-sm mt-2 font-medium">
                 {mode === 'drop'
-                  ? 'Drop from ~20 cm onto glass — wait until silent — drop once more'
+                  ? 'Drop ONCE from 15–20 cm onto glass — then leave it'
                   : 'Tap the ornament 4–5 times with coin edge'}
               </p>
             </div>
@@ -514,7 +514,7 @@ export function AudioEval() {
                   <div className="bg-red-100/60 rounded-xl px-3 py-2 w-full text-left">
                     <p className="text-[11px] text-red-600 font-medium">
                       {mode === 'drop'
-                        ? '→ Drop from ~20 cm on glass, wait for the ring to fully stop, then drop once more'
+                        ? '→ Drop once from 15–20 cm onto glass and let it ring out (5-second recording)'
                         : '→ Tap harder with a coin edge and hold the phone closer'}
                     </p>
                   </div>
@@ -606,7 +606,7 @@ export function AudioEval() {
                         {
                           label: mode === 'drop' ? 'Drop impacts' : 'Tap events',
                           value: `${result.params.tap_events}`,
-                          ref:   mode === 'drop' ? '1–2 drops recommended' : '2–3 = reliable result',
+                          ref:   mode === 'drop' ? 'exactly 1 drop' : '2–3 = reliable result',
                           highlight: false,
                         },
                       ].map(({ label, value, ref, highlight }) => (
@@ -644,7 +644,7 @@ export function AudioEval() {
                   <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
                     <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-700">
-                      Signal is ambiguous. For a clearer result, {mode === 'tap' ? 'try a drop test — drop from ~20 cm on glass, wait for ring to stop, then drop once more' : 'drop from ~20 cm on a flat glass surface, wait until ring fully stops'}.
+                      Signal is ambiguous. For a clearer result, {mode === 'tap' ? 'try a drop test — one drop from 15–20 cm onto glass and let it ring out' : 'drop once from 15–20 cm onto a flat glass surface and let it ring out'}.
                     </p>
                   </div>
                 )}
