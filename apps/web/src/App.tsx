@@ -20,6 +20,7 @@ import { Confirmation } from './pages/Confirmation'
 import { VideoEval } from './pages/VideoEval'
 import { AudioEval } from './pages/AudioEval'
 import { useSessionStore } from './store/session'
+import { FloatingAssistant } from './components/FloatingAssistant'
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
           <Route path="/confirmation" element={<Confirmation />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <FloatingAssistant />
       </div>
     </BrowserRouter>
   )
