@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
-import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon } from 'lucide-react'
+import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon, PlayCircle } from 'lucide-react'
 import { speak, prefetchSpeech } from '../lib/tts'
 import { clsx } from 'clsx'
 import { evaluateFrameAPI, listMyAssetsAPI, urlToDataUrl, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
@@ -853,6 +853,11 @@ export function CaptureFlow() {
           {step.optional && evalState !== 'evaluating' && (
             <button id={`capture-skip-${step.type}`} onClick={skip} className="btn-secondary w-full text-sm">
               {t('capture_skip')}
+            </button>
+          )}
+          {!showTutorial && !step.isVideo && !step.isAudio && (
+            <button onClick={() => setShowTutorial(true)} className="w-full py-2 text-sm font-semibold text-brand-600 flex items-center justify-center gap-2 mt-1 active:scale-95 transition-transform">
+              <PlayCircle className="w-4 h-4" /> Watch Tutorial
             </button>
           )}
         </div>
