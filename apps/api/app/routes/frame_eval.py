@@ -94,6 +94,20 @@ def _same_item_unverified(same_item: Optional[dict], frame_type: str) -> bool:
     reasons = set(same_item.get("mismatch_reasons") or [])
     verdict = same_item.get("verdict")
     score = float(same_item.get("same_item_score") or 0.5)
+    reference_frame_type = str(same_item.get("reference_frame_type") or "").strip().lower()
+
+    # 45deg reference produces a large angle change — inconclusive is the
+    # expected outcome, not a fraud signal.  Only block when score is very
+    # low (strong mismatch evidence) or reference image was missing.
+    if reference_frame_type == "45deg":
+        if "missing_reference_or_candidate_image" in reasons:
+            return True
+        if verdict == "inconclusive" or method in {
+            "same_item_timeout", "local_visual_fingerprint_timeout", "none"
+        }:
+            return score < 0.40
+        return False  # same/different verdicts handled by is_blocking_mismatch
+
     if method == "local_visual_fingerprint" and verdict == "inconclusive" and score >= 0.62:
         return False
     return (
@@ -115,15 +129,11 @@ async def _evaluate_compare_store(
     reference_image_data_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
 ) -> FrameEvalResponse:
-    result = await evaluate_frame(image_b64, frame_type)
-    detected = result.get("detected", {}) or {}
-    issues = list(result.get("issues", []) or [])
-    approved = bool(result.get("approved", True))
-    feedback = result.get("feedback", "Image captured")
-    quality_score = float(result.get("quality_score", 0.5))
-
+    # Start same-item compare immediately so it runs in parallel with evaluate_frame.
+    # By the time evaluate_frame returns (~2-3s) compare is often already done.
     same_item = None
     reference_source = reference_image_data_url or reference_image_url
+    compare_task = None
     if reference_source and frame_type in COMPARE_FRAME_TYPES:
         compare_task = asyncio.create_task(compare_item_images(
             reference_source,
@@ -131,7 +141,17 @@ async def _evaluate_compare_store(
             reference_frame_type=reference_frame_type or "top",
             candidate_frame_type=frame_type,
         ))
-        done, _pending = await asyncio.wait({compare_task}, timeout=8.0)
+
+    result = await evaluate_frame(image_b64, frame_type)
+    detected = result.get("detected", {}) or {}
+    issues = list(result.get("issues", []) or [])
+    approved = bool(result.get("approved", True))
+    feedback = result.get("feedback", "Image captured")
+    quality_score = float(result.get("quality_score", 0.5))
+
+    if compare_task is not None:
+        # Give at most 3 extra seconds; compare is likely already done.
+        done, _pending = await asyncio.wait({compare_task}, timeout=3.0)
         if compare_task not in done:
             compare_task.cancel()
             compare_task.add_done_callback(_consume_task_exception)

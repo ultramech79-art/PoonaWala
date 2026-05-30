@@ -557,30 +557,33 @@ def _normalize_semantic_result(raw: dict, local_result: dict) -> dict:
 
 
 def _identity_prompt(reference_frame_type: str, candidate_frame_type: str) -> str:
-    return f"""You are a fraud-control visual examiner for a gold-loan app.
-Compare whether image A and image B show the SAME physical jewelry item.
-
-Image A is the baseline {reference_frame_type} capture. Image B is the later {candidate_frame_type} capture.
-You will receive four images in this order: A full frame, A jewelry close-up crop, B full frame, B jewelry close-up crop. Use the close-up crops for identity and the full frames only for context.
-Jewelry may look different because of angle, zoom, crop, lighting, or a macro close-up.
-Do not require duplicate photos. Focus on item type, distinctive shape, thickness, hollow/open regions, chain/link pattern, stones, hallmark area, color family, wear marks, and visible engravings.
-If both images show rings, compare the visible ring design, band thickness, stone/setting placement, pattern, and unique silhouette. A clearly different visible ring design should be "different".
-Do NOT mark "same" merely because both images contain a ring, a stone, or gold/silver color. "same" requires the visible design cues to line up. If one ring has a visibly different band profile, head/setting shape, stone cluster, metal color family, or color arrangement, mark "different".
+    return f"""Gold-loan fraud check. Image A={reference_frame_type}, Image B={candidate_frame_type}.
+Are these the SAME physical jewelry item? Angles/zoom/lighting may differ — that is normal.
+Mark "different" ONLY for clear item substitution (different type, color family, or distinct design).
+Do NOT mark "different" for angle change, blur, crop, or partial view.
 
 Return ONLY valid JSON:
-{{
-  "same_item": true|false|null,
-  "verdict": "same|different|inconclusive",
-  "confidence": 0.0-1.0,
-  "same_item_score": 0.0-1.0,
-  "matching_signals": ["short evidence"],
-  "mismatch_reasons": ["short evidence"]
-}}
+{{"same_item":true|false|null,"verdict":"same|different|inconclusive","confidence":0.0-1.0,"same_item_score":0.0-1.0,"matching_signals":["1-3 words"],"mismatch_reasons":["1-3 words"]}}"""
 
-Use "different" only when there is clear evidence the physical jewelry item changed.
-Do not mark "different" only because image B is blurrier, closer/farther, rotated, side-view, partially cropped, or shot in a selfie context.
-If the baseline top-view image appears partial or cropped, do not infer a mismatch simply because the later image shows more of the same ring/bangle/chain.
-For macro, hallmark, selfie, and individual video frames, use "inconclusive" unless a distinctive item-level difference is clearly visible."""
+
+def _resize_for_compare(raw: bytes, max_px: int = 512) -> bytes:
+    """Shrink to 512px longest side before sending to Groq same-item check.
+    Reduces image tokens ~8x vs a 1024px capture without losing identity cues."""
+    try:
+        import cv2
+        arr = np.frombuffer(raw, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return raw
+        h, w = img.shape[:2]
+        if max(h, w) <= max_px:
+            return raw
+        scale = max_px / max(h, w)
+        img = cv2.resize(img, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        return buf.tobytes() if ok else raw
+    except Exception:
+        return raw
 
 
 def _build_groq_compare_payload(
@@ -590,39 +593,32 @@ def _build_groq_compare_payload(
     reference_raw: bytes,
     candidate_raw: bytes,
 ) -> dict:
-    reference_crop = _crop_jewelry_bytes(reference_raw)
-    candidate_crop = _crop_jewelry_bytes(candidate_raw)
+    # Send only the jewelry crops resized to 512px.
+    # 4 full-frame images at 1024px = ~4400 image tokens → exhausts Groq TPM in one call.
+    # 2 crops at 512px = ~512 image tokens, well within per-minute budget.
+    ref_img = _resize_for_compare(_crop_jewelry_bytes(reference_raw))
+    cand_img = _resize_for_compare(_crop_jewelry_bytes(candidate_raw))
     return {
         "model": model,
         "messages": [{
             "role": "user",
             "content": [
                 {"type": "text", "text": prompt},
-                {"type": "text", "text": "IMAGE A FULL FRAME"},
+                {"type": "text", "text": "A:"},
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(reference_raw).decode('utf-8')}"},
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(ref_img).decode('utf-8')}"},
                 },
-                {"type": "text", "text": "IMAGE A JEWELRY CLOSE-UP CROP"},
+                {"type": "text", "text": "B:"},
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(reference_crop).decode('utf-8')}"},
-                },
-                {"type": "text", "text": "IMAGE B FULL FRAME"},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(candidate_raw).decode('utf-8')}"},
-                },
-                {"type": "text", "text": "IMAGE B JEWELRY CLOSE-UP CROP"},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(candidate_crop).decode('utf-8')}"},
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(cand_img).decode('utf-8')}"},
                 },
             ]
         }],
         "response_format": {"type": "json_object"},
         "temperature": 0.05,
-        "max_tokens": 1200,
+        "max_tokens": 200,
     }
 
 
@@ -640,8 +636,8 @@ async def _groq_compare(
     import aiohttp
     from app.data.groq_client import GROQ_API_URL, GROQ_MODEL
 
-    per_key_timeout = _float_env("ITEM_MATCH_GROQ_PER_KEY_TIMEOUT_S", 4.0, 2.0, 20.0)
-    total_timeout = _float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 10.0, 4.0, 26.0)
+    per_key_timeout = _float_env("ITEM_MATCH_GROQ_PER_KEY_TIMEOUT_S", 3.0, 2.0, 20.0)
+    total_timeout = _float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 4.0, 3.0, 26.0)
     max_keys = _int_env("ITEM_MATCH_GROQ_MAX_KEYS", 2, 1, 5)
     keys = keys[:max_keys]
     deadline = time.monotonic() + total_timeout
@@ -949,7 +945,7 @@ async def compare_item_images(
                     reference_frame_type,
                     candidate_frame_type,
                 ),
-                timeout=_float_env("ITEM_MATCH_LOCAL_TIMEOUT_S", 4.0, 1.0, 12.0),
+                timeout=_float_env("ITEM_MATCH_LOCAL_TIMEOUT_S", 1.5, 1.0, 12.0),
             )
         except asyncio.TimeoutError:
             logger.warning("Local item fingerprint timed out")
@@ -968,45 +964,45 @@ async def compare_item_images(
 
     if use_remote:
         semantic_results: list[dict] = []
-        # Primary judge: Gemini (stronger fine-grained visual ID). Fall back to
-        # Groq only if Gemini is unavailable/failed.
+        # Primary judge: Groq (fast, consistent). Fall back to Gemini only if
+        # Groq is unavailable/failed.
         try:
-            gemini_result = await asyncio.wait_for(
-                _gemini_compare(
-                    reference_raw, candidate_raw,
-                    reference_frame_type, candidate_frame_type, local_result,
+            groq_result = await asyncio.wait_for(
+                _groq_compare(
+                    reference_raw,
+                    candidate_raw,
+                    reference_frame_type,
+                    candidate_frame_type,
+                    local_result,
                 ),
-                timeout=_float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 5.0, 2.0, 12.0) + 1.0,
+                timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 4.0, 3.0, 26.0) + 1.0,
             )
-            if gemini_result:
-                gemini_result["reference_frame_type"] = reference_frame_type
-                gemini_result["candidate_frame_type"] = candidate_frame_type
-                semantic_results.append(gemini_result)
+            if groq_result:
+                groq_result["reference_frame_type"] = reference_frame_type
+                groq_result["candidate_frame_type"] = candidate_frame_type
+                semantic_results.append(groq_result)
         except asyncio.TimeoutError:
-            logger.warning("Gemini item compare timed out inside same-item matcher")
+            logger.warning("Groq item compare timed out inside same-item matcher")
         except Exception as exc:
-            logger.warning("Gemini item compare exception: %s", exc)
+            logger.warning("Groq item compare exception: %s", exc)
 
         if not semantic_results:
             try:
-                groq_result = await asyncio.wait_for(
-                    _groq_compare(
-                        reference_raw,
-                        candidate_raw,
-                        reference_frame_type,
-                        candidate_frame_type,
-                        local_result,
+                gemini_result = await asyncio.wait_for(
+                    _gemini_compare(
+                        reference_raw, candidate_raw,
+                        reference_frame_type, candidate_frame_type, local_result,
                     ),
-                    timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 10.0, 4.0, 26.0) + 1.0,
+                    timeout=_float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 5.0, 2.0, 12.0) + 1.0,
                 )
-                if groq_result:
-                    groq_result["reference_frame_type"] = reference_frame_type
-                    groq_result["candidate_frame_type"] = candidate_frame_type
-                    semantic_results.append(groq_result)
+                if gemini_result:
+                    gemini_result["reference_frame_type"] = reference_frame_type
+                    gemini_result["candidate_frame_type"] = candidate_frame_type
+                    semantic_results.append(gemini_result)
             except asyncio.TimeoutError:
-                logger.warning("Groq item compare timed out inside same-item matcher")
+                logger.warning("Gemini item compare timed out inside same-item matcher")
             except Exception as exc:
-                logger.warning("Groq item compare exception: %s", exc)
+                logger.warning("Gemini item compare exception: %s", exc)
 
         if semantic_results:
             blocking_semantic = [item for item in semantic_results if is_blocking_mismatch(item)]
@@ -1021,7 +1017,7 @@ async def compare_item_images(
                                 candidate_frame_type,
                                 local_result,
                             ),
-                            timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 8.0, 4.0, 20.0) + 1.0,
+                            timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 4.0, 3.0, 20.0) + 1.0,
                         )
                         if groq_result:
                             groq_result["reference_frame_type"] = reference_frame_type
