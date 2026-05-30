@@ -356,12 +356,19 @@ async def _gemini_audio_eval(
             "You are an expert acoustic gold authenticator. This is a standardised "
             "DROP TEST: the jewellery item was dropped EXACTLY ONCE onto a hard GLASS "
             "surface and recorded for ~5 seconds.\n\n"
+            "CALIBRATION — read carefully: this device is empirically calibrated on real "
+            "gold JEWELLERY (18-22k alloy, NOT pure 24k). On a hard glass surface, genuine "
+            "gold pieces sustain a CLEAR, LINGERING ringing tone, while plated / hollow / "
+            "base-metal imitations give a SHORT DEAD THUD. Do NOT apply the textbook "
+            "'pure 24k gold is soft so it sounds dull' argument — it is wrong for these "
+            "wearable alloyed pieces on glass, where genuine gold rings LONGER and CLEARER "
+            "than imitations. Trust the calibration below, not generic metallurgy priors.\n\n"
             "Because the surface is GLASS (hard and reflective, almost no damping of its "
             "own), the sound after the impact is governed by the ITEM itself:\n"
-            "  • Solid gold / dense precious metal → a CLEAR, SUSTAINED, bell-like ringing "
-            "tone that lingers and echoes after the impact → HIGH gold likelihood.\n"
-            "  • Plated, hollow, or base metal (brass, zinc, alloy) → a SHORT, DEAD 'tick' "
-            "or 'thud' that dies almost immediately, little or no sustained tone → LOW.\n\n"
+            "  • Genuine gold jewellery → a CLEAR, SUSTAINED, bell-like ringing tone that "
+            "lingers and echoes after the impact → HIGH gold likelihood.\n"
+            "  • Plated, hollow, or base metal (brass, zinc) → a SHORT, DEAD 'tick' or "
+            "'thud' that dies almost immediately, little or no sustained tone → LOW.\n\n"
             "How to analyse the clip:\n"
             "1. Locate the SINGLE drop impact (the loudest moment). Ignore any faint second "
             "bounce and the brief high-pitched click of glass itself.\n"
@@ -393,7 +400,12 @@ async def _gemini_audio_eval(
             ]}],
             "generationConfig": {
                 "temperature": 0.10,
-                "maxOutputTokens": 400,
+                # NO maxOutputTokens cap on purpose: gemini-3.x flash spends tokens
+                # THINKING before the answer; a small cap (e.g. 400) was consumed by
+                # thinking → empty reply (finishReason=MAX_TOKENS). Omitting the cap lets
+                # the model use its full output budget, so the JSON answer always lands.
+                # Keep thinking low so latency/cost stay reasonable.
+                "thinkingConfig": {"thinkingLevel": "low"},
                 "responseMimeType": "application/json",
                 "responseSchema": {
                     "type": "OBJECT",
@@ -419,7 +431,7 @@ async def _gemini_audio_eval(
                 logger.info(f"Gemini audio eval ok [{item_type}/{mode}] gold_score={gscore} model={GEMINI_AUDIO_MODEL}")
                 return explanation, low_conf, gscore
     except Exception as e:
-        logger.warning(f"Gemini audio eval failed [{item_type}/{mode}]: {e}")
+        logger.warning(f"Gemini audio eval failed [{item_type}/{mode}] (audio_model={GEMINI_AUDIO_MODEL}): {e}")
 
     return _templated_explanation(physics, phys_score, item_type, mode), False, None
 

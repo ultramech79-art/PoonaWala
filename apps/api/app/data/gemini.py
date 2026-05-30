@@ -42,10 +42,11 @@ GEMINI_GUIDANCE_FALLBACK_API_KEYS = _split_keys("GEMINI_GUIDANCE_FALLBACK_API_KE
 # Gemini API Configuration. Keep this env-driven so local and Render deployments
 # can pin a released multimodal model without code changes.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
-# Best model for AUDIO analysis (the drop-test gold check). Pro reasons over the
-# actual waveform far better than flash, which just parroted the reference numbers.
-# Env-overridable so the deployment can pin whatever Pro model its key can access.
-GEMINI_AUDIO_MODEL = os.getenv("GEMINI_AUDIO_MODEL", "gemini-2.5-pro").strip() or "gemini-2.5-pro"
+# Model for AUDIO analysis (the drop-test gold check). gemini-3.5-flash analyses the
+# recorded clip well and is fast; the audio call sends NO maxOutputTokens cap so its
+# thinking tokens don't starve the JSON answer. Env-overridable.
+# (Verified: "*-live" model IDs are Live-streaming-API only and 404 on generateContent.)
+GEMINI_AUDIO_MODEL = os.getenv("GEMINI_AUDIO_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
 GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1beta").strip() or "v1beta"
 GEMINI_THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "minimal").strip() or "minimal"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
