@@ -3,6 +3,9 @@ import { X, SkipForward, PlayCircle } from 'lucide-react'
 
 interface Props {
   stepType: string        // 'top' | '45deg' | 'side' | 'macro' | 'selfie'
+  title?: string
+  hint?: string
+  buttonText?: string
   onDismiss: () => void
 }
 
@@ -28,7 +31,7 @@ const TUTORIAL_HINTS: Record<string, string> = {
   certificate: 'Scan the original purchase bill or authenticity certificate. Ensure the HUID and purity stamp are clearly visible.',
 }
 
-export function TutorialOverlay({ stepType, onDismiss }: Props) {
+export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }: Props) {
   const videoRef   = useRef<HTMLVideoElement>(null)
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
   const [videoError, setVideoError] = useState(false)
@@ -60,7 +63,7 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div>
             <p className="text-[10px] text-brand-600 uppercase tracking-widest font-bold mb-0.5">Tutorial</p>
-            <p className="text-xl font-bold text-stone-900 tracking-tight leading-tight">{TUTORIAL_LABELS[stepType] ?? stepType}</p>
+            <p className="text-xl font-bold text-stone-900 tracking-tight leading-tight">{title || TUTORIAL_LABELS[stepType] ?? stepType}</p>
           </div>
           <button
             onClick={onDismiss}
@@ -72,7 +75,7 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
         </div>
 
         {/* Video or placeholder */}
-        <div className={`mx-5 rounded-2xl overflow-hidden bg-stone-900 flex items-center justify-center relative ${stepType === '45deg' ? 'aspect-[9/16] max-h-[60vh]' : 'aspect-video'}`}>
+        <div className={`mx-6 rounded-[24px] overflow-hidden bg-stone-900 flex items-center justify-center relative ${stepType === '45deg' ? 'aspect-[3/4]' : 'aspect-video'}`}>
           {!videoError ? (
             <video
               ref={videoRef}
@@ -108,17 +111,17 @@ export function TutorialOverlay({ stepType, onDismiss }: Props) {
         </div>
 
         {/* Hint text */}
-        <div className="px-6 pt-4 pb-3">
-          <p className="text-sm font-medium text-stone-600 leading-relaxed">{TUTORIAL_HINTS[stepType]}</p>
+        <div className="px-6 pt-5 pb-3">
+          <p className="text-sm font-medium text-stone-600 leading-relaxed">{hint || TUTORIAL_HINTS[stepType]}</p>
         </div>
 
         {/* Actions */}
         <div className="px-6 pt-2 pb-6 flex gap-3">
           <button
             onClick={onDismiss}
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-900 text-white font-semibold text-sm active:scale-[0.97] transition-all shadow-xl shadow-stone-900/20 hover:bg-stone-800"
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[20px] bg-stone-900 text-white font-semibold text-sm active:scale-[0.97] transition-all shadow-xl shadow-stone-900/20 hover:bg-stone-800"
           >
-            Got it — Start Capture
+            {buttonText || 'Got it'}
           </button>
         </div>
       </div>

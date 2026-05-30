@@ -860,6 +860,9 @@ export function CaptureFlow() {
         {showTutorial && !step.isVideo && !step.isAudio && (
           <TutorialOverlay
             stepType={step.type}
+            title={t(step.titleKey)}
+            hint={t(step.hintKey)}
+            buttonText={t('tutorial_got_it')}
             onDismiss={() => setShowTutorial(false)}
           />
         )}
