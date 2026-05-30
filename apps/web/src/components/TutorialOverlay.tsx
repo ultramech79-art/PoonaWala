@@ -75,8 +75,9 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
         </div>
 
         {/* Video or placeholder */}
-        <div className={`mx-6 rounded-[24px] overflow-hidden bg-stone-900 flex items-center justify-center relative ${stepType === '45deg' ? 'aspect-[9/16]' : 'aspect-video'}`}>
-          {!videoError ? (
+        <div className="w-full px-6 flex justify-center">
+          <div className={`relative rounded-[24px] overflow-hidden bg-stone-900 shadow-xl flex items-center justify-center ${stepType === '45deg' ? 'aspect-[9/16] h-[48vh] sm:h-[55vh]' : 'aspect-video w-full'}`}>
+            {!videoError ? (
             <video
               ref={videoRef}
               src={videoSrc}
