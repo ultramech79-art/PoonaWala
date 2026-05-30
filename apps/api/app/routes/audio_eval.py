@@ -181,89 +181,61 @@ _DEFAULT_RANGE = {"decay_lo": 60, "decay_hi": 450, "centroid_lo": 250, "centroid
 
 def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[str]]:
     """
-    Drop mode: decay time is the PRIMARY discriminator and carries most of the weight.
+    ONE transparent rule for every item (ring, bangle, necklace) and both modes.
 
-    Physics basis:
-      Gold internal damping: 3×10⁻⁴ → very low energy loss → long sustained ring
-      Brass/zinc damping:    2–10×10⁻⁴ → 3–10× faster decay → dead, short ring
-      At 5% threshold (phone on glass): real gold 100ms–2500ms, fakes 80–200ms.
-      LONGER = more gold-like. Secondary features (gold-band, R²) are confirmatory only.
+    Design goal (explicit product decision): a genuine gold piece must score HIGH
+    and CONSISTENTLY. The same dropped ring measures decay anywhere from ~430 ms to
+    the 3000 ms ceiling depending on how it bounces, so a brittle threshold made the
+    score swing 16↔87. Here the bands are deliberately WIDE: any clean, sustained
+    metallic ring lands 82–92 regardless of that run-to-run decay variation, so the
+    verdict no longer flips.
 
-    Weight design:
-      DROP: decay contributes ±48 of the ~45-point swing above/below 50.
-            All secondary features combined cap at ~±10.
-      TAP:  gold-band is primary; decay secondary (multiple taps obscure decay).
+    Physics: solid precious metal rings with a clean, sustained resonance (long
+    decay and/or a clean exponential R²). A dead, instantly-damped strike is
+    base-metal-like. Honest tradeoff (chosen): a hollow/plated fake that genuinely
+    rings long also scores high — acoustics cannot separate those, only the
+    XRF/density step can. The disclaimer makes that explicit.
+
+    NOTE: this is deterministic (same input → same score). It replaces the 33-clip
+    classifier, which could not generalise to new recordings and was the source of
+    the wild score swings.
     """
     decay_ms   = physics["decay_ms"]
     gold_ratio = physics["gold_ratio"]
-    hf_ratio   = physics["hf_ratio"]
     decay_r2   = physics["decay_r2"]
-    events     = physics["event_count"]
-    is_drop    = mode == "drop"
+    snr_db     = physics.get("snr_db", 30.0)
 
-    score, reasons = 50, []
+    clean = decay_r2 >= 0.55          # clean exponential ring-down (single material)
+    reasons: list[str] = []
 
-    # ── DECAY TIME (drop: primary / tap: secondary) ───────────────────────────
-    if is_drop:
-        # Fakes (5% threshold): 80–200ms.  Real gold: 80ms (small ring) – 2500ms (bangle).
-        # Thresholds sized so that the ≥150ms band covers real necklaces / medium rings
-        # and the ≥250ms / ≥500ms bands cover rings and bangles that ring visibly longer.
-        if decay_ms >= 500:
-            score += 48
-            reasons.append(f"Very long ring {decay_ms:.0f}ms — solid gold sustains resonance (damping 3×10⁻⁴)")
-        elif decay_ms >= 250:
-            score += 38
-            reasons.append(f"Long drop decay {decay_ms:.0f}ms — well above typical base-metal range")
-        elif decay_ms >= 150:
-            score += 16
-            reasons.append(f"Drop decay {decay_ms:.0f}ms — moderate; secondary features determine verdict")
-        elif decay_ms >= 80:
-            score += 4
-            reasons.append(f"Drop decay {decay_ms:.0f}ms — borderline overlap zone")
-        else:
-            score -= 25
-            reasons.append(f"Short drop decay {decay_ms:.0f}ms — consistent with high-damping base metal")
+    if decay_ms >= 1200:
+        score = 88
+        reasons.append(f"Long sustained metallic ring {decay_ms:.0f}ms — solid-gold-like resonance")
+    elif decay_ms >= 250 and clean:
+        score = 82
+        reasons.append(f"Clean sustained ring {decay_ms:.0f}ms (R²={decay_r2:.2f}) — gold-like")
+    elif decay_ms >= 250:
+        score = 72
+        reasons.append(f"Sustained ring {decay_ms:.0f}ms — gold-like (decay envelope a little noisy)")
+    elif decay_ms >= 120 and clean:
+        score = 64
+        reasons.append(f"Short but clean ring {decay_ms:.0f}ms (R²={decay_r2:.2f}) — borderline")
+    elif decay_ms >= 120:
+        score = 45
+        reasons.append(f"Short ring {decay_ms:.0f}ms — mixed evidence")
     else:
-        # Tap: decay less reliable (multiple taps extend apparent decay for both classes)
-        if decay_ms >= 80:
-            score += 10
-            reasons.append(f"Tap decay {decay_ms:.0f}ms — supportive")
-        elif decay_ms < 35:
-            score -= 8
-            reasons.append(f"Very short tap decay {decay_ms:.0f}ms")
+        score = 26
+        reasons.append(f"Dead / instantly-damped strike {decay_ms:.0f}ms — base-metal-like")
 
-    # ── SECONDARY FEATURES (confirmatory, total max ±10) ─────────────────────
-
-    # Gold-band energy: real avg 16.6% vs fake avg 10.8%
+    # Small nudges (kept small so they cannot flip the verdict)
     if gold_ratio >= 0.20:
-        score += 6
-        reasons.append(f"Gold-band energy {gold_ratio:.0%} — above real-gold average (16.6%)")
-    elif gold_ratio >= 0.12:
-        score += 2
-        reasons.append(f"Gold-band energy {gold_ratio:.0%} — moderate")
-    else:
-        score -= 5
-        reasons.append(f"Low gold-band energy {gold_ratio:.0%} — below fake average (10.8%)")
-
-    # R²: only meaningful paired with a long decay (multi-mode bangles have low R²)
-    if decay_r2 >= 0.95 and decay_ms >= 150:
         score += 4
-        reasons.append(f"R²={decay_r2:.2f} with long decay — clean single-material ring")
+        reasons.append(f"Strong dense-metal band energy {gold_ratio:.0%}")
+    if snr_db < 15:
+        score -= 6
+        reasons.append(f"Low SNR {snr_db:.0f}dB — recording quality reduces certainty")
 
-    # HF ratio: 60–90% normal on glass — only flag true extremes
-    if hf_ratio > 0.92:
-        score -= 2
-        reasons.append(f"Very high HF {hf_ratio:.0%} — possible noise")
-    elif hf_ratio < 0.20:
-        score += 3
-        reasons.append(f"Low HF {hf_ratio:.0%} — warm acoustic signature")
-
-    # Multi-tap bonus (tap mode only — drop mode onset count reflects ring harmonics)
-    if not is_drop and events >= 3:
-        score += 3
-        reasons.append(f"{events} tap impacts detected")
-
-    return max(5, min(95, score)), reasons
+    return max(5, min(97, score)), reasons
 
 
 # Confidence-sharpening gain (logit temperature scaling, T = 1/gain < 1).
@@ -499,16 +471,13 @@ async def audio_eval(req: AudioEvalRequest):
     # validation + MFCC pass that build_feature_vector would do.
     physics = extract_physics_features(arr, sr, val, item_type, mode)
 
-    # ── Score (classifier > physics heuristic) ────────────────────────────────
-    clf_score = _classifier_score(physics, mode) if physics else None
-    if clf_score is not None:
-        final_score = clf_score
-        score_source = "classifier"
-    else:
-        heuristic, reasons = _physics_score(physics, item_type, mode)
-        final_score  = heuristic
-        score_source = "physics_heuristic"
-        physics["_reasons"] = reasons
+    # ── Score: transparent deterministic physics rule ─────────────────────────
+    # The 33-clip classifier could not generalise to new recordings (the same ring
+    # scored 16↔87 across drops), so scoring is the explainable _physics_score:
+    # same input → same score, real gold reliably high. See _physics_score.
+    final_score, reasons = _physics_score(physics, item_type, mode)
+    score_source = "physics_rule"
+    physics["_reasons"] = reasons
 
     logger.info(
         f"audio_eval [{item_type}/{mode}] source={score_source} score={final_score} "
