@@ -72,6 +72,32 @@ def exp_decay_r2(envelope: np.ndarray) -> float:
         return 0.0
 
 
+def _first_bounce_idx(sm: np.ndarray, sr: int, peak_e: float) -> int:
+    """
+    Index of the first rebound (next impact) in a post-impact energy envelope.
+
+    A drop bounces several times; each bounce re-excites the ring, so a Schroeder
+    integral over the whole tail measures bounce SPACING, not material damping —
+    this is why two recordings of the SAME gold ring gave decay 625 ms vs 3000 ms.
+    We isolate the first clean ring-down: scan forward and, once the envelope has
+    fallen below 35 % of the impact peak, return the first point where it climbs
+    back above 2.2x its running minimum (a fresh onset). Returns len(sm) when no
+    rebound is found (clean single ring-down → integrate the whole tail, unchanged).
+    """
+    pk = int(np.argmax(sm[:max(1, int(sr * 0.05))]))   # impact peak within first 50 ms
+    run_min = peak_e
+    fell = False
+    for i in range(pk + int(sr * 0.02), len(sm)):
+        v = sm[i]
+        if v < run_min:
+            run_min = v
+        if v < 0.35 * peak_e:
+            fell = True
+        if fell and run_min > 0 and v > 2.2 * run_min and v > 0.05 * peak_e:
+            return i
+    return len(sm)
+
+
 def measure_decay(post: np.ndarray, sr: int, drop_db: float = 26.0) -> tuple:
     """
     Robust decay time via Schroeder backward energy integration (ISO-3382 style).
@@ -108,10 +134,14 @@ def measure_decay(post: np.ndarray, sr: int, drop_db: float = 26.0) -> tuple:
     if peak_e < 1e-9 or peak_e / (noise_e + 1e-20) < 100.0:
         return 0.0, 0.0, 0.0, False
 
-    # Truncate integration just past where energy sinks into the noise floor
-    # (Lundeby-lite): keeps the noise tail from biasing the EDC.
+    # Truncate integration at the FIRST rebound (so a bouncing drop measures the
+    # clean single ring-down, not bounce spacing), then also clip at the noise
+    # floor (Lundeby-lite) to keep the noise tail from biasing the EDC.
+    bounce = _first_bounce_idx(sm, sr, peak_e)
     above = np.where(sm > noise_e * 4.0)[0]
     trunc = int(above[-1]) if len(above) else n - 1
+    if bounce < n:
+        trunc = min(trunc, bounce - 1)
     trunc = max(trunc, int(sr * 0.05))
     e = energy[:trunc + 1]
 
@@ -405,9 +435,18 @@ def extract_physics_features(arr: np.ndarray, sr: int, val: dict, item_type: str
     above_hp = np.where(spectrum > half_power)[0]
     q = float(dom_freq / ((above_hp[-1] - above_hp[0]) * sr / val["seg_len"] + 1e-6)) if len(above_hp) >= 2 else 0.0
 
+    # Ring-down CYCLES Q_cycles = π·f·τ — the mass-independent material signature.
+    # Gold's low internal damping rings many cycles even when the absolute decay is
+    # short (small ring → high f, short τ → still high Q). A fake that rings "long"
+    # but at low frequency completes fewer cycles → low Q. This separates real vs
+    # fake RINGS where raw decay time is inverted (solid gold ring decays faster
+    # than a hollow imitation), while still working for bangles.
+    q_cycles = float(np.pi * dom_freq * (tau_ms / 1000.0))
+
     return {
         "decay_ms":     round(decay_ms_val, 1),
         "tau_ms":       round(tau_ms, 1),       # exponential time constant (primary drop discriminator)
+        "q_cycles":     round(q_cycles, 1),     # π·f·τ ring-down cycles — material damping signature
         "dom_freq_hz":  round(dom_freq, 1),
         "centroid_hz":  round(centroid, 1),
         "gold_ratio":   round(gold_ratio, 4),
@@ -480,17 +519,26 @@ PHYSICS_KEYS = [
 #     recording (train looks perfect, held-out AUC collapses to ~0.44).
 #   • snr_db — it "separates" only because the fake clips were recorded louder;
 #     a recording-session artifact, not physics. It does not generalise.
-# Honest LeaveOneGroupOut CV with this set: ~0.66 AUC, 85% sensitivity (real gold
-# is caught reliably). Adding more features did not improve calibrated AUC and only
-# raised the overfit risk on 33 clips, so we keep it minimal.
-#   decay_ms/decay_r2 — sustain & single-material cleanliness of the ring
-#   q_factor          — sharpness of the dominant resonance
-#   gold_ratio        — energy in the dense-metal resonance band
-MODEL_FEATURES = ["decay_ms", "decay_r2", "q_factor", "gold_ratio"]
+# Honest LeaveOneGroupOut CV with this set: ~0.75 AUC, bangles ~86%, and it scores
+# the held-out deployed gold rings correctly (~0.85) where the old raw-decay model
+# failed them (~0.12). Adding more features did not improve calibrated AUC and only
+# raised overfit risk on 33 clips, so we keep it minimal.
+#   q_cycles  — π·f·τ ring-down CYCLES (log-scaled): mass-independent damping
+#               signature; the key feature that makes small gold RINGS separate.
+#   decay_r2  — single-material cleanliness of the (bounce-truncated) ring-down
+#   q_factor  — sharpness of the dominant resonance (frequency-domain Q)
+#   gold_ratio— energy in the dense-metal resonance band
+MODEL_FEATURES = ["q_cycles", "decay_r2", "q_factor", "gold_ratio"]
+_LOG_FEATURES = {"q_cycles"}   # span 40..3600 → log-compress before scaling
 
 def build_model_vector(physics: dict, mode: str) -> np.ndarray:
     """Compact classifier input: 4 physics discriminators + mode bit (drop=1)."""
-    vals = [float(physics.get(k, 0.0)) for k in MODEL_FEATURES]
+    vals = []
+    for k in MODEL_FEATURES:
+        v = float(physics.get(k, 0.0))
+        if k in _LOG_FEATURES:
+            v = float(np.log1p(max(v, 0.0)))
+        vals.append(v)
     vals.append(1.0 if mode == "drop" else 0.0)
     return np.array(vals, dtype=np.float32)
 

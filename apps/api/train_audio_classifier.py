@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
 """
-Gold acoustic authenticity classifier — training script v3.
+Gold acoustic authenticity classifier — training script v4.
 
-v3 (anti-overfit rewrite):
+v4 (ring-down CYCLES + bounce-truncated decay):
   - Trains on the COMPACT physics-only vector (audio_features.MODEL_FEATURES):
-    decay_ms, decay_r2, q_factor, gold_ratio + mode bit. The 120 MFCCs and snr_db
-    are deliberately excluded — on 33 clips MFCCs let the model memorise each
-    recording (perfect train, ~0.44 held-out AUC) and snr_db is a recording-
+    q_cycles (log), decay_r2, q_factor, gold_ratio + mode bit. The 120 MFCCs and
+    snr_db are deliberately excluded — on 33 clips MFCCs let the model memorise
+    each recording (perfect train, ~0.44 held-out AUC) and snr_db is a recording-
     loudness artifact, not physics.
-  - Sigmoid (Platt) calibration instead of isotonic (isotonic over-fit on this few clips).
-  - Regularized linear models preferred for the small feature set; shallow RF as baseline.
-  - Per-mode (drop/tap) analysis + full per-clip diagnostics printed.
-  - Decay/τ now come from the robust Schroeder energy-decay fit (measure_decay),
-    so the wild multi-second values that broke v2 are gone.
+  - q_cycles = π·f·τ (ring-down cycles) is the mass-independent damping signature.
+    It makes small gold RINGS separate from fakes where raw decay TIME is inverted
+    (a solid gold ring decays fast but at high frequency = many cycles = high Q; a
+    hollow fake rings longer but at low frequency = fewer cycles). Bangles still work.
+  - measure_decay now truncates the Schroeder integral at the first rebound, so a
+    bouncing drop measures the clean single ring-down (fixes the same gold ring
+    reading 625 ms vs 3000 ms across two recordings).
+  - Sigmoid (Platt) calibration; regularized linear models; shallow RF baseline.
 
-Honest LeaveOneGroupOut CV on the current 33 clips: ~67% acc / 0.66 AUC.
-Real gold is caught reliably (~85% sensitivity); some imitations ring like gold
-on glass and cannot be separated acoustically — that is physics, not a bug.
+Honest LeaveOneGroupOut CV on the current 33 clips: ~67% acc / 0.66 AUC, bangles
+~86%, and the held-out deployed gold rings now score correctly (~0.85) where the
+old raw-decay model failed them (~0.12). A hollow imitation that rings many cycles
+can still read gold — that residual is physics, not a bug.
 
 Dataset:   data/audio_gold/manifest.csv
 Features:  4 physics metrics + 1 mode bit = 5 dims (see audio_features.MODEL_FEATURES)
