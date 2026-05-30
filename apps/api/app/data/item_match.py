@@ -201,12 +201,10 @@ def _fingerprint(raw: bytes) -> dict:
     if img is None:
         return {"valid": False}
 
-    coin = None
-    try:
-        coin = detect_coin_hough(img, "auto_coin")
-    except Exception:
-        coin = None
-    bbox = estimate_jewelry_bbox_px(img, coin)
+    # Skip detect_coin_hough (Hough circle = O(n³), too slow on low-CPU servers).
+    # bbox without coin is still useful for shape scoring; coin is only needed
+    # for scale/weight estimation which happens elsewhere.
+    bbox = estimate_jewelry_bbox_px(img, None)
     color = analyze_color(img)
     hsh = compute_phash(img)
 
@@ -593,11 +591,10 @@ def _build_groq_compare_payload(
     reference_raw: bytes,
     candidate_raw: bytes,
 ) -> dict:
-    # Send only the jewelry crops resized to 512px.
-    # 4 full-frame images at 1024px = ~4400 image tokens → exhausts Groq TPM in one call.
-    # 2 crops at 512px = ~512 image tokens, well within per-minute budget.
-    ref_img = _resize_for_compare(_crop_jewelry_bytes(reference_raw))
-    cand_img = _resize_for_compare(_crop_jewelry_bytes(candidate_raw))
+    # Resize to 512px — skip crop (crop calls detect_coin_hough which is O(n³) slow).
+    # Groq vision handles the full resized frame fine for same-item identity.
+    ref_img = _resize_for_compare(reference_raw)
+    cand_img = _resize_for_compare(candidate_raw)
     return {
         "model": model,
         "messages": [{
@@ -654,7 +651,7 @@ async def _groq_compare(
                 reference_raw=reference_raw,
                 candidate_raw=candidate_raw,
             ),
-            timeout=_float_env("ITEM_MATCH_PAYLOAD_TIMEOUT_S", 2.0, 1.0, 8.0),
+            timeout=_float_env("ITEM_MATCH_PAYLOAD_TIMEOUT_S", 4.0, 1.0, 8.0),
         )
     except asyncio.TimeoutError:
         logger.warning("Groq item compare payload preparation timed out")
