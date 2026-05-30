@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
         from app.db.database import engine, Base
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        logger.info("✓ Successfully connected to the database")
         logger.info("✓ Database schema initialized")
     except Exception as e:
         logger.error(f"✗ Database initialization failed: {e}")
