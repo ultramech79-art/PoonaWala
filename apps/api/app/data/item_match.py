@@ -518,6 +518,44 @@ def _local_compare(ref: dict, cand: dict, reference_frame_type: str, candidate_f
     }
 
 
+# Canonical jewelry categories + synonym map. Used to turn the VLM's per-image
+# type label into a hard substitution block (a weak model confuses "same exact
+# item" but reliably tells a ring from a bangle).
+_CATEGORY_SYNONYMS = {
+    "ring": "ring",
+    "bangle": "bangle", "kada": "bangle", "kara": "bangle", "kangan": "bangle", "bracelet": "bangle",
+    "necklace": "necklace", "haar": "necklace", "mala": "necklace",
+    "chain": "chain",
+    "pendant": "pendant", "locket": "pendant",
+    "earring": "earring", "earrings": "earring", "jhumka": "earring", "stud": "earring", "tops": "earring", "bali": "earring",
+    "nosepin": "nosepin", "nose pin": "nosepin", "nath": "nosepin",
+    "coin": "coin",
+    "bar": "bar", "biscuit": "bar", "ingot": "bar",
+}
+# Pairs too easily confused across angles/crops to block on (neck-worn family).
+_CONFUSABLE_CATEGORY_PAIRS = (
+    {"necklace", "chain"},
+    {"necklace", "pendant"},
+    {"chain", "pendant"},
+)
+
+def _normalize_category(value) -> Optional[str]:
+    token = str(value or "").strip().lower()
+    if not token or token in ("other", "unknown", "unclear", "n/a", "none"):
+        return None
+    # match the longest synonym keyword contained in the label
+    for key in sorted(_CATEGORY_SYNONYMS, key=len, reverse=True):
+        if key in token:
+            return _CATEGORY_SYNONYMS[key]
+    return None
+
+
+def _category_mismatch(cat_a: Optional[str], cat_b: Optional[str]) -> bool:
+    if not cat_a or not cat_b or cat_a == cat_b:
+        return False
+    return {cat_a, cat_b} not in _CONFUSABLE_CATEGORY_PAIRS
+
+
 def _normalize_semantic_result(raw: dict, local_result: dict) -> dict:
     verdict = str(raw.get("verdict") or "").strip().lower()
     same_item = raw.get("same_item")
@@ -540,32 +578,60 @@ def _normalize_semantic_result(raw: dict, local_result: dict) -> dict:
     score = raw.get("same_item_score")
     if score is None:
         score = 0.5 + confidence * 0.5 if same_item is True else 0.5 - confidence * 0.5 if same_item is False else 0.5
+    score = max(0.0, min(1.0, float(score)))
+
+    matching_signals = list(raw.get("matching_signals") or [])[:5]
+    mismatch_reasons = list(raw.get("mismatch_reasons") or [])[:5]
+
+    # ── Category override: different jewelry TYPE = hard substitution ──────────
+    # The VLM classifies each image's type independently (an easier, more reliable
+    # task than fine-grained same-item ID). If the types are confidently distinct
+    # (ring vs bangle), force "different" regardless of its same-item verdict.
+    cat_a = _normalize_category(raw.get("category_a"))
+    cat_b = _normalize_category(raw.get("category_b"))
+    category_mismatch = _category_mismatch(cat_a, cat_b)
+    if category_mismatch:
+        verdict = "different"
+        same_item = False
+        score = min(score, 0.1)
+        confidence = max(confidence, 0.9)
+        reason = f"item_type_changed_from_{cat_a}_to_{cat_b}"
+        if reason not in mismatch_reasons:
+            mismatch_reasons.insert(0, reason)
+            mismatch_reasons = mismatch_reasons[:5]
 
     return {
         "same_item": same_item,
         "verdict": verdict,
-        "same_item_score": round(max(0.0, min(1.0, float(score))), 3),
+        "same_item_score": round(score, 3),
         "confidence": round(confidence, 3),
         "method": "semantic_multimodal_compare",
         "reference_view_partial": bool(local_result.get("reference_view_partial")),
-        "matching_signals": list(raw.get("matching_signals") or [])[:5],
-        "mismatch_reasons": list(raw.get("mismatch_reasons") or [])[:5],
+        "category_a": cat_a,
+        "category_b": cat_b,
+        "category_mismatch": category_mismatch,
+        "matching_signals": matching_signals,
+        "mismatch_reasons": mismatch_reasons,
         "local_fingerprint": local_result,
     }
 
 
 def _identity_prompt(reference_frame_type: str, candidate_frame_type: str) -> str:
     return f"""Gold-loan fraud check. Image A is a {reference_frame_type} view. Image B is a {candidate_frame_type} view.
-Do these two images show the EXACT SAME physical jewelry item?
 
-IMPORTANT RULES:
+STEP 1 — Independently classify the jewelry TYPE in EACH image. Choose exactly one of:
+ring, bangle, bracelet, necklace, chain, pendant, earring, nosepin, coin, bar, other.
+A ring is a small finger band; a bangle/kada is a large wrist hoop — these are DIFFERENT types.
+If you cannot tell the type, use "other".
+
+STEP 2 — Do these two images show the EXACT SAME physical jewelry item?
 - Angle changes between {reference_frame_type} and {candidate_frame_type} are EXPECTED and NORMAL. Do NOT mark different for angle change alone.
 - Lighting, blur, zoom, and partial cropping differences are NORMAL. Do NOT mark different for these.
-- Mark "different" ONLY if there is a CLEAR SUBSTITUTION: a completely different jewelry type (ring vs. bangle), different gold color (yellow vs. white), or obviously different design.
-- If in doubt, return "inconclusive" — do NOT falsely accuse.
+- Mark "different" if the TYPES differ (e.g. ring vs bangle), the gold color differs (yellow vs white), or the design is obviously different.
+- If the types match and you are merely unsure about fine details, return "inconclusive" — do NOT falsely accuse.
 
 Return ONLY valid JSON:
-{{"same_item":true|false|null,"verdict":"same|different|inconclusive","confidence":0.0-1.0,"same_item_score":0.0-1.0,"matching_signals":["up to 3 short reasons"],"mismatch_reasons":["up to 3 short reasons"]}}"""
+{{"category_a":"<type>","category_b":"<type>","same_item":true|false|null,"verdict":"same|different|inconclusive","confidence":0.0-1.0,"same_item_score":0.0-1.0,"matching_signals":["up to 3 short reasons"],"mismatch_reasons":["up to 3 short reasons"]}}"""
 
 
 def _resize_for_compare(raw: bytes, max_px: int = 512) -> bytes:
@@ -1012,6 +1078,13 @@ async def compare_item_images(
                 logger.warning("Gemini item compare exception: %s", exc)
 
         if semantic_results:
+            # A confident jewelry-TYPE mismatch (ring vs bangle) is unambiguous —
+            # return it immediately, never let the local "supports same" path (which
+            # cannot tell a ring from a bangle) override a real substitution.
+            category_blocks = [item for item in semantic_results if item.get("category_mismatch")]
+            if category_blocks:
+                return sorted(category_blocks, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
+
             blocking_semantic = [item for item in semantic_results if is_blocking_mismatch(item)]
             if blocking_semantic:
                 if _local_supports_same_despite_semantic_block(local_result):
@@ -1066,6 +1139,11 @@ def is_blocking_mismatch(result: Optional[dict]) -> bool:
         return False
     if result.get("verdict") != "different":
         return False
+
+    # A confidently-distinct jewelry TYPE (ring vs bangle vs necklace …) is an
+    # unambiguous substitution — block regardless of frame angle or score.
+    if result.get("category_mismatch"):
+        return True
 
     confidence = float(result.get("confidence", 0.0))
     same_item_score = float(result.get("same_item_score", 0.5))
