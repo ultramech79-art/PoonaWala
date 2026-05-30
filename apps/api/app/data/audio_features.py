@@ -222,14 +222,16 @@ def detect_impacts(arr: np.ndarray, sr: int, mode: str = "tap") -> list:
     """
     Detect metallic impact events using spectral flux (primary) with amplitude fallback.
 
-    Drop mode uses stricter thresholds — only 1-2 real drops happen, echoes and
-    ring harmonics must NOT count as separate impacts. A minimum 300ms gap between
-    drop events and a cap of 2 events prevents echo contamination of the decay.
+    ONE-DROP-ON-GLASS protocol: the drop test is evaluated on exactly ONE drop, so
+    drop mode returns the single strongest impact (max_events=1). Echoes, ring
+    harmonics, and the rebound are NOT counted as separate impacts — the evaluation
+    (decay + resonance) is taken from that one drop. Tap mode still allows multiple.
     """
     is_drop = mode == "drop"
     # For drop mode: minimum gap between impacts is 300ms. For tap: 75ms.
     min_gap_ms = 300 if is_drop else 75
-    max_events = 2 if is_drop else 8
+    # Drop test = ONE drop: evaluate only the single strongest impact.
+    max_events = 1 if is_drop else 8
     # For drop: use a higher delta so we only pick real impacts, not ring harmonics
     onset_delta = 0.09 if is_drop else 0.04
 
