@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -51,6 +52,9 @@ GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_
 COMPARE_FRAME_TYPES = {"top", "45deg", "side", "macro", "hallmark", "huid", "closeup", "selfie", "video"}
 LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup", "selfie"}
 ANGLE_VARIANT_FRAME_TYPES = {"45deg", "side"}
+_IMAGE_BYTES_CACHE: dict[str, tuple[float, bytes]] = {}
+_IMAGE_BYTES_CACHE_MAX = 48
+_IMAGE_BYTES_CACHE_TTL_S = 15 * 60
 
 
 def _float_env(name: str, default: float, minimum: float, maximum: float) -> float:
@@ -118,14 +122,47 @@ def _frame_context(frame_type: str | None) -> dict:
     }
 
 
+def _cache_key(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8", "ignore")).hexdigest()
+
+
+def _get_cached_bytes(source: str) -> Optional[bytes]:
+    key = _cache_key(source)
+    cached = _IMAGE_BYTES_CACHE.get(key)
+    if not cached:
+        return None
+    now = time.monotonic()
+    cached_at, raw = cached
+    if now - cached_at > _IMAGE_BYTES_CACHE_TTL_S:
+        _IMAGE_BYTES_CACHE.pop(key, None)
+        return None
+    _IMAGE_BYTES_CACHE[key] = (now, raw)
+    return raw
+
+
+def _set_cached_bytes(source: str, raw: Optional[bytes]) -> Optional[bytes]:
+    if not raw:
+        return raw
+    now = time.monotonic()
+    _IMAGE_BYTES_CACHE[_cache_key(source)] = (now, raw)
+    if len(_IMAGE_BYTES_CACHE) > _IMAGE_BYTES_CACHE_MAX:
+        oldest = sorted(_IMAGE_BYTES_CACHE.items(), key=lambda item: item[1][0])
+        for key, _ in oldest[: len(_IMAGE_BYTES_CACHE) - _IMAGE_BYTES_CACHE_MAX]:
+            _IMAGE_BYTES_CACHE.pop(key, None)
+    return raw
+
+
 async def _load_bytes(source: str) -> Optional[bytes]:
     if not source:
         return None
+    cached = _get_cached_bytes(source)
+    if cached is not None:
+        return cached
     if source.startswith("data:"):
-        return await asyncio.to_thread(_decode_data_url, source)
+        return _set_cached_bytes(source, await asyncio.to_thread(_decode_data_url, source))
     if source.startswith("http://") or source.startswith("https://") or source.startswith("local://"):
-        return await fetch_image_bytes(source)
-    return await asyncio.to_thread(_decode_base64, source)
+        return _set_cached_bytes(source, await fetch_image_bytes(source))
+    return _set_cached_bytes(source, await asyncio.to_thread(_decode_base64, source))
 
 
 def _decode_data_url(source: str) -> Optional[bytes]:
@@ -706,7 +743,7 @@ async def _gemini_compare(
         }],
         "generationConfig": {"temperature": 0.05, "maxOutputTokens": 600},
     }
-    timeout = _float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 12.0, 4.0, 25.0)
+    timeout = _float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 5.0, 2.0, 12.0)
     try:
         data, ok = await _gemini_request(payload, timeout=int(timeout), api_keys=keys, max_retries=0)
         if not ok:
@@ -747,6 +784,16 @@ def _same_verdict_has_visual_conflict(semantic_result: dict) -> bool:
     shape_score = float(debug.get("shape_score", 1.0))
     phash_score = float(debug.get("phash_score", 1.0))
     mismatch_count = int(debug.get("mismatch_signal_count") or 0)
+    # 45-degree to top-view comparisons are noisy for the local geometry
+    # detector: the coin and the tilted ring can get merged into one bbox.
+    # If the semantic judge says "same", only veto it for a truly severe
+    # local conflict.
+    if reference_type == "45deg" and candidate_type == "top":
+        return (
+            mismatch_count >= 2
+            and local_score <= 0.42
+            and (shape_score <= 0.50 or color_score <= 0.32 or phash_score <= 0.30)
+        )
     if (
         mismatch_count >= 2
         and local_score <= 0.55
@@ -759,6 +806,29 @@ def _same_verdict_has_visual_conflict(semantic_result: dict) -> bool:
         bool(debug.get("distinct_type_mismatch"))
         and local_score <= 0.62
         and shape_score <= 0.68
+    )
+
+
+def _local_supports_same_despite_semantic_block(local_result: dict) -> bool:
+    reference_type = str(local_result.get("reference_frame_type") or "").lower()
+    candidate_type = str(local_result.get("candidate_frame_type") or "").lower()
+    if reference_type != "45deg" or candidate_type not in {"top", "side"}:
+        return False
+    if is_blocking_mismatch(local_result):
+        return False
+
+    debug = local_result.get("debug") or {}
+    local_score = float(local_result.get("same_item_score", 0.5))
+    shape_score = float(debug.get("shape_score", 0.0))
+    phash_score = float(debug.get("phash_score", 0.0))
+    mismatch_count = int(debug.get("mismatch_signal_count") or 0)
+    angle_conflict = bool(debug.get("angle_identity_conflict"))
+    return (
+        local_score >= 0.62
+        and shape_score >= 0.72
+        and phash_score >= 0.42
+        and mismatch_count <= 1
+        and not angle_conflict
     )
 
 
@@ -906,7 +976,7 @@ async def compare_item_images(
                     reference_raw, candidate_raw,
                     reference_frame_type, candidate_frame_type, local_result,
                 ),
-                timeout=_float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 12.0, 4.0, 25.0) + 1.0,
+                timeout=_float_env("ITEM_MATCH_GEMINI_TIMEOUT_S", 5.0, 2.0, 12.0) + 1.0,
             )
             if gemini_result:
                 gemini_result["reference_frame_type"] = reference_frame_type
@@ -941,6 +1011,32 @@ async def compare_item_images(
         if semantic_results:
             blocking_semantic = [item for item in semantic_results if is_blocking_mismatch(item)]
             if blocking_semantic:
+                if _local_supports_same_despite_semantic_block(local_result):
+                    try:
+                        groq_result = await asyncio.wait_for(
+                            _groq_compare(
+                                reference_raw,
+                                candidate_raw,
+                                reference_frame_type,
+                                candidate_frame_type,
+                                local_result,
+                            ),
+                            timeout=_float_env("ITEM_MATCH_GROQ_TOTAL_TIMEOUT_S", 8.0, 4.0, 20.0) + 1.0,
+                        )
+                        if groq_result:
+                            groq_result["reference_frame_type"] = reference_frame_type
+                            groq_result["candidate_frame_type"] = candidate_frame_type
+                            if not is_blocking_mismatch(groq_result):
+                                return groq_result
+                            blocking_semantic.append(groq_result)
+                    except asyncio.TimeoutError:
+                        logger.warning("Groq arbitration timed out after semantic mismatch")
+                    except Exception as exc:
+                        logger.warning("Groq arbitration exception after semantic mismatch: %s", exc)
+                    local_result["semantic_verdict"] = ",".join(str(item.get("verdict")) for item in blocking_semantic)
+                    local_result["semantic_method"] = ",".join(str(item.get("method")) for item in blocking_semantic)
+                    local_result["mismatch_reasons"] = list(local_result.get("mismatch_reasons") or [])[:5]
+                    return local_result
                 return sorted(blocking_semantic, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
 
             visual_conflicts = [item for item in semantic_results if _same_verdict_has_visual_conflict(item)]

@@ -170,8 +170,15 @@ async def test_top_side_timeout_is_unverified_not_accepted():
     assert frame_eval._same_item_unverified({
         "method": "local_visual_fingerprint",
         "verdict": "inconclusive",
+        "same_item_score": 0.5,
         "mismatch_reasons": [],
     }, "side")
+    assert not frame_eval._same_item_unverified({
+        "method": "local_visual_fingerprint",
+        "verdict": "inconclusive",
+        "same_item_score": 0.64,
+        "mismatch_reasons": [],
+    }, "top")
     assert not frame_eval._same_item_unverified({
         "method": "local_visual_fingerprint_timeout",
         "mismatch_reasons": ["local_fingerprint_timeout"],

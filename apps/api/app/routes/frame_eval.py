@@ -82,8 +82,12 @@ def _same_item_unverified(same_item: Optional[dict], frame_type: str) -> bool:
         return True
     method = str(same_item.get("method") or "")
     reasons = set(same_item.get("mismatch_reasons") or [])
+    verdict = same_item.get("verdict")
+    score = float(same_item.get("same_item_score") or 0.5)
+    if method == "local_visual_fingerprint" and verdict == "inconclusive" and score >= 0.62:
+        return False
     return (
-        same_item.get("verdict") == "inconclusive"
+        verdict == "inconclusive"
         or method in {"same_item_timeout", "local_visual_fingerprint_timeout", "none"}
         or "same_item_compare_timeout" in reasons
         or "local_fingerprint_timeout" in reasons

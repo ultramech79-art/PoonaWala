@@ -27,7 +27,13 @@ def _split_keys(*names: str) -> list[str]:
     return keys
 
 
-GROQ_PRIMARY_API_KEYS = _split_keys("GROQ_PRIMARY_API_KEY_1", "GROQ_PRIMARY_API_KEY_2")
+GROQ_PRIMARY_API_KEYS = _split_keys(
+    "GROQ_PRIMARY_API_KEY_1",
+    "GROQ_PRIMARY_API_KEY_2",
+    "GROQ_GUIDANCE_API_KEY",
+    "GROQ_AUDIO_VIDEO_FALLBACK_API_KEY",
+    "GROQ_VIDEO_FALLBACK_API_KEY",
+)
 GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_KEY")
 GROQ_GUIDANCE_API_KEYS = _split_keys("GROQ_GUIDANCE_API_KEY")
 
@@ -950,6 +956,7 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         frame_type,
         GEMINI_GUIDANCE_FALLBACK_API_KEYS,
         "gemini_strict_fallback",
+        max_retries=0,
     )
 
 
