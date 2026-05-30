@@ -982,17 +982,6 @@ def _profile_measurement(
     scale_source = "top_view_coin"
     mm_per_pixel = fallback_mm_per_pixel
     coin: Optional[CoinDetection] = None
-    try:
-        coin = _detect_rs10_coin(img)
-        mm_per_pixel = float(_config()["reference_objects"]["rs10_coin"]["diameter_mm"]) / coin.diameter_px
-        scale_source = f"{view}_coin"
-    except WeightEstimationError:
-        coin = None
-
-    thickness_scale = _coin_thickness_scale_from_side_profile(img, coin)
-    if thickness_scale is not None:
-        mm_per_pixel = thickness_scale
-        scale_source = f"{view}_coin_thickness"
 
     coin_mask = _coin_exclusion_mask(img.shape[:2], coin) if coin is not None else np.zeros(img.shape[:2], dtype=np.uint8)
     roi_mask = _bbox_to_mask(jewelry_bbox, img.shape[:2], pad_fraction=0.10)
