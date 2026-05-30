@@ -54,6 +54,52 @@ function quickQualityCheck(canvas: HTMLCanvasElement): QualityResult {
   return { ok: reasons.length === 0, reasons, score }
 }
 
+function waitForVideoReady(video: HTMLVideoElement, timeoutMs = 2500): Promise<void> {
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+    return Promise.resolve()
+  }
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup()
+      reject(new Error('Camera preview did not start'))
+    }, timeoutMs)
+    const cleanup = () => {
+      window.clearTimeout(timeout)
+      video.removeEventListener('loadedmetadata', onReady)
+      video.removeEventListener('canplay', onReady)
+    }
+    const onReady = () => {
+      if (video.videoWidth <= 0) return
+      cleanup()
+      resolve()
+    }
+    video.addEventListener('loadedmetadata', onReady)
+    video.addEventListener('canplay', onReady)
+  })
+}
+
+async function previewLooksBlack(video: HTMLVideoElement): Promise<boolean> {
+  await new Promise(resolve => window.setTimeout(resolve, 450))
+  if (video.videoWidth <= 0 || video.videoHeight <= 0) return true
+
+  const canvas = document.createElement('canvas')
+  canvas.width = 96
+  canvas.height = 72
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return false
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+  let mean = 0
+  let max = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = (data[i] + data[i + 1] + data[i + 2]) / 3
+    mean += luma
+    if (luma > max) max = luma
+  }
+  mean /= data.length / 4
+  return mean < 3 && max < 12
+}
+
 interface CameraProps {
   type: CaptureType
   onCapture: (blob: Blob, dataUrl: string, exif?: Record<string, unknown>) => void
@@ -117,28 +163,41 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
     setStatus('starting')
     try {
       const deviceId = await preferredCameraDeviceId(facing)
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const baseVideoConstraints = {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      }
+      const openStream = async (usePreferredDevice: boolean) => navigator.mediaDevices.getUserMedia({
         video: {
-          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: facing } }),
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          // Ask for higher frame rate for better focus
-          frameRate: { ideal: 30 },
+          ...(usePreferredDevice && deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: facing } }),
+          ...baseVideoConstraints,
         },
         audio: !!(isAudio || isVideo),
       })
+
+      let stream = await openStream(true)
       mediaRef.current = stream
 
       const video = videoRef.current!
       video.muted = true
       video.srcObject = stream
-      setStatus('live')
-      setCurrentFacing(facing)
 
-      await new Promise(r => setTimeout(r, 100))
+      await waitForVideoReady(video)
       try { await video.play() } catch (_) {}
+      if (deviceId && await previewLooksBlack(video)) {
+        stream.getTracks().forEach(t => t.stop())
+        video.srcObject = null
+        stream = await openStream(false)
+        mediaRef.current = stream
+        video.srcObject = stream
+        await waitForVideoReady(video)
+        try { await video.play() } catch (_) {}
+      }
 
       await applyTrackConstraints(stream, facing)
+      setStatus('live')
+      setCurrentFacing(facing)
 
       if (!isVideo && !isAudio) {
         qualityRef.current = setInterval(() => {
@@ -161,6 +220,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
     if (qualityRef.current) clearInterval(qualityRef.current)
     mediaRef.current?.getTracks().forEach(t => t.stop())
     mediaRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
   }, [])
 
   const switchCamera = useCallback(async () => {

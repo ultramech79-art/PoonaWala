@@ -4,10 +4,8 @@ Live guidance uses GROQ_GUIDANCE_API_KEY with GEMINI_GUIDANCE_FALLBACK_API_KEY f
 """
 import asyncio
 import base64
-import hashlib
 import json
 import logging
-from collections import OrderedDict
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -19,41 +17,7 @@ from app.data.capture_assets import store_capture_asset
 from app.data.item_match import COMPARE_FRAME_TYPES, compare_item_images, is_blocking_mismatch
 
 router = APIRouter()
-
-# Angle variants: only run fast local fingerprint, skip Gemini/Groq semantic comparison
-# (the semantic compare was timing out on almost every request for these frame types)
-FAST_COMPARE_FRAME_TYPES = {"45deg", "side", "top"}
-# Max time to wait for same-item comparison before returning quality eval alone
-COMPARE_TIMEOUT_FAST = 3.0   # local-only (angle variants)
-COMPARE_TIMEOUT_FULL = 8.0   # with Gemini/Groq (macro, selfie)
 logger = logging.getLogger("goldeye.frame_eval")
-
-
-# ── Evaluation result cache (LRU, max 64 entries) ────────────────────────────
-# Key: hash(image_b64_prefix + frame_type)  →  Value: evaluate_frame() result dict
-# Prevents duplicate Groq/Gemini API calls on retries, WS→HTTP fallback, etc.
-_EVAL_CACHE: OrderedDict[str, dict] = OrderedDict()
-_EVAL_CACHE_MAX = 64
-
-
-def _eval_cache_key(image_b64: str, frame_type: str, language: str) -> str:
-    # Hash first 2048 chars of image data + frame_type + language — fast and collision-resistant
-    sample = (image_b64[:2048] + "|" + frame_type + "|" + language).encode()
-    return hashlib.md5(sample).hexdigest()
-
-
-def _eval_cache_get(key: str) -> Optional[dict]:
-    if key in _EVAL_CACHE:
-        _EVAL_CACHE.move_to_end(key)
-        return _EVAL_CACHE[key]
-    return None
-
-
-def _eval_cache_put(key: str, result: dict) -> None:
-    _EVAL_CACHE[key] = result
-    _EVAL_CACHE.move_to_end(key)
-    while len(_EVAL_CACHE) > _EVAL_CACHE_MAX:
-        _EVAL_CACHE.popitem(last=False)
 
 
 class FrameEvalRequest(BaseModel):
@@ -64,7 +28,6 @@ class FrameEvalRequest(BaseModel):
     reference_frame_type: str = "top"
     reference_image_data_url: Optional[str] = None
     reference_image_url: Optional[str] = None
-    language: str = "en"
 
 
 class FrameEvalResponse(BaseModel):
@@ -75,6 +38,29 @@ class FrameEvalResponse(BaseModel):
     detected: dict
     same_item: Optional[dict] = None
     asset: Optional[dict] = None
+
+
+async def _store_capture_asset_background(
+    session_id: Optional[str],
+    frame_type: str,
+    image_source: str,
+    same_item: Optional[dict] = None,
+) -> None:
+    try:
+        await store_capture_asset(session_id, frame_type, image_source, same_item=same_item)
+    except Exception as exc:
+        logger.warning(f"Could not store capture asset: {exc}")
+
+
+def _consume_task_exception(task: asyncio.Task) -> None:
+    if task.cancelled():
+        return
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        return
+    if exc:
+        logger.warning("Background frame task failed: %s", exc)
 
 
 def _extract_data_url_b64(image_data_url: Optional[str]) -> Optional[str]:
@@ -89,6 +75,26 @@ def _candidate_data_url(image_b64: str) -> str:
     return f"data:image/jpeg;base64,{image_b64}"
 
 
+def _same_item_unverified(same_item: Optional[dict], frame_type: str) -> bool:
+    if str(frame_type or "").strip().lower() not in {"top", "side"}:
+        return False
+    if not same_item:
+        return True
+    method = str(same_item.get("method") or "")
+    reasons = set(same_item.get("mismatch_reasons") or [])
+    verdict = same_item.get("verdict")
+    score = float(same_item.get("same_item_score") or 0.5)
+    if method == "local_visual_fingerprint" and verdict == "inconclusive" and score >= 0.62:
+        return False
+    return (
+        verdict == "inconclusive"
+        or method in {"same_item_timeout", "local_visual_fingerprint_timeout", "none"}
+        or "same_item_compare_timeout" in reasons
+        or "local_fingerprint_timeout" in reasons
+        or "missing_reference_or_candidate_image" in reasons
+    )
+
+
 async def _evaluate_compare_store(
     *,
     frame_type: str,
@@ -98,18 +104,8 @@ async def _evaluate_compare_store(
     reference_frame_type: str = "top",
     reference_image_data_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
-    language: str = "en",
 ) -> FrameEvalResponse:
-    # ── Check evaluation cache first ──────────────────────────────────────────
-    cache_key = _eval_cache_key(image_b64, frame_type, language)
-    cached = _eval_cache_get(cache_key)
-    if cached is not None:
-        logger.info("eval cache HIT [%s:%s] — returning instantly", frame_type, language)
-        result = cached
-    else:
-        result = await evaluate_frame(image_b64, frame_type, language)
-        _eval_cache_put(cache_key, result)
-
+    result = await evaluate_frame(image_b64, frame_type)
     detected = result.get("detected", {}) or {}
     issues = list(result.get("issues", []) or [])
     approved = bool(result.get("approved", True))
@@ -119,35 +115,42 @@ async def _evaluate_compare_store(
     same_item = None
     reference_source = reference_image_data_url or reference_image_url
     if reference_source and frame_type in COMPARE_FRAME_TYPES:
-        is_fast = frame_type in FAST_COMPARE_FRAME_TYPES
-        timeout = COMPARE_TIMEOUT_FAST if is_fast else COMPARE_TIMEOUT_FULL
-        try:
-            same_item = await asyncio.wait_for(
-                compare_item_images(
-                    reference_source,
-                    image_source,
-                    reference_frame_type=reference_frame_type or "top",
-                    candidate_frame_type=frame_type,
-                    use_gemini=not is_fast,  # skip slow semantic compare for angle variants
-                ),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
-            logger.warning("same_item comparison timed out for [%s vs %s] (%.1fs) — skipping", reference_frame_type, frame_type, timeout)
-            same_item = None
+        compare_task = asyncio.create_task(compare_item_images(
+            reference_source,
+            image_source,
+            reference_frame_type=reference_frame_type or "top",
+            candidate_frame_type=frame_type,
+        ))
+        done, _pending = await asyncio.wait({compare_task}, timeout=8.0)
+        if compare_task not in done:
+            compare_task.cancel()
+            compare_task.add_done_callback(_consume_task_exception)
+            logger.warning("same_item [%s vs %s] timed out", reference_frame_type or "top", frame_type)
+            same_item = {
+                "same_item": None,
+                "verdict": "inconclusive",
+                "same_item_score": 0.5,
+                "confidence": 0.0,
+                "method": "same_item_timeout",
+                "reference_frame_type": reference_frame_type or "top",
+                "candidate_frame_type": frame_type,
+                "matching_signals": [],
+                "mismatch_reasons": ["same_item_compare_timeout"],
+            }
+        else:
+            same_item = compare_task.result()
         detected["same_item"] = same_item
         blocking_mismatch = is_blocking_mismatch(same_item)
-        if same_item:
-            logger.info(
-                "same_item [%s vs %s]: verdict=%s score=%s confidence=%s method=%s blocking=%s",
-                reference_frame_type or "top",
-                frame_type,
-                same_item.get("verdict"),
-                same_item.get("same_item_score"),
-                same_item.get("confidence"),
-                same_item.get("method"),
-                blocking_mismatch,
-            )
+        logger.info(
+            "same_item [%s vs %s]: verdict=%s score=%s confidence=%s method=%s blocking=%s",
+            reference_frame_type or "top",
+            frame_type,
+            same_item.get("verdict"),
+            same_item.get("same_item_score"),
+            same_item.get("confidence"),
+            same_item.get("method"),
+            blocking_mismatch,
+        )
         if blocking_mismatch:
             approved = False
             quality_score = min(quality_score, 0.35)
@@ -158,12 +161,16 @@ async def _evaluate_compare_store(
                 f"This does not look like the same jewelry item as the {reference_label}. "
                 "Please retake using the same item."
             )
+        elif _same_item_unverified(same_item, frame_type):
+            approved = False
+            quality_score = min(quality_score, 0.45)
+            if "same_item_unverified" not in issues:
+                issues.append("same_item_unverified")
+            feedback = "Could not verify the jewelry item clearly. Please retake using the same item."
 
     asset = None
-    try:
-        asset = await store_capture_asset(session_id, frame_type, image_source, same_item=same_item)
-    except Exception as exc:
-        logger.warning(f"Could not store capture asset: {exc}")
+    if session_id and image_source:
+        asyncio.create_task(_store_capture_asset_background(session_id, frame_type, image_source, same_item=same_item))
 
     return FrameEvalResponse(
         approved=approved,
@@ -205,7 +212,6 @@ async def evaluate_frame_endpoint(req: FrameEvalRequest):
         reference_frame_type=req.reference_frame_type,
         reference_image_data_url=req.reference_image_data_url,
         reference_image_url=req.reference_image_url,
-        language=req.language,
     )
 
 
@@ -239,7 +245,6 @@ async def evaluate_frame_ws(websocket: WebSocket):
                 reference_frame_type=req.get("reference_frame_type", "top"),
                 reference_image_data_url=req.get("reference_image_data_url"),
                 reference_image_url=req.get("reference_image_url"),
-                language=req.get("language", "en"),
             )
             logger.info(
                 f"WS eval [{frame_type}]: approved={response.approved}, "
