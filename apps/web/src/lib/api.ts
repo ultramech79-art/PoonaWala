@@ -373,6 +373,7 @@ export interface WeightEstimateResult {
     estimated_g: number
     low_g: number
     high_g: number
+    method?: string
   }
   confidence: {
     score: number

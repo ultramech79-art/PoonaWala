@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import type { HuidVerificationResult } from '../lib/api'
+import type { ConfidenceComputation } from '../lib/confidenceScoring'
 import type { LTVComponent } from '../lib/ltvEngine'
 import type { ROIComponent } from '../lib/roiEngine'
 import type { RepaymentType, AmortizationRow } from '../lib/emiEngine'
@@ -92,6 +93,9 @@ export interface TapTestResult {
   reasoning: string
 }
 
+export type EvidencePageKey = 'capture' | 'huid' | 'selfie' | 'video' | 'audio' | 'certificate' | 'weight' | 'processing'
+export type PageEvidence = Record<string, unknown>
+
 export interface SessionState {
   sessionId: string | null
   authToken: string | null
@@ -101,6 +105,8 @@ export interface SessionState {
   phone: string | null
   name: string | null
   captures: Partial<Record<CaptureType, CapturedAsset>>
+  skippedCaptures: Partial<Record<CaptureType, boolean>>
+  pageEvidence: Partial<Record<EvidencePageKey, PageEvidence>>
   weightG: number | null
   huidCode: string | null
   scannedKarat: number | null
@@ -109,6 +115,7 @@ export interface SessionState {
   liveAuthResult: LiveAuthResult | null
   tapTestResult: TapTestResult | null
   result: AssessmentResult | null
+  confidenceBreakdown: ConfidenceComputation | null
   evalData: EvalData | null
   loanAppData: LoanAppData | null
 }
@@ -189,6 +196,90 @@ export interface AssessmentResult {
   audit: { trace_id: string; input_asset_hashes: string[] }
 }
 
+const SESSION_STORAGE_KEY = 'goldeye_session_state_v1'
+
+type PersistedCapture = Omit<CapturedAsset, 'blob'>
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  try {
+    if (!dataUrl.startsWith('data:') || typeof atob === 'undefined') return new Blob([])
+    const [header, payload] = dataUrl.split(',', 2)
+    const mime = header.match(/^data:([^;]+)/)?.[1] || 'application/octet-stream'
+    const binary = atob(payload || '')
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+    return new Blob([bytes], { type: mime })
+  } catch {
+    return new Blob([])
+  }
+}
+
+function serializeState(state: SessionState) {
+  const captures = Object.fromEntries(
+    Object.entries(state.captures).map(([type, asset]) => [
+      type,
+      asset
+        ? {
+            type: asset.type,
+            dataUrl: asset.dataUrl,
+            timestamp: asset.timestamp,
+            exif: asset.exif,
+          } satisfies PersistedCapture
+        : asset,
+    ]),
+  )
+  return {
+    sessionId: state.sessionId,
+    lang: state.lang,
+    consentAt: state.consentAt,
+    phone: state.phone,
+    name: state.name,
+    captures,
+    skippedCaptures: state.skippedCaptures,
+    pageEvidence: state.pageEvidence,
+    weightG: state.weightG,
+    huidCode: state.huidCode,
+    scannedKarat: state.scannedKarat,
+    certificateData: state.certificateData,
+    huidVerification: state.huidVerification,
+    liveAuthResult: state.liveAuthResult,
+    tapTestResult: state.tapTestResult,
+    result: state.result,
+    confidenceBreakdown: state.confidenceBreakdown,
+    evalData: state.evalData,
+    loanAppData: state.loanAppData,
+  }
+}
+
+function readPersistedState(): Partial<SessionState> {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    const captures = Object.fromEntries(
+      Object.entries(parsed.captures ?? {}).map(([type, value]) => {
+        const asset = value as PersistedCapture | undefined
+        if (!asset?.dataUrl) return [type, undefined]
+        return [type, { ...asset, blob: dataUrlToBlob(asset.dataUrl) }]
+      }),
+    ) as Partial<Record<CaptureType, CapturedAsset>>
+    return { ...parsed, captures }
+  } catch {
+    return {}
+  }
+}
+
+function persistState(state: SessionState) {
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(serializeState(state)))
+  } catch {
+    // Captures can exceed browser quota. Keep the critical result/session data.
+    try {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ ...serializeState(state), captures: {} }))
+    } catch {}
+  }
+}
+
 let storedToken = localStorage.getItem('goldeye_auth_token')
 let storedProfile = localStorage.getItem('goldeye_user_profile')
 
@@ -199,43 +290,31 @@ if (storedToken === 'guest') {
   storedProfile = null
 }
 
+const persistedState = readPersistedState()
+
 // Simple module-level singleton store (no external dependency)
 let _state: SessionState = {
-  sessionId: null,
+  sessionId: persistedState.sessionId ?? null,
   authToken: storedToken,
   userProfile: JSON.parse(storedProfile || 'null'),
-  lang: localStorage.getItem('goldeye_lang') || 'en',
-  consentAt: null,
-  phone: null,
-  name: null,
-  captures: {},
-  weightG: null,
-  huidCode: null,
-  scannedKarat: null,
-  certificateData: null,
-  huidVerification: null,
-  liveAuthResult: null,
-  tapTestResult: null,
-  result: null,
-  evalData: null,
-  loanAppData: null,
-}
-
-// Try to restore session from sessionStorage
-try {
-  const storedSession = sessionStorage.getItem('goldeye_session_state')
-  if (storedSession) {
-    const parsed = JSON.parse(storedSession)
-    // Merge but keep auth state from localStorage as source of truth
-    _state = {
-      ..._state,
-      ...parsed,
-      authToken: storedToken,
-      userProfile: JSON.parse(storedProfile || 'null'),
-    }
-  }
-} catch (e) {
-  console.warn('Failed to restore session state', e)
+  lang: persistedState.lang ?? localStorage.getItem('goldeye_lang') ?? 'en',
+  consentAt: persistedState.consentAt ?? null,
+  phone: persistedState.phone ?? null,
+  name: persistedState.name ?? null,
+  captures: persistedState.captures ?? {},
+  skippedCaptures: persistedState.skippedCaptures ?? {},
+  pageEvidence: persistedState.pageEvidence ?? {},
+  weightG: persistedState.weightG ?? null,
+  huidCode: persistedState.huidCode ?? null,
+  scannedKarat: persistedState.scannedKarat ?? null,
+  certificateData: persistedState.certificateData ?? null,
+  huidVerification: persistedState.huidVerification ?? null,
+  liveAuthResult: persistedState.liveAuthResult ?? null,
+  tapTestResult: persistedState.tapTestResult ?? null,
+  result: persistedState.result ?? null,
+  confidenceBreakdown: persistedState.confidenceBreakdown ?? null,
+  evalData: persistedState.evalData ?? null,
+  loanAppData: persistedState.loanAppData ?? null,
 }
 
 type Listener = () => void
@@ -244,9 +323,7 @@ const listeners = new Set<Listener>()
 function getState() { return _state }
 function setState(patch: Partial<SessionState>) {
   _state = { ..._state, ...patch }
-  try {
-    sessionStorage.setItem('goldeye_session_state', JSON.stringify(_state))
-  } catch (e) {}
+  persistState(_state)
   listeners.forEach(l => l())
 }
 
@@ -287,7 +364,57 @@ export function useSessionStore() {
     setPhone: (phone: string) => setState({ phone }),
     setName: (name: string) => setState({ name }),
     addCapture: (asset: CapturedAsset) => {
-      setState({ captures: { ..._state.captures, [asset.type]: asset } })
+      const skippedCaptures = { ..._state.skippedCaptures }
+      delete skippedCaptures[asset.type]
+      const captures = { ..._state.captures, [asset.type]: asset }
+      setState({
+        captures,
+        skippedCaptures,
+        pageEvidence: {
+          ..._state.pageEvidence,
+          capture: {
+            ..._state.pageEvidence.capture,
+            capturedTypes: Object.keys(captures),
+            skippedTypes: Object.keys(skippedCaptures),
+            lastCapturedType: asset.type,
+            updatedAt: Date.now(),
+          },
+        },
+      })
+    },
+    skipCapture: (type: CaptureType) => {
+      const captures = { ..._state.captures }
+      delete captures[type]
+      const skippedCaptures = { ..._state.skippedCaptures, [type]: true }
+      setState({
+        captures,
+        skippedCaptures,
+        pageEvidence: {
+          ..._state.pageEvidence,
+          capture: {
+            ..._state.pageEvidence.capture,
+            capturedTypes: Object.keys(captures),
+            skippedTypes: Object.keys(skippedCaptures),
+            lastSkippedType: type,
+            updatedAt: Date.now(),
+          },
+        },
+      })
+    },
+    setPageEvidence: (page: EvidencePageKey, evidence: PageEvidence) => setState({
+      pageEvidence: {
+        ..._state.pageEvidence,
+        [page]: {
+          ..._state.pageEvidence[page],
+          ...evidence,
+          updatedAt: Date.now(),
+        },
+      },
+    }),
+    clearPageEvidence: (page: EvidencePageKey) => {
+      const pageEvidence = { ..._state.pageEvidence }
+      delete pageEvidence[page]
+      setState({ pageEvidence })
     },
     setWeight: (g: number | null) => setState({ weightG: g }),
     setHuid: (code: string | null) => setState({ huidCode: code }),
@@ -297,6 +424,7 @@ export function useSessionStore() {
     setLiveAuthResult: (liveAuthResult: LiveAuthResult | null) => setState({ liveAuthResult }),
     setTapTestResult: (tapTestResult: TapTestResult | null) => setState({ tapTestResult }),
     setResult: (result: AssessmentResult) => setState({ result }),
+    setConfidenceBreakdown: (confidenceBreakdown: ConfidenceComputation | null) => setState({ confidenceBreakdown }),
     setEvalData: (evalData: EvalData) => setState({ evalData }),
     setLoanAppData: (loanAppData: LoanAppData) => setState({ loanAppData }),
     setSessionId: (id: string) => setState({ sessionId: id }),
@@ -310,6 +438,8 @@ export function useSessionStore() {
       consentAt: null,
       phone: null,
       captures: {},
+      skippedCaptures: {},
+      pageEvidence: {},
       weightG: null,
       huidCode: null,
       scannedKarat: null,
@@ -318,6 +448,25 @@ export function useSessionStore() {
       liveAuthResult: null,
       tapTestResult: null,
       result: null,
+      confidenceBreakdown: null,
+      evalData: null,
+      loanAppData: null,
+    }),
+    resetAssessment: (sessionId: string | null = null) => setState({
+      sessionId,
+      consentAt: null,
+      captures: {},
+      skippedCaptures: {},
+      pageEvidence: {},
+      weightG: null,
+      huidCode: null,
+      scannedKarat: null,
+      certificateData: null,
+      huidVerification: null,
+      liveAuthResult: null,
+      tapTestResult: null,
+      result: null,
+      confidenceBreakdown: null,
       evalData: null,
       loanAppData: null,
     }),
