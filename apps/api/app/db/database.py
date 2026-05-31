@@ -15,13 +15,21 @@ elif _raw_url.startswith("postgresql://") and "+psycopg" not in _raw_url:
 # The user must use the pooler URL from their Supabase dashboard instead.
 DATABASE_URL = _raw_url
 
-# SQLite async driver needs different connection args than Postgres
-connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+# SQLite async driver needs different connection args than Postgres.
+# Supabase/pgBouncer transaction poolers can reject prepared statements during
+# SQLAlchemy metadata introspection, so disable psycopg server-side prepares.
+if "sqlite" in DATABASE_URL:
+    connect_args = {"check_same_thread": False}
+elif "postgresql+psycopg" in DATABASE_URL:
+    connect_args = {"prepare_threshold": None}
+else:
+    connect_args = {}
 
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    connect_args=connect_args
+    connect_args=connect_args,
+    pool_pre_ping=True,
 )
 
 AsyncSessionLocal = async_sessionmaker(
