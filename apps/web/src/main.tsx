@@ -1,3 +1,4 @@
+import './dev/seedResult' // DEV-ONLY preview seed (no-op in prod) — must run before the session store loads
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'

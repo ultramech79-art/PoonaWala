@@ -1,3 +1,5 @@
+import { brand, gold, stone, surface, semantic, chart, shadow, radius, font } from './src/theme/palette.js'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -7,121 +9,102 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50:  '#FFF5F5',
-          100: '#FED7D7',
-          200: '#FEB2B2',
-          300: '#FC8181',
-          400: '#F56565',
-          500: '#C53030', // Deep Red
-          600: '#9B2C2C', // Deep Crimson
-          700: '#742A2A',
-          800: '#63171B',
-          900: '#4A1215',
-        },
-        gold: {
-          50:  '#FFFBEB',
-          100: '#FEF3C7',
-          200: '#FDE68A',
-          300: '#FCD34D',
-          400: '#FBBF24',
-          500: '#D97706', // Vibrant Gold/Amber
-          600: '#B45309',
-          700: '#92400E',
-          800: '#78350F',
-          900: '#451A03',
-        },
-        poonawala: {
-          red:  '#C53030',
-          gold: '#D4A017',
-        },
+        // ── Brand (burnt orange) — primary accent, CTAs, active states
+        brand,
+        // ── Gold — trust badges, purity/value highlights, verified states
+        gold,
+        // ── Warm neutral ramp (replaces cold grey app-wide)
+        stone,
+        // ── Named surfaces
+        canvas:   surface.canvas,
+        surface:  surface.card,
+        sand:     surface.sand,
+        'sand-soft': surface.sandSoft,
+        charcoal: surface.charcoal,
+        muted:    surface.muted,
+        // Warm-charcoal ramp — keeps legacy dark surfaces (ink-800/900) rendering
+        // in warm tones until each dark screen is migrated to light mode.
         ink: {
-          50:  '#F7F7FA',
-          100: '#EFEFF4',
-          200: '#DCDCE6',
-          300: '#B8B8CC',
-          400: '#8A8AA8',
-          500: '#6B6B88',
-          600: '#4A4A66',
-          700: '#333347',
-          800: '#1E1E2E',
-          900: '#0C0B18',
-          950: '#07060F',
+          50:  '#F5F3EF', 100: '#E7E3DC', 200: '#CFC8BD', 300: '#A89F90',
+          400: '#6E665A', 500: '#4A4339', 600: '#36302A', 700: '#2B2622',
+          800: '#211D1A', 900: '#171411', 950: '#0F0D0B',
         },
-        stone: {
-          50:  '#FAFAF8',
-          100: '#F5F5F0',
-          200: '#EBEBEB',
-          300: '#D4D4D0',
-          400: '#A3A3A0',
-          500: '#737370',
-          600: '#525250',
-          700: '#404040',
-          800: '#262626',
-          900: '#111111',
-        },
+        // ── Semantic (warm-toned)
+        success:  semantic.success,
+        warning:  semantic.warning,
+        error:    semantic.error,
+        info:     semantic.info,
+        // ── Confidence / chart accents
+        coral:    chart.coral,
+        mustard:  chart.mustard,
+        'chart-purple': chart.purple,
+        // ── Legacy compat (old red theme → mapped onto warm system)
+        poonawala: { red: brand[500], gold: gold[500] },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Outfit', 'Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        sans: font.sans,
+        display: font.display,
+        mono: font.mono,
       },
-      keyframes: {
-        fadeIn:       { from: { opacity: '0' }, to: { opacity: '1' } },
-        slideUp:      { from: { opacity: '0', transform: 'translateY(20px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
-        slideDown:    { from: { opacity: '0', transform: 'translateY(-12px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
-        scaleIn:      { from: { opacity: '0', transform: 'scale(0.94)' }, to: { opacity: '1', transform: 'scale(1)' } },
-        pulseBrand:   { '0%,100%': { boxShadow: '0 0 0 0 rgba(91,71,250,0.4)' }, '50%': { boxShadow: '0 0 0 10px rgba(91,71,250,0)' } },
-        shimmer:      { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
-        glowGold:     { from: { boxShadow: '0 0 8px rgba(212,160,23,0.3)' }, to: { boxShadow: '0 0 24px rgba(212,160,23,0.6)' } },
-        bandDraw:     { from: { transform: 'scaleX(0)', transformOrigin: 'left' }, to: { transform: 'scaleX(1)', transformOrigin: 'left' } },
-        marquee:      { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } },
+      fontSize: {
+        // tuned mobile type scale
+        'display-xl': ['2.75rem', { lineHeight: '1.04', letterSpacing: '-0.02em', fontWeight: '600' }],
+        'display-lg': ['2.25rem', { lineHeight: '1.06', letterSpacing: '-0.02em', fontWeight: '600' }],
+        'display':    ['1.75rem', { lineHeight: '1.1',  letterSpacing: '-0.01em', fontWeight: '600' }],
       },
-      animation: {
-        'fade-in':      'fadeIn 0.4s ease-out',
-        'slide-up':     'slideUp 0.45s cubic-bezier(0.16,1,0.3,1)',
-        'slide-down':   'slideDown 0.35s cubic-bezier(0.16,1,0.3,1)',
-        'scale-in':     'scaleIn 0.3s cubic-bezier(0.16,1,0.3,1)',
-        'pulse-brand':  'pulseBrand 2s ease-in-out infinite',
-        'shimmer':      'shimmer 1.5s ease-in-out infinite',
-        'spin-slow':    'spin 3s linear infinite',
-        'glow-gold':    'glowGold 2s ease-in-out infinite alternate',
-        'marquee':      'marquee 20s linear infinite',
-      },
-
-
-      backgroundImage: {
-        'gold-gradient':     'linear-gradient(135deg, #D4A017 0%, #F5C030 50%, #D4A017 100%)',
-        'brand-gradient':    'linear-gradient(135deg, #9B2C2C 0%, #C53030 100%)',
-        'dark-gradient':     'linear-gradient(180deg, #0C0B18 0%, #07060F 100%)',
-        'shimmer-gradient':  'linear-gradient(90deg, transparent 0%, rgba(212,160,23,0.12) 50%, transparent 100%)',
-      },
-      backdropBlur: { xs: '2px' },
       boxShadow: {
-        'brand-sm':  '0 1px 4px rgba(91,71,250,0.25)',
-        'brand':     '0 4px 20px rgba(91,71,250,0.30)',
-        'brand-lg':  '0 8px 40px rgba(91,71,250,0.40)',
-        'gold-sm':   '0 1px 4px rgba(212,160,23,0.20)',
-        'gold':      '0 4px 16px rgba(212,160,23,0.25)',
-        'card':      '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.06)',
-        'card-hover':'0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.10)',
-        'inset-top': 'inset 0 1px 0 rgba(255,255,255,0.08)',
+        xs:   shadow.xs,
+        sm:   shadow.sm,
+        card: shadow.card,
+        'card-hover': shadow.lg,
+        lg:   shadow.lg,
+        cta:  shadow.cta,
+        // legacy aliases retuned to warm palette
+        brand: shadow.cta,
+        'brand-sm': shadow.sm,
+        'brand-lg': shadow.lg,
+        gold: shadow.sm,
+        'gold-sm': shadow.xs,
       },
       borderRadius: {
-        '2xl': '1rem',
-        '3xl': '1.5rem',
-        '4xl': '2rem',
+        '2xl': radius['2xl'],
+        '3xl': radius['3xl'],
+        '4xl': radius['4xl'],
       },
       spacing: {
         safe: 'env(safe-area-inset-bottom)',
       },
+      keyframes: {
+        fadeIn:    { from: { opacity: '0' }, to: { opacity: '1' } },
+        slideUp:   { from: { opacity: '0', transform: 'translateY(12px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        slideDown: { from: { opacity: '0', transform: 'translateY(-10px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        scaleIn:   { from: { opacity: '0', transform: 'scale(0.96)' }, to: { opacity: '1', transform: 'scale(1)' } },
+        shimmer:   { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
+        bandDraw:  { from: { transform: 'scaleX(0)', transformOrigin: 'left' }, to: { transform: 'scaleX(1)', transformOrigin: 'left' } },
+        marquee:   { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } },
+      },
+      animation: {
+        'fade-in':    'fadeIn 0.4s cubic-bezier(0.22,1,0.36,1)',
+        'slide-up':   'slideUp 0.45s cubic-bezier(0.22,1,0.36,1)',
+        'slide-down': 'slideDown 0.35s cubic-bezier(0.22,1,0.36,1)',
+        'scale-in':   'scaleIn 0.3s cubic-bezier(0.22,1,0.36,1)',
+        'shimmer':    'shimmer 1.6s ease-in-out infinite',
+        'spin-slow':  'spin 3s linear infinite',
+        'marquee':    'marquee 24s linear infinite',
+      },
+      transitionTimingFunction: {
+        smooth: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      },
+      backgroundImage: {
+        'sheen': 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%)',
+      },
+      backdropBlur: { xs: '2px' },
     },
   },
   safelist: [
-    'bg-brand-500', 'text-brand-500', 'border-brand-500',
-    'bg-gold-500', 'text-gold-500', 'border-gold-500',
-    'text-stone-900', 'bg-stone-50',
-    // legacy poonawala compat
+    'bg-brand-500', 'bg-brand-600', 'text-brand-600', 'border-brand-500',
+    'bg-gold-500', 'text-gold-700', 'border-gold-300',
+    'text-stone-900', 'bg-canvas', 'bg-sand', 'bg-charcoal',
     'text-poonawala-red', 'bg-poonawala-red',
   ],
   plugins: [],

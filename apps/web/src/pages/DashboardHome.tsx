@@ -6,7 +6,7 @@ import {
   ChevronRight, ChevronDown, TrendingUp, TrendingDown,
   Sparkles, Shield, FileCheck, Clock, Zap, Percent,
   Scale, IndianRupee, Award, BadgeCheck, LayoutDashboard,
-  UserRound, Landmark, RefreshCw, Phone, MessageCircle,
+  UserRound, Landmark, Phone, MessageCircle,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -233,42 +233,46 @@ export function DashboardHome() {
     setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening')
   }, [])
 
-  const firstName = (state.userProfile?.full_name || state.name || 'there').split(' ')[0]
+  const fullName = state.userProfile?.full_name || state.name || ''
+  const isGuest = !state.authToken || state.authToken === 'guest' || fullName === 'Guest User'
+  const firstName = isGuest ? 'Guest' : (fullName.split(' ')[0] || 'there')
+  const initials = fullName && !isGuest
+    ? fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+    : ''
 
   return (
-    <div className="flex flex-col bg-stone-50 animate-fade-in" style={{ height: '100dvh' }}>
+    <div className="flex flex-col app-page-bg animate-fade-in relative z-[5]" style={{ height: '100dvh' }}>
 
       {/* ── Sticky header ──────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 flex items-center justify-between px-5 py-3 bg-white/95 backdrop-blur-md border-b border-stone-100">
+      <header className="sticky top-0 z-30 flex items-center justify-between px-5 py-3 bg-white/80 backdrop-blur-xl border-b border-stone-200/70">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-brand-800 flex items-center justify-center shadow-sm flex-shrink-0" aria-hidden>
-            <span className="text-white font-display font-black text-xs">PF</span>
+          <div className="w-9 h-9 rounded-2xl bg-charcoal flex items-center justify-center shadow-xs flex-shrink-0" aria-hidden>
+            <span className="text-gold-200 font-display font-black text-xs">PF</span>
           </div>
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-stone-400 leading-none">
               Poonawalla Fincorp
             </p>
-            <p className="text-sm font-display font-bold text-stone-900 leading-tight">
-              {greeting}, {firstName} 👋
+            <p className="text-sm font-display font-bold text-stone-900 leading-tight tracking-[-0.01em]">
+              {greeting}, {firstName}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate('/dashboard')}
-            className="w-9 h-9 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="View past evaluations"
+            onClick={() => isGuest
+              ? navigate('/register')
+              : navigate('/profile', { state: { from: '/dashboard-home' } })
+            }
+            className="w-10 h-10 rounded-2xl overflow-hidden active:scale-95 transition-transform shadow-sm border border-stone-200 flex items-center justify-center"
+            style={{ background: isGuest ? '#F0EDE8' : 'linear-gradient(135deg, #1C1A18 0%, #2C2820 100%)' }}
+            aria-label={isGuest ? 'Create account' : 'Open profile'}
           >
-            <LayoutDashboard className="w-4 h-4 text-stone-600" />
-          </button>
-          <button
-            onClick={() => navigate('/profile', { state: { from: '/dashboard-home' } })}
-            className="w-9 h-9 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center overflow-hidden active:scale-95 transition-transform"
-            aria-label="Open profile"
-          >
-            {state.userProfile?.profile_photo_url
+            {state.userProfile?.profile_photo_url && !isGuest
               ? <img src={state.userProfile.profile_photo_url} className="w-full h-full object-cover" alt={firstName} />
-              : <UserRound className="w-4 h-4 text-stone-600" />}
+              : isGuest
+                ? <UserRound className="w-5 h-5 text-stone-500" strokeWidth={1.8} />
+                : <span className="text-[13px] font-black text-gold-300 tracking-tight">{initials}</span>}
           </button>
         </div>
       </header>
@@ -277,55 +281,52 @@ export function DashboardHome() {
       <main className="flex-1 overflow-y-auto no-scrollbar pb-6" id="main-content" tabIndex={-1}>
 
         {/* ── Hero evaluate card ─────────────────────────────────── */}
-        <div className="mx-5 mt-5 rounded-3xl overflow-hidden shadow-lg relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-brand-700 via-brand-600 to-[#7A1F1F]" aria-hidden />
-          <div
-            className="absolute inset-0 opacity-[0.04] pointer-events-none"
-            style={{
-              backgroundImage:
-                'repeating-linear-gradient(0deg,transparent,transparent 32px,rgba(255,255,255,1) 32px,rgba(255,255,255,1) 33px),repeating-linear-gradient(90deg,transparent,transparent 32px,rgba(255,255,255,1) 32px,rgba(255,255,255,1) 33px)',
-            }}
-            aria-hidden
-          />
-          <div className="absolute -top-8 -right-8 w-44 h-44 rounded-full bg-gradient-to-br from-gold-400/20 to-gold-600/5 blur-2xl pointer-events-none" aria-hidden />
-          <div className="absolute bottom-0 -left-6 w-32 h-32 rounded-full bg-gradient-to-tr from-brand-400/20 to-transparent blur-2xl pointer-events-none" aria-hidden />
+        <div className="mx-5 mt-5 rounded-3xl overflow-hidden hero-card relative">
+          {/* Ambient gold glow top-right */}
+          <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-gradient-to-bl from-gold-300/20 to-transparent blur-2xl pointer-events-none" aria-hidden />
 
-          <div className="relative z-10 px-6 pt-6 pb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
-                <Sparkles className="w-3 h-3 text-gold-300" aria-hidden />
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/80">AI-Powered · RBI Compliant</span>
-              </div>
+          <div className="relative z-10 px-6 pt-5 pb-6 flex flex-col items-center text-center">
+            {/* Top badge */}
+            <div className="self-start flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/10 border border-white/15 mb-5">
+              <Sparkles className="w-3 h-3 text-gold-300" aria-hidden />
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/80">AI-Powered · RBI Compliant</span>
             </div>
 
-            <h1 className="font-display font-black text-2xl text-white leading-tight mb-1.5">
-              Evaluate Your<br />Gold Jewellery
-            </h1>
-            <p className="text-sm text-white/70 leading-snug mb-5">
-              AI assessment in under 60 seconds.<br />Get your loan pre-qualification instantly.
-            </p>
-
-            {/* ✅ Goes directly to /setup (consent already done) */}
+            {/* Big gold scan button */}
             <button
               onClick={() => navigate('/setup')}
-              className="w-full flex items-center justify-between px-5 py-4 rounded-2xl bg-white active:scale-[0.97] transition-transform shadow-md"
-              aria-label="Start gold jewellery evaluation — select item type first"
+              className="relative flex items-center justify-center mb-5 active:scale-95 transition-transform duration-150"
+              style={{ width: 154, height: 154 }}
+              aria-label="Tap to scan gold jewellery"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-sm" aria-hidden>
-                  <Sparkles className="w-4 h-4 text-white" strokeWidth={2} />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-display font-black text-stone-900 leading-none mb-0.5">Start Evaluation</p>
-                  <p className="text-[10px] font-medium text-stone-500 leading-none">45° angle capture first</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-brand-600 flex-shrink-0" aria-hidden />
+              {/* Pulse ring */}
+              <span className="absolute inset-0 rounded-full bg-gold-400/20 animate-ping" style={{ animationDuration: '2s' }} aria-hidden />
+              {/* Ring 1 */}
+              <span className="absolute rounded-full border border-gold-300/25" style={{ inset: 6 }} aria-hidden />
+              {/* Ring 2 */}
+              <span className="absolute rounded-full border border-gold-400/20" style={{ inset: 14 }} aria-hidden />
+              {/* Core button */}
+              <span className="absolute rounded-full shadow-lg flex items-center justify-center" style={{
+                inset: 20,
+                background: 'conic-gradient(from 135deg, #C8A24B, #F0D080, #C8A24B, #E0B860, #C8A24B)',
+              }} aria-hidden>
+                {/* Gold coin SVG */}
+                <svg width="46" height="46" viewBox="0 0 46 46" fill="none" aria-hidden>
+                  <circle cx="23" cy="23" r="21" fill="none" stroke="rgba(120,80,10,0.25)" strokeWidth="1.5" />
+                  <circle cx="23" cy="23" r="17" fill="rgba(120,80,10,0.15)" />
+                  <text x="23" y="28.5" textAnchor="middle" fontSize="20" fill="rgba(100,65,5,0.85)" fontWeight="900" fontFamily="serif">₹</text>
+                </svg>
+              </span>
             </button>
 
-            <div className="flex items-center gap-2 mt-4 flex-wrap">
+            {/* Label */}
+            <p className="font-display font-black text-[17px] text-white leading-none mb-1">Tap to Scan Gold</p>
+            <p className="text-[12px] text-white/55 mb-5 leading-snug">AI assessment · under 60 seconds</p>
+
+            {/* Feature chips */}
+            <div className="flex items-center gap-2 flex-wrap justify-center">
               {['BIS HUID', 'RBI Norms', 'Instant'].map(chip => (
-                <div key={chip} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20">
+                <div key={chip} className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
                   <BadgeCheck className="w-3 h-3 text-gold-300" aria-hidden />
                   <span className="text-[10px] font-bold text-white/80">{chip}</span>
                 </div>
@@ -345,7 +346,7 @@ export function DashboardHome() {
         {/* ── Previous evaluations shortcut ─────────────────────── */}
         <div className="mx-5 mt-4">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/dashboard-home')}
             className="w-full flex items-center justify-between px-4 py-3.5 bg-white border border-stone-200 rounded-2xl shadow-card active:scale-[0.98] transition-transform"
             aria-label="View my past evaluations"
           >
@@ -417,7 +418,7 @@ export function DashboardHome() {
         </div>
 
         {/* ── Trust footer ───────────────────────────────────────── */}
-        <div className="mx-5 mt-5 p-4 rounded-2xl bg-gradient-to-r from-brand-50 to-stone-50 border border-brand-100">
+        <div className="mx-5 mt-5 p-4 rounded-2xl surface-panel">
           <div className="flex items-center justify-center gap-4 flex-wrap">
             {[
               { Icon: Shield,     text: 'RBI Regulated NBFC' },
@@ -436,14 +437,29 @@ export function DashboardHome() {
         </div>
       </main>
 
+      {/* ── Chatbot bubble ───────────────────────────────────────── */}
+      <button
+        onClick={() => navigate('/chatbot')}
+        className="absolute right-0 z-40 active:scale-95 transition-transform"
+        style={{ bottom: 72, width: 176, height: 176 }}
+        aria-label="Open GoldEye assistant"
+      >
+        <img
+          src="/assets/tutorial/1d64f64e-dfe1-11ee-a390-a7bd47dd18d6%20(1).gif"
+          alt="GoldEye Assistant"
+          className="w-full h-full object-contain"
+          draggable={false}
+        />
+      </button>
+
       {/* ── Sticky bottom Evaluate CTA ────────────────────────────── */}
       <div
-        className="sticky bottom-0 z-20 px-5 py-3 bg-white/95 backdrop-blur-md border-t border-stone-100"
+        className="sticky bottom-0 z-20 px-5 py-3 bg-white/90 backdrop-blur-xl border-t border-stone-200/70"
         style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       >
         <button
           onClick={() => navigate('/setup')}
-          className="w-full py-4 rounded-2xl bg-gradient-to-r from-brand-600 to-brand-700 text-white font-display font-black text-base shadow-brand active:scale-[0.97] transition-transform flex items-center justify-center gap-2.5"
+          className="w-full py-4 rounded-2xl bg-charcoal text-white font-display font-black text-base shadow-cta active:scale-[0.98] transition-transform flex items-center justify-center gap-2.5"
           aria-label="Evaluate my gold — select item type first"
         >
           <Sparkles className="w-5 h-5" aria-hidden />

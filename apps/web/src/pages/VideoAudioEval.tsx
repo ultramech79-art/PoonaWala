@@ -201,7 +201,7 @@ export function VideoAudioEval() {
 
   // ── render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="page bg-gradient-to-b from-stone-50 to-white overflow-y-auto">
+    <div className="page app-page-bg overflow-y-auto">
 
       {/* Header */}
       <div className="page-header">
@@ -228,8 +228,8 @@ export function VideoAudioEval() {
         {/* ── INTRO VIDEO ── */}
         {phase === 'intro-video' && (
           <div className="space-y-5 animate-fade-in">
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-3xl p-6 flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+            <div className="surface-panel rounded-3xl p-6 flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center shadow-lg">
                 <Video className="w-8 h-8 text-white" />
               </div>
               <div className="text-center">
@@ -240,7 +240,7 @@ export function VideoAudioEval() {
               </div>
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2.5">
+            <div className="surface-panel rounded-2xl p-4 space-y-2.5">
               {[
                 'Place gold on a clean white surface',
                 'Good lighting — near a window works best',
@@ -311,7 +311,7 @@ export function VideoAudioEval() {
         {/* ── VIDEO RESULT ── */}
         {phase === 'video-result' && (
           <div className="space-y-4 animate-fade-in">
-            <div className="bg-white border border-stone-200 rounded-3xl p-5">
+            <div className="surface-panel rounded-3xl p-5">
               <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">Video Analysis</p>
               {authResult ? (
                 <>
@@ -350,8 +350,8 @@ export function VideoAudioEval() {
         {/* ── INTRO AUDIO ── */}
         {phase === 'intro-audio' && (
           <div className="space-y-5 animate-fade-in">
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-3xl p-6 flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+            <div className="surface-panel rounded-3xl p-6 flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center shadow-lg">
                 <Mic className="w-8 h-8 text-white" />
               </div>
               <div className="text-center">
@@ -362,7 +362,7 @@ export function VideoAudioEval() {
               </div>
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2.5">
+            <div className="surface-panel rounded-2xl p-4 space-y-2.5">
               {[
                 'Place the gold on a firm surface (table or marble)',
                 'Use a coin or knuckle to tap the piece',
@@ -398,7 +398,7 @@ export function VideoAudioEval() {
             <div className="relative flex items-center justify-center w-40 h-40">
               <div className="absolute inset-0 rounded-full bg-blue-400/20 animate-ping" />
               <div className="absolute inset-3 rounded-full bg-blue-400/15 animate-ping" style={{ animationDelay: '0.4s' }} />
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30">
+              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center shadow-2xl shadow-blue-500/30">
                 <Mic className="w-12 h-12 text-white" />
               </div>
             </div>
@@ -408,7 +408,7 @@ export function VideoAudioEval() {
             </div>
             <div className="w-56 bg-stone-100 rounded-full h-2">
               <div
-                className="h-2 rounded-full bg-blue-500 transition-all duration-300"
+                className="h-2 rounded-full bg-brand-500 transition-all duration-300"
                 style={{ width: `${100 - (secondsLeft / (AUDIO_DURATION_MS / 1000)) * 100}%` }}
               />
             </div>
@@ -435,7 +435,7 @@ export function VideoAudioEval() {
             </div>
 
             {(authResult || tapResult) && (
-              <div className="bg-white border border-stone-200 rounded-3xl p-5 space-y-3">
+              <div className="surface-panel rounded-3xl p-5 space-y-3">
                 <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold">Summary</p>
 
                 {authResult ? (

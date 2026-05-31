@@ -126,7 +126,7 @@ export function Profile() {
   })
 
   return (
-    <div className="page bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30 animate-slide-up">
+    <div className="page app-page-bg animate-slide-up">
       <div className="page-header">
         <button onClick={() => navigate(-1)} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
@@ -143,7 +143,7 @@ export function Profile() {
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-6 pt-5 space-y-4">
         {state.authToken === 'guest' ? (
-          <div className="card p-6 flex flex-col items-center justify-center text-center mt-10">
+          <div className="surface-panel rounded-3xl p-6 flex flex-col items-center justify-center text-center mt-10">
             <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center mb-4">
               <UserRound className="w-8 h-8 text-stone-400" />
             </div>
@@ -159,7 +159,7 @@ export function Profile() {
             </button>
           </div>
         ) : (
-          <div className="card p-5">
+          <div className="surface-panel rounded-3xl p-5">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-center overflow-hidden">
                 {user?.profile_photo_url
@@ -178,7 +178,7 @@ export function Profile() {
 
 
         {state.authToken !== 'guest' && (
-          <div className="card p-4">
+          <div className="surface-panel rounded-3xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <History className="w-4 h-4 text-brand-700" />
               <p className="font-display font-bold text-sm text-stone-900">Loan history</p>
@@ -211,7 +211,7 @@ export function Profile() {
 
         {/* Saved Assets */}
         {state.authToken !== 'guest' && (
-          <div className="card p-4">
+          <div className="surface-panel rounded-3xl p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <ImageIcon className="w-4 h-4 text-brand-700" />

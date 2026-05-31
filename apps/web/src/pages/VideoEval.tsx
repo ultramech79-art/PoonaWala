@@ -215,7 +215,7 @@ export function VideoEval() {
   const barColor   = (s: number) => s >= 70 ? 'bg-emerald-500' : s >= 45 ? 'bg-amber-400' : 'bg-red-400'
 
   return (
-    <div className="page bg-gradient-to-b from-stone-50 to-white overflow-y-auto">
+    <div className="page app-page-bg overflow-y-auto">
 
       {/* Tutorial overlay */}
       {showTutorial && phase === 'intro' && (
@@ -250,8 +250,8 @@ export function VideoEval() {
         {/* INTRO */}
         {phase === 'intro' && (
           <div className="space-y-5 animate-fade-in">
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-3xl p-6 flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+            <div className="surface-panel rounded-3xl p-6 flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center shadow-lg">
                 <Video className="w-8 h-8 text-white" />
               </div>
               <div className="text-center">
@@ -262,7 +262,7 @@ export function VideoEval() {
               </div>
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2.5">
+            <div className="surface-panel rounded-2xl p-4 space-y-2.5">
               {[
                 'Place gold on a clean white surface',
                 'Good lighting — near a window works best',
@@ -337,7 +337,7 @@ export function VideoEval() {
         {phase === 'result' && (
           <div className="space-y-4 animate-fade-in">
             {result ? (
-              <div className="bg-white border border-stone-200 rounded-3xl p-5 space-y-4">
+              <div className="surface-panel rounded-3xl p-5 space-y-4">
                 <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold">Video Analysis Result</p>
                 <div className="flex items-center gap-4">
                   <div className="text-center">

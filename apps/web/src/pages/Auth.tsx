@@ -214,7 +214,7 @@ export function Auth() {
     : Boolean(fullName && dob && regionCode && phone.length === 10 && (method === 'password' ? password.length >= 8 : otpSessionId && otp.length === 6))
 
   return (
-    <div className="page bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30 animate-slide-up">
+    <div className="page animate-slide-up">
       <div className="page-header">
         <div className="w-11" />
         <span className="text-sm font-semibold text-stone-700">{mode === 'register' ? copy.createProfile : copy.login}</span>
@@ -223,7 +223,7 @@ export function Auth() {
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-6">
         <div className="pt-6 pb-5">
-          <h1 className="font-display font-black text-3xl text-stone-950 tracking-tight">
+          <h1 className="font-display font-black text-3xl text-stone-950 tracking-[-0.04em]">
             {mode === 'register' ? copy.getStarted : copy.welcomeBack}
           </h1>
           <p className="text-sm text-stone-500 mt-2">
@@ -235,7 +235,7 @@ export function Auth() {
 
         <div className="grid grid-cols-2 gap-2 mb-4">
           {(['register', 'login'] as Mode[]).map(item => (
-            <button key={item} onClick={() => setMode(item)} className={clsx('py-3 rounded-2xl text-sm font-bold border transition', mode === item ? 'bg-brand-700 text-white border-brand-700' : 'bg-white text-stone-600 border-stone-200')}>
+            <button key={item} onClick={() => setMode(item)} className={clsx('py-3 rounded-2xl text-sm font-bold border transition', mode === item ? 'bg-charcoal text-white border-charcoal' : 'bg-white/80 text-stone-600 border-stone-200')}>
               {item === 'register' ? copy.register : copy.login}
             </button>
           ))}
@@ -243,7 +243,7 @@ export function Auth() {
 
         <div className="grid grid-cols-2 gap-2 mb-5">
           {(['otp', 'password'] as AuthMethod[]).map(item => (
-            <button key={item} onClick={() => setMethod(item)} className={clsx('py-3 rounded-2xl text-sm font-semibold border flex items-center justify-center gap-2 transition', method === item ? 'bg-brand-50 text-brand-800 border-brand-300' : 'bg-white text-stone-600 border-stone-200')}>
+            <button key={item} onClick={() => setMethod(item)} className={clsx('py-3 rounded-2xl text-sm font-semibold border flex items-center justify-center gap-2 transition', method === item ? 'bg-brand-50 text-brand-800 border-brand-200' : 'bg-white/80 text-stone-600 border-stone-200')}>
               {item === 'otp' ? <Phone className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />}
               {item === 'otp' ? 'OTP' : 'Password'}
             </button>

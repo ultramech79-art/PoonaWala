@@ -1,4 +1,4 @@
-import { Bot, ChevronRight, ExternalLink, Loader2, MessageCircle, Mic, MicOff, Send, Volume2, X } from 'lucide-react'
+import { Bot, ChevronRight, ExternalLink, Loader2, Mic, MicOff, Send, Volume2, X } from 'lucide-react'
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { assistantChatAPI, type AssistantAction, type AssistantLink, type AssistantMessage } from '../lib/api'
@@ -167,6 +167,17 @@ export function FloatingAssistant() {
   const location = useLocation()
   const navigate = useNavigate()
   const { state } = useSessionStore()
+  const quietRoutes = new Set([
+    '/',
+    '/language',
+    '/welcome',
+    '/auth',
+    '/consent',
+    '/otp',
+    '/setup',
+    '/gold-loan-app',
+    '/confirmation',
+  ])
 
   const voiceSupported = useMemo(() => {
     if (typeof window === 'undefined') return false
@@ -294,18 +305,20 @@ export function FloatingAssistant() {
     recognition.start()
   }
 
-  const showAssistant = ['/', '/language', '/auth', '/profile', '/welcome', '/consent', '/otp', '/setup'].includes(location.pathname)
+  const showAssistant = ['/language', '/auth', '/profile', '/welcome', '/consent', '/otp', '/setup'].includes(location.pathname)
   if (!showAssistant) return null
+
+  if (quietRoutes.has(location.pathname)) return null
 
   if (!open) {
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="absolute right-4 bottom-[calc(var(--safe-bottom)+5.5rem)] z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-brand transition active:scale-95"
+        className="absolute right-4 bottom-[calc(var(--safe-bottom)+5.5rem)] z-50 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800 text-white shadow-brand transition active:scale-95"
         aria-label="Open GoldEye assistant"
       >
-        <MessageCircle className="h-6 w-6" />
+        <Bot className="h-6 w-6" />
       </button>
     )
   }
@@ -315,9 +328,9 @@ export function FloatingAssistant() {
       data-assistant-root="true"
       className="absolute inset-x-4 bottom-[calc(var(--safe-bottom)+5.5rem)] z-50 overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-2xl"
     >
-      <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-brand-100 bg-gradient-to-r from-brand-50 via-white to-gold-50 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-600 text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 text-white">
             <Bot className="h-5 w-5" />
           </div>
           <div>
@@ -335,7 +348,7 @@ export function FloatingAssistant() {
         </button>
       </div>
 
-      <div ref={scrollRef} className="max-h-[52dvh] space-y-3 overflow-y-auto bg-[#FFF9F9] px-4 py-4">
+      <div ref={scrollRef} className="max-h-[52dvh] space-y-3 overflow-y-auto bg-[#FFF8F0] px-4 py-4">
         {messages.length === 0 && (
           <div className="rounded-3xl border border-stone-200 bg-white px-4 py-5 text-center shadow-sm">
             <Bot className="mx-auto mb-3 h-8 w-8 text-brand-600" />

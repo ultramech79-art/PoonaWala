@@ -17,3 +17,4 @@ httpx>=0.27.0          # for async FastAPI test client
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 python-dotenv>=1.0.0
+

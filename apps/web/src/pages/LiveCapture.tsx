@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { analyzeFrame, sendTapTest, authCheck, type AnalyzeResult, type TapTestResult, type AuthCheckResult } from '../lib/liveSession'
 import { preferredCameraDeviceId } from '../lib/cameraQuality'
-import { X, Zap, ZapOff, Mic, CheckCircle, SwitchCamera } from 'lucide-react'
+import { X, Zap, ZapOff, Mic, CheckCircle, SwitchCamera, Sparkles, AlertTriangle, ArrowRight } from 'lucide-react'
 
 const ANGLES = ['top', '45deg', 'side', 'macro', 'selfie'] as const
 type Angle = typeof ANGLES[number]
@@ -929,8 +929,8 @@ export function LiveCapture() {
       <div className="relative flex items-center justify-center">
         <div className="absolute w-32 h-32 rounded-full border border-amber-400/20 animate-ping" />
         <div className="absolute w-24 h-24 rounded-full border border-amber-400/30 animate-pulse" />
-        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-2xl shadow-amber-500/40">
-          <span className="text-3xl">✨</span>
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center shadow-2xl shadow-amber-500/40">
+          <Sparkles className="w-9 h-9 text-white" />
         </div>
       </div>
       <div className="text-center">
@@ -950,9 +950,9 @@ export function LiveCapture() {
 
   if (status === 'error') return (
     <div className="fixed inset-0 bg-black flex flex-col items-center justify-center gap-4 px-6">
-      <span className="text-4xl">⚠️</span>
+      <AlertTriangle className="w-10 h-10 text-brand-300" />
       <p className="text-white text-sm text-center">{errorMsg}</p>
-      <button onClick={() => navigate('/capture')} className="btn-primary text-sm px-6">Use Manual Capture →</button>
+      <button onClick={() => navigate('/capture')} className="btn-primary text-sm px-6">Use Manual Capture <ArrowRight className="w-4 h-4" /></button>
     </div>
   )
 
@@ -1254,7 +1254,7 @@ export function LiveCapture() {
                   Seeing: {observedItem}
                 </p>
               )}
-              <p className="text-white/92 text-[13px] leading-snug">{guidance || INTRO[language][currentAngle]}</p>
+              <p className="text-white/90 text-[13px] leading-snug">{guidance || INTRO[language][currentAngle]}</p>
             </div>
           </div>
         </div>
