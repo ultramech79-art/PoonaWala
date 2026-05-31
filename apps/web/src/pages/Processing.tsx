@@ -11,6 +11,22 @@ const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const CACHE_KEY = 'goldeye_metal_prices_v2'
 const MAX_VIDEO_FRAMES = 11
 
+const FACTS_EN = [
+  "Did you know? Poonawalla Fincorp is one of the most trusted names in Indian finance.",
+  "Gold is so malleable that a single ounce can be stretched into a wire 50 miles long!",
+  "Poonawalla's digital Gold Loan process is completely paperless and ensures instant disbursal.",
+  "Fun fact: There is more gold in a ton of mobile phones than in a ton of gold ore.",
+  "Poonawalla guarantees the safety of your gold with secure, multi-layer vault protection.",
+]
+
+const FACTS_HI = [
+  "क्या आप जानते हैं? पूनावाला फिनकॉर्प भारतीय वित्त में सबसे भरोसेमंद नामों में से एक है।",
+  "सोना इतना लचीला होता है कि एक औंस सोने से 50 मील लंबा तार खींचा जा सकता है!",
+  "पूनावाला की डिजिटल गोल्ड लोन प्रक्रिया पूरी तरह से पेपरलेस है और तुरंत पैसे देती है।",
+  "रोचक तथ्य: एक टन सोने के अयस्क की तुलना में एक टन मोबाइल फोन में अधिक सोना होता है।",
+  "पूनावाला सुरक्षित, मल्टी-लेयर वॉल्ट सुरक्षा के साथ आपके सोने की सुरक्षा की गारंटी देता है।",
+]
+
 // ── Real-time gold price — 4-source fallback chain ────────────────────────────
 async function fetchLiveGoldPrice(): Promise<number> {
   // Source 1: Metalpriceapi (base=USD, so rates.XAU = troy oz per dollar)
@@ -326,7 +342,7 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const selfieDataUrl = selfieCapture?.dataUrl && !selfieCapture.dataUrl.startsWith('local://')
     ? await resizeDataUrl(selfieCapture.dataUrl, 1280).catch(() => selfieCapture.dataUrl)
     : undefined
-  const minDelay = new Promise<void>(r => setTimeout(r, 3500))
+  const minDelay = new Promise<void>(r => setTimeout(r, 4500))
   const CACHE_KEY = 'goldeye_last_result'
 
   try {
@@ -385,22 +401,30 @@ export function Processing() {
   ]
   const { state, setResult } = useSessionStore()
   const [activeStep, setActiveStep] = useState(0)
+  const [activeFact, setActiveFact] = useState(0)
   const [done, setDone] = useState(false)
   const started = useRef(false)
+
+  const facts = state.lang === 'hi' ? FACTS_HI : FACTS_EN
 
   useEffect(() => {
     if (started.current) return
     started.current = true
     STEPS.forEach(({ }, i) => setTimeout(() => setActiveStep(i), i * 900))
+    
+    const factInterval = setInterval(() => {
+      setActiveFact(prev => (prev + 1) % facts.length)
+    }, 2000)
+
     assessSession(state).then(result => {
       setResult(result)
       setDone(true)
+      clearInterval(factInterval)
       setTimeout(() => navigate('/result'), 600)
     })
-  }, [])
-
-  const pct = Math.round(((activeStep + 1) / STEPS.length) * 100)
-  const circumference = 2 * Math.PI * 52
+    
+    return () => clearInterval(factInterval)
+  }, [state.lang, facts.length])
 
   return (
     <div className="page items-center justify-center animate-fade-in relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
@@ -413,37 +437,39 @@ export function Processing() {
       </div>
 
       <div className="flex flex-col items-center px-8 text-center w-full relative z-10">
-        {/* Circular progress ring */}
-        <div className="relative w-32 h-32 mb-8">
-          <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="6" />
-            <circle
-              cx="60" cy="60" r="52"
-              fill="none"
-              stroke="#2D4336"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - pct / 100)}
-              className="transition-all duration-700 ease-out"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {done ? (
-              <CheckCircle className="w-10 h-10 text-emerald-600 animate-scale-in" />
-            ) : (
-              <span className="font-display font-black text-2xl text-stone-900">{pct}%</span>
-            )}
-          </div>
+        {/* Large Premium Loading GIF */}
+        <div className="relative w-48 h-48 sm:w-56 sm:h-56 mb-6">
+          {done ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-[2rem] shadow-xl backdrop-blur-md">
+              <CheckCircle className="w-20 h-20 text-emerald-600 animate-scale-in" />
+            </div>
+          ) : (
+            <div className="absolute inset-0 bg-white/40 backdrop-blur-sm rounded-[2rem] shadow-xl border border-white/60 p-4 overflow-hidden flex items-center justify-center">
+              <img 
+                src="/assets/aec8c628-117a-11ee-8c6e-a7ad82812cac.gif" 
+                alt="Analysing..." 
+                className="w-full h-full object-cover mix-blend-multiply drop-shadow-sm scale-110"
+              />
+            </div>
+          )}
         </div>
 
-        <h1 className="font-display font-bold text-2xl text-stone-900 mb-2">
+        <h1 className="font-display font-bold text-2xl sm:text-3xl text-stone-900 mb-6 drop-shadow-sm">
           {done ? t('processing_complete') : t('processing_analysing')}
         </h1>
-        <p className="text-sm text-stone-500 mb-10">{t('processing_note')}</p>
+        
+        {/* Facts Card */}
+        <div className="w-full max-w-sm mb-10 min-h-[5rem] flex items-center justify-center p-4 rounded-2xl bg-white/60 border border-white/80 shadow-sm backdrop-blur-md">
+          <p 
+            key={activeFact} 
+            className="text-sm font-medium text-stone-600 leading-relaxed animate-fade-in text-balance"
+          >
+            {done ? t('processing_note') : facts[activeFact]}
+          </p>
+        </div>
 
         {/* Step checklist */}
-        <div className="w-full max-w-xs space-y-3">
+        <div className="w-full max-w-xs space-y-3 p-5 rounded-2xl bg-white/40 border border-white/50 backdrop-blur-sm">
           {STEPS.map(({ label }, i) => (
             <div
               key={label}
