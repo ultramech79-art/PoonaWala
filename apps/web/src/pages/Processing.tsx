@@ -11,6 +11,19 @@ const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const CACHE_KEY = 'goldeye_metal_prices_v2'
 const MAX_VIDEO_FRAMES = 11
 
+const FACTS = [
+  "Did you know? Poonawalla Fincorp is one of the most trusted names in Indian finance.",
+  "Gold is so malleable that a single ounce can be stretched into a wire 50 miles long!",
+  "Poonawalla's digital Gold Loan process is completely paperless and ensures instant disbursal.",
+  "Fun fact: There is more gold in a ton of mobile phones than in a ton of gold ore.",
+  "Poonawalla guarantees the safety of your gold with secure, multi-layer vault protection.",
+  "Earth's oceans hold an estimated 20 million tons of gold, but it's too diluted to mine profitably.",
+  "Poonawalla offers zero hidden charges and absolute transparency on your gold loan.",
+  "Absurd fact: The human body contains about 0.2 milligrams of gold, mostly in your bloodstream!",
+  "With Poonawalla, you get the highest per-gram rate to maximize your loan amount.",
+  "Gold is edible! Some cultures add gold leaf to desserts, coffee, and even tea.",
+]
+
 // ── Real-time gold price — 4-source fallback chain ────────────────────────────
 async function fetchLiveGoldPrice(): Promise<number> {
   // Source 1: Metalpriceapi (base=USD, so rates.XAU = troy oz per dollar)
@@ -326,7 +339,7 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const selfieDataUrl = selfieCapture?.dataUrl && !selfieCapture.dataUrl.startsWith('local://')
     ? await resizeDataUrl(selfieCapture.dataUrl, 1280).catch(() => selfieCapture.dataUrl)
     : undefined
-  const minDelay = new Promise<void>(r => setTimeout(r, 3500))
+  const minDelay = new Promise<void>(r => setTimeout(r, 25000))
   const CACHE_KEY = 'goldeye_last_result'
 
   try {
@@ -385,22 +398,28 @@ export function Processing() {
   ]
   const { state, setResult } = useSessionStore()
   const [activeStep, setActiveStep] = useState(0)
+  const [activeFact, setActiveFact] = useState(0)
   const [done, setDone] = useState(false)
   const started = useRef(false)
 
   useEffect(() => {
     if (started.current) return
     started.current = true
-    STEPS.forEach(({ }, i) => setTimeout(() => setActiveStep(i), i * 900))
+    STEPS.forEach(({ }, i) => setTimeout(() => setActiveStep(i), i * 4500))
+    
+    const factInterval = setInterval(() => {
+      setActiveFact(prev => (prev + 1) % FACTS.length)
+    }, 4500)
+
     assessSession(state).then(result => {
       setResult(result)
       setDone(true)
+      clearInterval(factInterval)
       setTimeout(() => navigate('/result'), 600)
     })
+    
+    return () => clearInterval(factInterval)
   }, [])
-
-  const pct = Math.round(((activeStep + 1) / STEPS.length) * 100)
-  const circumference = 2 * Math.PI * 52
 
   return (
     <div className="page items-center justify-center animate-fade-in relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
@@ -413,34 +432,33 @@ export function Processing() {
       </div>
 
       <div className="flex flex-col items-center px-8 text-center w-full relative z-10">
-        {/* Circular progress ring */}
+        {/* Loading GIF */}
         <div className="relative w-32 h-32 mb-8">
-          <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="6" />
-            <circle
-              cx="60" cy="60" r="52"
-              fill="none"
-              stroke="#2D4336"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - pct / 100)}
-              className="transition-all duration-700 ease-out"
+          {done ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <CheckCircle className="w-16 h-16 text-emerald-600 animate-scale-in" />
+            </div>
+          ) : (
+            <img 
+              src="/assets/aec8c628-117a-11ee-8c6e-a7ad82812cac.gif" 
+              alt="Analysing..." 
+              className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm"
             />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {done ? (
-              <CheckCircle className="w-10 h-10 text-emerald-600 animate-scale-in" />
-            ) : (
-              <span className="font-display font-black text-2xl text-stone-900">{pct}%</span>
-            )}
-          </div>
+          )}
         </div>
 
         <h1 className="font-display font-bold text-2xl text-stone-900 mb-2">
           {done ? t('processing_complete') : t('processing_analysing')}
         </h1>
-        <p className="text-sm text-stone-500 mb-10">{t('processing_note')}</p>
+        
+        <div className="h-16 flex items-center justify-center mb-8">
+          <p 
+            key={activeFact} 
+            className="text-sm text-stone-500 max-w-[280px] leading-relaxed animate-fade-in text-balance"
+          >
+            {done ? t('processing_note') : FACTS[activeFact]}
+          </p>
+        </div>
 
         {/* Step checklist */}
         <div className="w-full max-w-xs space-y-3">
