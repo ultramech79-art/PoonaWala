@@ -187,10 +187,18 @@ async def _evaluate_compare_store(
             if "same_item_mismatch" not in issues:
                 issues.append("same_item_mismatch")
             reference_label = "45-degree photo" if (reference_frame_type or "top") == "45deg" else "top-view photo"
-            feedback = (
-                f"This does not look like the same jewelry item as the {reference_label}. "
-                "Please retake using the same item."
-            )
+            cat_a = same_item.get("category_a")
+            cat_b = same_item.get("category_b")
+            if same_item.get("category_mismatch") and cat_a and cat_b:
+                feedback = (
+                    f"Different jewelry detected: the {reference_label} shows a {cat_a} "
+                    f"but this appears to be a {cat_b}. Please use the same item."
+                )
+            else:
+                feedback = (
+                    f"This does not look like the same jewelry item as the {reference_label}. "
+                    "Please retake using the same item."
+                )
         elif _same_item_unverified(same_item, frame_type):
             approved = False
             quality_score = min(quality_score, 0.45)

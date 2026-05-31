@@ -8,7 +8,9 @@ Why a CHAIN (not everything-vs-one-reference):
   "different" at conf 1.0 on genuine same-ring side/macro). The comparisons that
   ARE reliable are between adjacent capture steps (small angle change).
 
-So we verify the capture as a chain:  top → 45° → side → macro (→ video → selfie).
+So we verify the capture as a chain:  top → 45° → side (→ video frames).
+  selfie and macro/huid are excluded: selfie is a face shot; macro is an extreme
+  hallmark closeup that looks nothing like the full-item reference views.
   • ORB collapses near-duplicate/same-angle bursts into groups (fast, reliable).
   • Consecutive groups are linked if they share strong ORB inliers; otherwise the
     VLM judges that one adjacent (similar-angle) pair — which it does reliably.
@@ -37,8 +39,11 @@ from app.models.schemas import SignalResult
 logger = logging.getLogger("goldeye.workers.s14")
 
 STILL_FRAME_LABELS = ["top", "45deg", "side", "macro"]
-_PHASE_RANK = {"top": 0, "45deg": 1, "side": 2, "macro": 3, "selfie": 50}
-_LABEL_PRIORITY = {"top": 0, "45deg": 1, "side": 2, "macro": 3, "selfie": 4}
+_PHASE_RANK = {"top": 0, "45deg": 1, "side": 2, "macro": 3}
+_LABEL_PRIORITY = {"top": 0, "45deg": 1, "side": 2, "macro": 3}
+# Frames excluded from same-item chain: selfie is a face shot; macro/huid are
+# extreme hallmark closeups that look nothing like the full-item reference views.
+_SKIP_FRAME_LABELS = {"selfie", "macro", "huid", "closeup"}
 MAX_VIDEO_FRAMES = 3
 
 # ORB inliers between adjacent groups to auto-link as the same item (no VLM).
@@ -106,24 +111,27 @@ def _max_inliers(ga: list[int], gb: list[int], inlier_matrix: dict) -> int:
     return best
 
 
-async def run(session_id: str, frames: list[str], selfie_url: Optional[str] = None, **_) -> SignalResult:
+async def run(session_id: str, frames: list[str], selfie_url: Optional[str] = None, **_) -> SignalResult:  # noqa: ARG001 selfie excluded from chain
     t0 = time.time()
     tag = f"ITEMCHK[{session_id}]"
     try:
         # ── Collect candidate frames ──────────────────────────────────────────
+        # Only top / 45deg / side stills and video frames are included.
+        # selfie (face shot) and macro/huid (hallmark closeup) are excluded
+        # because they look nothing like the full-item reference views.
         raw_entries: list[tuple[str, str]] = []
         video_count = 0
         for idx, url in enumerate(frames or []):
             if not url:
                 continue
             label = _frame_label(idx)
+            if label in _SKIP_FRAME_LABELS:
+                continue
             if label.startswith("video_"):
                 if video_count >= MAX_VIDEO_FRAMES:
                     continue
                 video_count += 1
             raw_entries.append((label, url))
-        if selfie_url:
-            raw_entries.append(("selfie", selfie_url))
         if len(raw_entries) < 2:
             return _result(session_id, t0, note="not_enough_frames")
 
