@@ -450,7 +450,7 @@ def _bbox_center(bbox: Optional[dict[str, float]]) -> Optional[dict[str, float]]
         return None
 
 
-def _ring_annulus_mask_from_bbox(shape: tuple[int, int], bbox: Optional[dict[str, float]], thickness_ratio: float = 0.16) -> Optional[np.ndarray]:
+def _ring_annulus_mask_from_bbox(shape: tuple[int, int], bbox: Optional[dict[str, float]], thickness_ratio: float = 0.23) -> Optional[np.ndarray]:
     if not bbox:
         return None
     try:
@@ -464,13 +464,18 @@ def _ring_annulus_mask_from_bbox(shape: tuple[int, int], bbox: Optional[dict[str
         return None
 
     h, w = shape[:2]
+    pad = 0.055
+    x = max(0.0, x - pad * width)
+    y = max(0.0, y - pad * height)
+    width = min(1.0 - x, width * (1.0 + 2.0 * pad))
+    height = min(1.0 - y, height * (1.0 + 2.0 * pad))
     cx = int(round((x + width / 2.0) * w))
     cy = int(round((y + height / 2.0) * h))
     outer_axes = (
         max(3, int(round(width * w / 2.0))),
         max(3, int(round(height * h / 2.0))),
     )
-    thickness_px = max(2, int(round(min(outer_axes) * thickness_ratio)))
+    thickness_px = max(3, int(round(min(outer_axes) * thickness_ratio)))
     inner_axes = (
         max(1, outer_axes[0] - thickness_px),
         max(1, outer_axes[1] - thickness_px),
@@ -478,7 +483,7 @@ def _ring_annulus_mask_from_bbox(shape: tuple[int, int], bbox: Optional[dict[str
     mask = np.zeros((h, w), dtype=np.uint8)
     cv2.ellipse(mask, (cx, cy), outer_axes, 0, 0, 360, 255, -1)
     cv2.ellipse(mask, (cx, cy), inner_axes, 0, 0, 360, 0, -1)
-    return mask
+    return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=1)
 
 
 def _segment_with_opencv(
@@ -827,7 +832,7 @@ def _extract_geometry(mask: np.ndarray, mm_per_pixel: float, requested_type: Jew
                 hole_area_px += float(cv2.contourArea(contours_all[idx]))
 
     aspect_ratio = w / float(max(h, 1))
-    hole_ratio = hole_area_px / max(hole_area_px + contour_area_px, 1.0)
+    hole_ratio = hole_area_px / max(contour_area_px, 1.0)
     inferred_type = _infer_type(requested_type, circularity, aspect_ratio, hole_ratio, max(w, h) * mm_per_pixel)
     dimensions = {
         "width_mm": round(w * mm_per_pixel, 2),
@@ -905,9 +910,9 @@ def _validate_jewelry_candidate(
     )
     features["jewelry_material_score"] = round(float(material_score), 4)
     features["area_fraction"] = round(area_fraction, 4)
-    vlm_ring_override = vlm_validated and geometry["type"] == "ring"
+    vlm_annular_override = vlm_validated and geometry["type"] in {"ring", "bangle"}
 
-    if area_fraction < _config()["quality_thresholds"]["min_mask_area_fraction"] and not vlm_ring_override:
+    if area_fraction < _config()["quality_thresholds"]["min_mask_area_fraction"] and not vlm_annular_override:
         raise WeightEstimationError(
             "non_jewelry_photo",
             "No jewellery-like object was found beside the coin.",
@@ -919,7 +924,7 @@ def _validate_jewelry_candidate(
             "The detected object is too large or background-like to be treated as jewellery.",
             features,
         )
-    if max(width_mm, height_mm) > 110 and geometry["type"] not in {"necklace", "chain"}:
+    if max(width_mm, height_mm) > 110 and geometry["type"] not in {"necklace", "chain", "bangle"}:
         raise WeightEstimationError(
             "segmentation_failed",
             "Detected jewellery dimensions are implausibly large. Retake on a plain matte background with the coin and ornament separated.",
@@ -931,7 +936,7 @@ def _validate_jewelry_candidate(
             "The mask appears to include background rather than only jewellery. Retake on a plain matte background.",
             {**features, "width_mm": width_mm, "height_mm": height_mm},
         )
-    if material_score < 0.30 and not vlm_ring_override:
+    if material_score < 0.30 and not vlm_annular_override:
         raise WeightEstimationError(
             "non_jewelry_photo",
             "The object beside the coin does not look like gold jewellery. Use a clear photo of the ornament only.",
@@ -943,7 +948,7 @@ def _validate_jewelry_candidate(
         and features["edge_density"] < 0.04
         and features["metallic_highlight_ratio"] < 0.08
     )
-    if flat_low_detail and not vlm_ring_override:
+    if flat_low_detail and not vlm_annular_override:
         raise WeightEstimationError(
             "non_jewelry_photo",
             "The detected object looks like a flat non-jewellery item, not an ornament.",
@@ -956,7 +961,13 @@ def _infer_type(requested_type: JewelryType, circularity: float, aspect_ratio: f
     if requested_type != "auto":
         return requested_type
     if hole_ratio > 0.12 and circularity > 0.16:
-        return "bangle" if max_dim_mm > 48.0 else "ring"
+        if max_dim_mm > 52.0:
+            return "bangle"
+        if max_dim_mm < 40.0:
+            return "ring"
+        # Ambiguous 40–52 mm: bangles have a much larger central opening (thin band)
+        # With corrected hole_ratio = hole_area / outer_disk: bangles ≥ 0.60, rings < 0.60
+        return "bangle" if hole_ratio >= 0.60 else "ring"
     if circularity > 0.52 and max_dim_mm < 55.0:
         return "ring"
     if aspect_ratio > 2.45 or aspect_ratio < 0.41:
@@ -1031,7 +1042,7 @@ def _profile_measurement(
     else:
         roi_overlap = 0.55
     quality = _mask_quality(mask, img.shape[:2], 0.08)
-    confidence = max(0.18, min(0.96, 0.50 * quality + 0.30 * roi_overlap + 0.20 * (1.0 if scale_source != "top_view_coin" else 0.65)))
+    confidence = max(0.18, min(0.96, 0.50 * quality + 0.30 * roi_overlap + 0.13))
     return ProfileMeasurement(
         thickness_mm=round(float(thickness_mm), 2),
         width_mm=round(float(width_mm), 2),
@@ -1127,8 +1138,8 @@ def _ring_minor_radius_mm(
     measured_thickness_mm: Optional[float],
     measured_thickness_source: Optional[str],
 ) -> tuple[float, dict[str, Any]]:
-    band_radius = _clamp_float(band_width_mm * 0.60, 0.45, 1.35)
-    diameter_prior_radius = _clamp_float(major_radius_mm * 0.061, 0.62, 1.18)
+    band_radius = _clamp_float(band_width_mm * 0.68, 0.58, 1.62)
+    diameter_prior_radius = _clamp_float(major_radius_mm * 0.066, 0.72, 1.36)
 
     candidates: list[tuple[str, float, float]] = [
         ("top_band", band_radius, 0.72),
@@ -1141,10 +1152,13 @@ def _ring_minor_radius_mm(
         measured = float(measured_thickness_mm)
         direct_coin_scaled = measured_thickness_source is not None and measured_thickness_source.endswith("_coin_thickness")
         if direct_coin_scaled and 0.75 <= measured <= 3.0:
-            profile_radius = _clamp_float(measured / 2.0, 0.45, 1.5)
+            profile_radius = _clamp_float(measured / 2.0, 0.55, 1.75)
             profile_weight = 1.25
+        elif direct_coin_scaled and 3.0 < measured <= 6.5:
+            profile_radius = _clamp_float(measured / 2.0, 1.18, 1.95)
+            profile_weight = 0.82
         elif 0.75 <= measured <= 2.65:
-            profile_radius = _clamp_float(measured / 2.0, 0.45, 1.32)
+            profile_radius = _clamp_float(measured / 2.0, 0.55, 1.45)
             profile_weight = 0.38
 
     if profile_radius is not None and profile_weight > 0:
@@ -1152,11 +1166,46 @@ def _ring_minor_radius_mm(
 
     total_weight = sum(weight for _, _, weight in candidates)
     radius = sum(value * weight for _, value, weight in candidates) / max(total_weight, 1e-6)
-    radius = _clamp_float(radius, 0.45, 1.35)
+    radius = _clamp_float(radius, 0.58, 1.75)
     return radius, {
         "candidates": [
             {"source": source, "minor_radius_mm": round(value, 3), "weight": round(weight, 3)}
             for source, value, weight in candidates
+        ],
+        "selected_minor_radius_mm": round(radius, 3),
+    }
+
+
+def _bangle_minor_radius_mm(
+    major_radius_mm: float,
+    band_width_mm: float,
+    measured_thickness_mm: Optional[float],
+    measured_thickness_source: Optional[str],
+) -> tuple[float, dict[str, Any]]:
+    # Top-view band half-width → cross-section radius (0.52 accounts for non-circular profiles)
+    band_radius = _clamp_float(band_width_mm * 0.52, 0.8, 3.5)
+    # Physical prior: bangle cross-section ≈ 6.5 % of major radius
+    diameter_prior_radius = _clamp_float(major_radius_mm * 0.065, 0.8, 3.2)
+    candidates: list[tuple[str, float, float]] = [
+        ("top_band", band_radius, 0.65),
+        ("diameter_prior", diameter_prior_radius, 0.35),
+    ]
+    if measured_thickness_mm is not None:
+        measured = float(measured_thickness_mm)
+        direct_coin_scaled = (
+            measured_thickness_source is not None
+            and measured_thickness_source.endswith("_coin_thickness")
+        )
+        if 0.8 <= measured <= 10.0:
+            meas_radius = _clamp_float(measured / 2.0, 0.8, 5.0)
+            candidates.append(("profile", meas_radius, 1.10 if direct_coin_scaled else 0.50))
+    total_weight = sum(w for _, _, w in candidates)
+    radius = sum(v * w for _, v, w in candidates) / max(total_weight, 1e-6)
+    radius = _clamp_float(radius, 0.8, 5.0)
+    return radius, {
+        "candidates": [
+            {"source": s, "minor_radius_mm": round(v, 3), "weight": round(w, 3)}
+            for s, v, w in candidates
         ],
         "selected_minor_radius_mm": round(radius, 3),
     }
@@ -1189,7 +1238,7 @@ def _volume_cm3(
 
     if geometry["type"] in {"ring", "bangle"}:
         if geometry["hole_ratio"] > 0.08:
-            outer_area_mm2 = (geometry["contour_area_px"] + geometry["hole_area_px"]) * mm_per_pixel * mm_per_pixel
+            outer_area_mm2 = geometry["contour_area_px"] * mm_per_pixel * mm_per_pixel
             inner_area_mm2 = geometry["hole_area_px"] * mm_per_pixel * mm_per_pixel
             outer_r = math.sqrt(max(outer_area_mm2, 1e-6) / math.pi)
             inner_r = math.sqrt(max(inner_area_mm2, 1e-6) / math.pi)
@@ -1209,11 +1258,12 @@ def _volume_cm3(
                 measured_thickness_source,
             )
         else:
-            cross_section_debug = {}
-            if measured_thickness_mm is not None:
-                minor_r = max(0.45, min(2.75, min(float(measured_thickness_mm) / 2.0, band_width_mm * 0.72)))
-            else:
-                minor_r = max(0.45, min(2.25, band_width_mm * 0.44))
+            minor_r, cross_section_debug = _bangle_minor_radius_mm(
+                major_r,
+                band_width_mm,
+                measured_thickness_mm,
+                measured_thickness_source,
+            )
         estimated_depth_mm = max(0.7, 2.0 * minor_r)
         volume_mm3 = 2.0 * (math.pi ** 2) * major_r * (minor_r ** 2)
         volume_mm3 *= cfg["solidness"]
@@ -1372,26 +1422,36 @@ def estimate_weight_from_image(
         coin.diameter_px,
         mm_per_pixel,
     )
-    ring_mask = None
-    if jewelry_type == "ring" and jewelry_bbox and vlm_validated:
-        ring_mask = _ring_annulus_mask_from_bbox(img.shape[:2], jewelry_bbox)
-    if ring_mask is not None and np.count_nonzero(ring_mask) > 50:
+    coin_exclusion = _coin_exclusion_mask(img.shape[:2], coin)
+    annulus_mask = None
+    _annulus_method = ""
+    if jewelry_type in {"ring", "bangle"} and jewelry_bbox and vlm_validated:
+        _t_ratio = 0.23 if jewelry_type == "ring" else 0.14
+        _annulus_method = "vlm_roi_ring_annulus" if jewelry_type == "ring" else "vlm_roi_bangle_annulus"
+        annulus_mask = _ring_annulus_mask_from_bbox(img.shape[:2], jewelry_bbox, thickness_ratio=_t_ratio)
+        if annulus_mask is not None:
+            annulus_mask[coin_exclusion > 0] = 0
+    if annulus_mask is not None and np.count_nonzero(annulus_mask) > 50:
         segmentation = SegmentationResult(
-            ring_mask,
-            "vlm_roi_ring_annulus",
+            annulus_mask,
+            _annulus_method,
             0.78,
-            _contour_count(ring_mask),
+            _contour_count(annulus_mask),
         )
     else:
         segmentation = _segment_jewellery(img, coin, jewelry_point, jewelry_bbox)
-    if jewelry_type == "ring" and jewelry_bbox and segmentation.method != "vlm_roi_ring_annulus":
-        ring_mask = _ring_annulus_mask_from_bbox(img.shape[:2], jewelry_bbox)
-        if ring_mask is not None and np.count_nonzero(ring_mask) > 50:
+    if jewelry_type in {"ring", "bangle"} and jewelry_bbox and segmentation.method not in {"vlm_roi_ring_annulus", "vlm_roi_bangle_annulus"}:
+        _t_ratio = 0.23 if jewelry_type == "ring" else 0.14
+        _annulus_method = "vlm_roi_ring_annulus" if jewelry_type == "ring" else "vlm_roi_bangle_annulus"
+        annulus_mask = _ring_annulus_mask_from_bbox(img.shape[:2], jewelry_bbox, thickness_ratio=_t_ratio)
+        if annulus_mask is not None:
+            annulus_mask[coin_exclusion > 0] = 0
+        if annulus_mask is not None and np.count_nonzero(annulus_mask) > 50:
             segmentation = SegmentationResult(
-                ring_mask,
-                "vlm_roi_ring_annulus",
+                annulus_mask,
+                _annulus_method,
                 max(segmentation.quality, 0.72),
-                _contour_count(ring_mask),
+                _contour_count(annulus_mask),
             )
     logger.info(
         "Weight stage segmentation complete in %.2fs method=%s quality=%.3f pixels=%d",
