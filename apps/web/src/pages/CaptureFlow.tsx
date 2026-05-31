@@ -30,6 +30,12 @@ interface StepEval {
   dataUrl?: string
 }
 
+const WEIGHT_VIEW_TYPES = new Set<CaptureType>(['top', '45deg', 'side'])
+
+function isWeightView(type: CaptureType) {
+  return WEIGHT_VIEW_TYPES.has(type)
+}
+
 /**
  * Returns the reference image to compare against for each step.
  * Strategy: always anchor to the FIRST captured frame (45deg), so a user
@@ -155,6 +161,7 @@ export function CaptureFlow() {
   const spokenStep = useRef(-1)
   const [previousAssets, setPreviousAssets] = useState<UserAsset[]>([])
   const [loadingPrevious, setLoadingPrevious] = useState(false)
+  const step = STEPS[stepIdx]
 
   // Fetch previously uploaded images from user's profile
   useEffect(() => {
@@ -163,7 +170,14 @@ export function CaptureFlow() {
     setLoadingPrevious(true)
     listMyAssetsAPI(state.authToken)
       .then(assets => {
-        if (!cancelled) setPreviousAssets(assets.filter(a => a.public_url && a.frame_type))
+        if (!cancelled) {
+          setPreviousAssets(assets.filter(a =>
+            a.public_url &&
+            a.frame_type &&
+            isWeightView(a.frame_type as CaptureType) &&
+            (a.asset_kind === 'verified_view' || a.asset_kind === 'jewellery_capture')
+          ))
+        }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoadingPrevious(false) })
@@ -173,7 +187,6 @@ export function CaptureFlow() {
   // Find previous upload for current step
   const previousForStep = previousAssets.find(a => a.frame_type === step.type)
 
-  const step = STEPS[stepIdx]
   const currentEval = evals[stepIdx]
   const evalState = currentEval?.state ?? 'idle'
   const sameItemMismatch = currentEval?.result?.issues?.includes('same_item_mismatch') ?? false
@@ -197,17 +210,10 @@ export function CaptureFlow() {
 
     const sessionId = state.sessionId || initSession()
 
-    addCapture({ type: currentStepConfig.type, blob, dataUrl, timestamp: Date.now(), exif })
-    setPageEvidence('capture', {
-      capturedTypes: nextCapturedTypes,
-      skippedTypes: Object.keys(state.skippedCaptures ?? {}).filter(type => type !== currentStepConfig.type),
-      lastCapturedType: currentStepConfig.type,
-      lastCapturedAt: Date.now(),
-    })
-    setCaptured(prev => new Set([...prev, currentStep]))
-
     if (currentStepConfig.isAudio) {
       const msg = t('speak_audio_done')
+      addCapture({ type: currentStepConfig.type, blob, dataUrl, timestamp: Date.now(), exif })
+      setCaptured(prev => new Set([...prev, currentStep]))
       setEvals(prev => ({
         ...prev,
         [currentStep]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.9, feedback: msg, issues: [], detected: {} } },
@@ -283,10 +289,17 @@ export function CaptureFlow() {
       })
       speak(result.feedback)
 
-      // Background upload on success
-      if (result.approved && state.authToken && state.authToken !== 'guest' && !isDemo) {
-        uploadUserAssetAPI(state.authToken, blob, 'jewellery_capture', sessionId, currentStepConfig.type)
-          .catch(err => console.error('[CaptureFlow] Immediate upload failed:', err))
+      if (result.approved) {
+        addCapture({ type: currentStepConfig.type, blob, dataUrl: optimizedDataUrl, timestamp: Date.now(), exif })
+        setCaptured(prev => new Set([...prev, currentStep]))
+      }
+
+      if (result.approved && state.authToken && state.authToken !== 'guest' && !isDemo && isWeightView(currentStepConfig.type)) {
+        uploadUserAssetAPI(state.authToken, blob, 'verified_view', sessionId, currentStepConfig.type)
+          .then(asset => {
+            setPreviousAssets(prev => [asset, ...prev.filter(item => item.id !== asset.id)])
+          })
+          .catch(err => console.error('[CaptureFlow] Verified view upload failed:', err))
       }
     } catch (err) {
       console.error('[CaptureFlow] Final evaluation attempt failed:', err)
@@ -305,12 +318,6 @@ export function CaptureFlow() {
         fallbackAccepted: true,
       })
       speak(fallback)
-
-      // Fallback background upload since we are marking it approved
-      if (state.authToken && state.authToken !== 'guest' && !isDemo) {
-        uploadUserAssetAPI(state.authToken, blob, 'jewellery_capture', sessionId, currentStepConfig.type)
-          .catch(err => console.error('[CaptureFlow] Immediate fallback upload failed:', err))
-      }
     }
   }, [stepIdx, addCapture, setPageEvidence, setHuid, setScannedKarat, state.sessionId, state.authToken, state.captures, state.skippedCaptures, initSession, t])
 
@@ -390,6 +397,10 @@ export function CaptureFlow() {
 
   const handleUsePreviousUpload = useCallback(async (asset: UserAsset) => {
     if (!asset.public_url) return
+    if (asset.frame_type !== step.type || !isWeightView(step.type)) {
+      speak('This saved image belongs to a different view. Please use the matching view.')
+      return
+    }
     speak(t('speak_analysing'))
     setEvals(prev => ({ ...prev, [stepIdx]: { state: 'evaluating', dataUrl: undefined } }))
     try {

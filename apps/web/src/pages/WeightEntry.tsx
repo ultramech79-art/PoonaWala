@@ -11,7 +11,7 @@ import {
   Scale,
   Sparkles,
 } from 'lucide-react'
-import { estimateWeightAPI, urlToDataUrl, type GoldKarat, type JewelryType, type WeightEstimateResult } from '../lib/api'
+import { estimateWeightAPI, listMyAssetsAPI, urlToDataUrl, type GoldKarat, type JewelryType, type UserAsset, type WeightEstimateResult } from '../lib/api'
 import { useSessionStore } from '../store/session'
 
 const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
@@ -26,6 +26,14 @@ const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
 ]
 
 const KARATS: GoldKarat[] = [22, 24, 18]
+const SLOT_FRAME_TYPE = {
+  top: 'top',
+  angle: '45deg',
+  side: 'side',
+} as const
+
+type WeightSlot = keyof typeof SLOT_FRAME_TYPE
+type WeightFrameType = (typeof SLOT_FRAME_TYPE)[WeightSlot]
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -101,6 +109,33 @@ export function WeightEntry() {
   const [error, setError] = useState('')
   const [result, setResult] = useState<WeightEstimateResult | null>(null)
   const [jewelryPoint, setJewelryPoint] = useState<{ x: number; y: number } | null>(null)
+  const [savedAssets, setSavedAssets] = useState<UserAsset[]>([])
+  const [savedLoading, setSavedLoading] = useState(false)
+
+  useEffect(() => {
+    if (!state.authToken || state.authToken === 'guest') {
+      setSavedAssets([])
+      return
+    }
+    let cancelled = false
+    setSavedLoading(true)
+    listMyAssetsAPI(state.authToken)
+      .then(assets => {
+        if (cancelled) return
+        setSavedAssets(assets.filter(asset =>
+          !!asset.public_url &&
+          (asset.asset_kind === 'verified_view' || asset.asset_kind === 'jewellery_capture') &&
+          Object.values(SLOT_FRAME_TYPE).includes(asset.frame_type as WeightFrameType)
+        ))
+      })
+      .catch(() => {
+        if (!cancelled) setSavedAssets([])
+      })
+      .finally(() => {
+        if (!cancelled) setSavedLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [state.authToken])
 
   // Auto-populate from CaptureFlow captures (top, 45deg, side)
   useEffect(() => {
@@ -165,7 +200,31 @@ export function WeightEntry() {
 
   const confidencePct = useMemo(() => Math.round((result?.confidence.score ?? 0) * 100), [result])
 
-  async function loadFile(slot: 'top' | 'angle' | 'side', file: File | undefined) {
+  function savedForSlot(slot: WeightSlot) {
+    const expectedFrame = SLOT_FRAME_TYPE[slot]
+    return savedAssets
+      .filter(asset => asset.frame_type === expectedFrame && !!asset.public_url)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, 8)
+  }
+
+  async function applySavedAsset(slot: WeightSlot, asset: UserAsset) {
+    const expectedFrame = SLOT_FRAME_TYPE[slot]
+    if (asset.frame_type !== expectedFrame || !asset.public_url) {
+      setError(`That saved image is not a ${expectedFrame} view.`)
+      return
+    }
+    setError('')
+    setResult(null)
+    if (slot === 'top') setJewelryPoint(null)
+    const imageUrl = await urlToDataUrl(asset.public_url).catch(() => asset.public_url!)
+    setFileNames(current => ({ ...current, [slot]: `saved_${expectedFrame}.jpg` }))
+    if (slot === 'top') setTopImageDataUrl(imageUrl)
+    if (slot === 'angle') setAngleImageDataUrl(imageUrl)
+    if (slot === 'side') setSideImageDataUrl(imageUrl)
+  }
+
+  async function loadFile(slot: WeightSlot, file: File | undefined) {
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setError('Upload a JPG, PNG, or HEIC image.')
@@ -241,13 +300,14 @@ export function WeightEntry() {
     src,
     fileName,
   }: {
-    slot: 'top' | 'angle' | 'side'
+    slot: WeightSlot
     title: string
     hint: string
     src: string | null
     fileName: string
   }) {
     const isTop = slot === 'top'
+    const saved = savedForSlot(slot)
     return (
       <div
         className="flex min-h-40 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-200 bg-white px-4 py-5 text-center"
@@ -285,6 +345,29 @@ export function WeightEntry() {
             <FileImage className="h-4 w-4 flex-shrink-0" />
             <span className="truncate">{fileName}</span>
           </div>
+        )}
+        {saved.length > 0 && (
+          <div className="mt-4 w-full text-left">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-stone-400">
+              Saved verified {title}
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {saved.map(asset => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  onClick={() => applySavedAsset(slot, asset)}
+                  className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  title={`Use saved ${title}`}
+                >
+                  <img src={asset.public_url!} alt={`Saved ${title}`} className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {savedLoading && saved.length === 0 && (
+          <p className="mt-3 text-[10px] font-medium text-stone-400">Checking saved verified views...</p>
         )}
       </div>
     )
