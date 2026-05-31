@@ -73,7 +73,14 @@ export function Profile() {
     assets.forEach(asset => {
       if (assetImageSrcs[asset.id]) return
       assetImageDataUrlAPI(state.authToken!, asset.id)
-        .then(src => setAssetImageSrcs(prev => ({ ...prev, [asset.id]: src })))
+        .then(src => {
+          setAssetImageSrcs(prev => ({ ...prev, [asset.id]: src }))
+          setImgErrors(prev => {
+            const next = new Set(prev)
+            next.delete(asset.id)
+            return next
+          })
+        })
         .catch(() => {
           if (!asset.public_url) handleImgError(asset.id)
         })
@@ -237,18 +244,27 @@ export function Profile() {
                       <div className="grid grid-cols-3 gap-2">
                         {sessionAssets.map(asset => (
                           <div key={asset.id} className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 border border-stone-200">
-                            {imgErrors.has(asset.id) ? (
-                              <div className="w-full h-full flex items-center justify-center bg-stone-100">
-                                <AlertTriangle className="w-5 h-5 text-stone-400" />
-                              </div>
-                            ) : (
+                            {assetImageSrcs[asset.id] || asset.public_url ? (
                               <img
                                 src={assetImageSrcs[asset.id] || asset.public_url || ''}
                                 alt={asset.frame_type || asset.asset_kind}
                                 className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover:scale-105"
                                 onError={() => handleImgError(asset.id)}
+                                onLoad={() => {
+                                  setImgErrors(prev => {
+                                    const next = new Set(prev)
+                                    next.delete(asset.id)
+                                    return next
+                                  })
+                                }}
                                 onClick={() => openAsset(asset)}
                               />
+                            ) : imgErrors.has(asset.id) ? (
+                              <div className="w-full h-full flex items-center justify-center bg-stone-100">
+                                <AlertTriangle className="w-5 h-5 text-stone-400" />
+                              </div>
+                            ) : (
+                              <div className="w-full h-full animate-pulse bg-stone-100" />
                             )}
                             <AssetLabel asset={asset} />
                             <button

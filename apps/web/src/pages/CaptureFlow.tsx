@@ -223,8 +223,10 @@ export function CaptureFlow() {
     })
   }, [previousAssets, previousAssetSrcs, state.authToken])
 
-  // Find previous upload for current step
-  const previousForStep = previousAssets.find(a => a.frame_type === step.type)
+  const previousForStep = previousAssets
+    .filter(a => a.frame_type === step.type)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 12)
 
   const currentEval = evals[stepIdx]
   const evalState = currentEval?.state ?? 'idle'
@@ -569,8 +571,9 @@ export function CaptureFlow() {
         </div>
 
         {/* Demo / Previous Upload Buttons */}
-        {(step.demoUrl || previousForStep) && (
-          <div className="px-5 pb-2 flex gap-2">
+        {(step.demoUrl || previousForStep.length > 0) && (
+          <div className="px-5 pb-2 space-y-2">
+            <div className="flex gap-2">
             {step.demoUrl && (
               <button
                 onClick={() => setShowDemo(true)}
@@ -580,23 +583,39 @@ export function CaptureFlow() {
                 Enter Example Demo
               </button>
             )}
-            {previousForStep && step.type !== 'macro' && step.type !== 'selfie' && (
-              <button
-                onClick={() => handleUsePreviousUpload(previousForStep)}
-                disabled={evalState === 'evaluating'}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 hover:bg-emerald-100 transition-colors font-medium disabled:opacity-50"
-              >
-                {previousAssetSrcs[previousForStep.id] ? (
-                  <img
-                    src={previousAssetSrcs[previousForStep.id]}
-                    className="w-4 h-4 rounded object-cover"
-                    alt=""
-                  />
-                ) : (
-                  <ImageIcon className="w-4 h-4" />
-                )}
-                Use Previous Upload
-              </button>
+            {previousForStep.length > 0 && step.type !== 'macro' && step.type !== 'selfie' && (
+              <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 font-medium">
+                <ImageIcon className="w-4 h-4" />
+                {previousForStep.length} saved {step.type} view{previousForStep.length === 1 ? '' : 's'}
+              </span>
+            )}
+            </div>
+            {previousForStep.length > 0 && step.type !== 'macro' && step.type !== 'selfie' && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {previousForStep.map((asset, index) => {
+                  const src = previousAssetSrcs[asset.id]
+                  return (
+                    <button
+                      key={asset.id}
+                      onClick={() => handleUsePreviousUpload(asset)}
+                      disabled={evalState === 'evaluating'}
+                      className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 disabled:opacity-50"
+                      title={`Use saved ${step.type} view`}
+                    >
+                      {src ? (
+                        <img src={src} className="h-full w-full object-cover" alt="" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <ImageIcon className="h-5 w-5 text-emerald-600" />
+                        </div>
+                      )}
+                      <span className="absolute bottom-0 inset-x-0 bg-black/50 px-1 py-0.5 text-[9px] font-bold text-white">
+                        {index === 0 ? 'Latest' : `#${index + 1}`}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </div>
         )}
