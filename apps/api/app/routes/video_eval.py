@@ -331,7 +331,12 @@ Return ONLY valid JSON:
                 "comparisons": comparisons,
             }
             video_score = min(video_score, 35)
-            signals.insert(0, "Different jewelry item detected compared with the top-view photo")
+            cat_a = strongest.get("category_a")
+            cat_b = strongest.get("category_b")
+            if strongest.get("category_mismatch") and cat_a and cat_b:
+                signals.insert(0, f"Different jewelry detected in video: reference shows a {cat_a} but video shows a {cat_b}")
+            else:
+                signals.insert(0, "Different jewelry item detected in video compared with the reference photo")
         elif comparisons:
             strongest = sorted(comparisons, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
             same_item_summary = {

@@ -50,12 +50,12 @@ GROQ_GUIDANCE_API_KEYS = _split_keys("GROQ_GUIDANCE_API_KEY", "GROQ_API_KEY")
 GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS = _split_keys("GROQ_AUDIO_VIDEO_FALLBACK_API_KEY", "GROQ_API_KEY")
 
 # Frame types that get same-item comparison against the reference (45° / top) view.
-# "hallmark" is intentionally EXCLUDED: it is an extreme close-up of the BIS stamp
-# that looks nothing like the 45°/full-item reference, so comparing them produced
-# false "different item" mismatches. Quality of the hallmark image is still
-# evaluated — it just isn't cross-view compared. selfie/video stay compared.
-COMPARE_FRAME_TYPES = {"top", "45deg", "side", "macro", "huid", "closeup", "selfie", "video"}
-LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup", "selfie"}
+# Only top/side/45deg still-captures and video frames are compared.
+# selfie, macro (hallmark closeup), huid, and closeup are excluded:
+# - selfie is a face shot, not a jewelry view
+# - macro/huid/closeup are extreme closeups that look nothing like the full-item reference
+COMPARE_FRAME_TYPES = {"top", "45deg", "side", "video"}
+LOW_CONTEXT_FRAME_TYPES = {"macro", "hallmark", "huid", "closeup"}
 ANGLE_VARIANT_FRAME_TYPES = {"45deg", "side"}
 _IMAGE_BYTES_CACHE: dict[str, tuple[float, bytes]] = {}
 _IMAGE_BYTES_CACHE_MAX = 48
@@ -594,6 +594,26 @@ def _normalize_semantic_result(raw: dict, local_result: dict) -> dict:
     # (ring vs bangle), force "different" regardless of its same-item verdict.
     cat_a = _normalize_category(raw.get("category_a"))
     cat_b = _normalize_category(raw.get("category_b"))
+
+    # Ring-vs-ring bypass: two rings look nearly identical from stills/video —
+    # angle changes, lighting, and cropping differences make fine-grained ring ID
+    # unreliable. Return "inconclusive" so fraud block is never triggered for rings.
+    if cat_a == "ring" and cat_b == "ring":
+        return {
+            "same_item": None,
+            "verdict": "inconclusive",
+            "same_item_score": round(score, 3),
+            "confidence": round(confidence, 3),
+            "method": "ring_bypass",
+            "reference_view_partial": bool(local_result.get("reference_view_partial")),
+            "category_a": cat_a,
+            "category_b": cat_b,
+            "category_mismatch": False,
+            "matching_signals": ["both_classified_as_ring_bypass"],
+            "mismatch_reasons": [],
+            "local_fingerprint": local_result,
+        }
+
     category_mismatch = _category_mismatch(cat_a, cat_b)
     if category_mismatch:
         verdict = "different"
