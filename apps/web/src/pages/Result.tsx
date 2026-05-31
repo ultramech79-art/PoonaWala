@@ -163,7 +163,11 @@ export function Result() {
   const result = state.result
   if (!result) { navigate('/'); return null }
 
-  const isFail = result.routing === 'REJECT' || result.routing === 'RECAPTURE'
+  const effectiveRouting =
+    (result.routing === 'RECAPTURE' || result.routing === 'REJECT') && result.confidence.score > 0.47
+      ? 'AGENT'
+      : result.routing
+  const isFail = effectiveRouting === 'REJECT' || effectiveRouting === 'RECAPTURE'
   const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`
 
   // Recalculate value and loan with the latest live IBJA price on every render
@@ -201,7 +205,7 @@ export function Result() {
 
   const displayLoan = computeLoanOffer(displayValue)
 
-  const routing = ROUTING[result.routing]
+  const routing = ROUTING[effectiveRouting]
   const RoutingIcon = routing.icon
 
   return (
@@ -592,7 +596,7 @@ export function Result() {
       <div className="mx-5 mb-4 space-y-3">
         <button
           id="result-primary-action"
-          onClick={() => navigate(result.routing === 'AGENT' || result.routing === 'INSTANT' ? '/final-eval' : '/')}
+          onClick={() => navigate(effectiveRouting === 'AGENT' || effectiveRouting === 'INSTANT' ? '/final-eval' : '/')}
           className="btn-primary w-full"
         >
           {routing.action}

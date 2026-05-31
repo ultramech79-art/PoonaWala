@@ -60,7 +60,7 @@ interface VideoResult {
 
 export function VideoEval() {
   const navigate = useNavigate()
-  const { setLiveAuthResult, addCapture, state } = useSessionStore()
+  const { setLiveAuthResult, addCapture, skipCapture, setPageEvidence, state } = useSessionStore()
   const { t } = useTranslation()
   const lang = (localStorage.getItem('goldeye_lang') ?? 'en') as 'en' | 'hi'
 
@@ -130,6 +130,11 @@ export function VideoEval() {
             source: 'video-eval',
           },
         })
+        setPageEvidence('video', {
+          skipped: false,
+          captured: true,
+          frameCount: dataUrls.length,
+        })
       }
 
       setPhase('analyzing')
@@ -169,10 +174,41 @@ export function VideoEval() {
         audio_signals:  [],
         purity_estimate: data.purity_estimate ?? null,
       })
+      setPageEvidence('video', {
+        skipped: false,
+        captured: true,
+        analysed: true,
+        score: data.video_score,
+        verdict: data.verdict,
+        frameCount: framesRef.current.length,
+        signals: data.video_signals ?? [],
+        purityEstimate: data.purity_estimate ?? null,
+        sameItem: data.same_item ?? null,
+      })
     } catch (e: any) {
       setError(e?.message ?? 'Video analysis failed. Please try again.')
+      setPageEvidence('video', {
+        skipped: false,
+        captured: framesRef.current.length > 0,
+        analysed: false,
+        frameCount: framesRef.current.length,
+        error: e?.message ?? 'analysis_failed',
+      })
     }
     setPhase('result')
+  }
+
+  function skipVideo() {
+    skipCapture('video')
+    setLiveAuthResult(null)
+    setPageEvidence('video', {
+      skipped: true,
+      captured: false,
+      analysed: false,
+      score: null,
+      frameCount: 0,
+    })
+    navigate('/audio-eval')
   }
 
   const scoreColor = (s: number) => s >= 70 ? 'text-emerald-600' : s >= 45 ? 'text-amber-500' : 'text-red-500'
@@ -251,7 +287,7 @@ export function VideoEval() {
               <Video className="w-5 h-5" /> Start 15-Second Video
             </button>
             <button
-              onClick={() => navigate('/audio-eval')}
+              onClick={skipVideo}
               className="w-full btn-secondary text-sm flex items-center justify-center gap-2"
             >
               <SkipForward className="w-4 h-4" /> Skip Video — Go to Tap Test

@@ -34,10 +34,12 @@ export function CertificateScan() {
   const { t } = useTranslation()
   const {
     addCapture,
+    skipCapture,
     setCertificateData,
     setWeight,
     setScannedKarat,
     setHuid,
+    setPageEvidence,
     state,
   } = useSessionStore()
 
@@ -66,13 +68,42 @@ export function CertificateScan() {
       const result = await certificateOcrAPI(optimized, 60000)
       const extracted = toCertificateData(result)
       setData(extracted)
+      setPageEvidence('certificate', {
+        skipped: false,
+        captured: true,
+        scanned: true,
+        confidence: extracted.confidence,
+        authenticityFound: extracted.authenticityFound,
+        huid: extracted.huid,
+        karat: extracted.karat,
+        weightG: extracted.weightG,
+        itemDescription: extracted.itemDescription,
+        billNumber: extracted.billNumber,
+        jewellerName: extracted.jewellerName,
+        purchaseDate: extracted.purchaseDate,
+        usefulFieldCount: [
+          extracted.huid,
+          extracted.karat,
+          extracted.weightG,
+          extracted.itemDescription,
+          extracted.billNumber,
+          extracted.jewellerName,
+          extracted.purchaseDate,
+        ].filter(Boolean).length,
+      })
       setStatus('done')
     } catch (err) {
       console.error('[CertificateScan] OCR failed:', err)
+      setPageEvidence('certificate', {
+        skipped: false,
+        captured: true,
+        scanned: false,
+        error: 'ocr_failed',
+      })
       setStatus('error')
       setError('Could not read the bill. Please retake the document or skip this step.')
     }
-  }, [addCapture])
+  }, [addCapture, setPageEvidence])
 
   const handleCapture = useCallback((blob: Blob, dataUrl: string, exif?: Record<string, unknown>) => {
     scanDocument(blob, dataUrl, exif)
@@ -98,12 +129,27 @@ export function CertificateScan() {
       if (sourceData.karat) setScannedKarat(sourceData.karat)
       if (sourceData.weightG) setWeight(sourceData.weightG)
       if (sourceData.huid) setHuid(sourceData.huid)
+      setPageEvidence('certificate', {
+        skipped: false,
+        applied: true,
+        confidence: sourceData.confidence,
+        authenticityFound: sourceData.authenticityFound,
+        huid: sourceData.huid,
+        karat: sourceData.karat,
+        weightG: sourceData.weightG,
+      })
     }
     navigate('/weight')
   }
 
   function continueWithoutDocument() {
     setCertificateData(null)
+    skipCapture('certificate')
+    setPageEvidence('certificate', {
+      skipped: true,
+      captured: false,
+      applied: false,
+    })
     navigate('/weight')
   }
 
