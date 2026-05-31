@@ -893,6 +893,98 @@ Return ONLY valid JSON:
 _FRAME_PROMPTS = _build_frame_prompts(gold_price_24k=0.0)
 
 
+# 6-char alphanumeric BIS HUID (e.g. "AB1234"). Purely-numeric codes are HSN/tariff
+# codes, NOT HUIDs, so they are rejected below.
+_MACRO_HUID_RE = re.compile(r"^[A-Z0-9]{6}$")
+
+
+def _coerce_karat_numeric(detected: dict) -> Optional[int]:
+    """Best-effort extraction of an integer karat (8..24) from a macro `detected`
+    dict. The vision model frequently returns the karat ONLY as a marking string
+    ("18K", "750", "916") and either omits `karat_numeric` or returns it as a
+    string. Without this coercion the frontend's photo-karat evidence flag never
+    fires, so a genuinely OCR-read karat (e.g. 18K) produces a LOW confidence."""
+    raw = detected.get("karat_numeric")
+
+    karat_num: Optional[int] = None
+    if isinstance(raw, bool):
+        karat_num = None
+    elif isinstance(raw, int):
+        karat_num = raw
+    elif isinstance(raw, float):
+        karat_num = int(round(raw))
+    elif isinstance(raw, str):
+        m = re.search(r"(\d{1,2})", raw)
+        if m:
+            karat_num = int(m.group(1))
+
+    if karat_num is None:
+        km = str(detected.get("karat_marking") or "")
+        m = re.search(r"(\d{1,2})\s*[Kk]", km)
+        if m:
+            karat_num = int(m.group(1))
+        else:
+            # fineness like "916" → 22K, "750" → 18K, "999" → 24K
+            m2 = re.search(r"(\d{3})", km)
+            if m2:
+                fineness = int(m2.group(1))
+                karat_num = round(fineness * 24 / 1000)
+
+    if karat_num is not None and 8 <= karat_num <= 24:
+        return karat_num
+    return None
+
+
+def _normalize_macro_detected(detected: Optional[dict], live_price: float = 0.0) -> dict:
+    """Normalize karat + HUID fields in a macro `detected` dict REGARDLESS of which
+    provider (Groq primary or Gemini fallback) produced it. Previously this ran
+    only inside the Gemini path and only when a live price was available, so the
+    common Groq-primary path returned a raw `karat_marking` with a null
+    `karat_numeric` — silently dropping photo-OCR karat evidence.
+
+    Adds, in place:
+      - detected["karat_numeric"]      : int 8..24 (or None)
+      - detected["karat_detected"]     : bool — a karat was readable from the photo
+      - detected["estimated_price_per_g"] : when live_price is known
+      - detected["huid_code"]          : cleaned 6-char HUID (or None)
+      - detected["huid_detected"]      : bool — a valid BIS HUID was readable
+      - detected["huid_code_raw"]      : original model value (debugging)
+    """
+    if not isinstance(detected, dict):
+        detected = {}
+
+    # ── Karat ────────────────────────────────────────────────────────────────
+    karat_num = _coerce_karat_numeric(detected)
+    detected["karat_numeric"] = karat_num
+    detected["karat_detected"] = karat_num is not None
+    if karat_num is not None and live_price > 0:
+        detected["estimated_price_per_g"] = round(live_price * karat_num / 24, 0)
+
+    # ── HUID ─────────────────────────────────────────────────────────────────
+    raw_huid = detected.get("huid_code")
+    detected["huid_code_raw"] = raw_huid
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", str(raw_huid)).upper() if raw_huid else ""
+    is_valid_huid = bool(
+        len(cleaned) == 6 and _MACRO_HUID_RE.match(cleaned) and not cleaned.isdigit()
+    )
+    detected["huid_code"] = cleaned if is_valid_huid else None
+    detected["huid_detected"] = is_valid_huid
+
+    logger.info(
+        "macro detected normalized: karat_marking=%r karat_numeric=%s karat_detected=%s "
+        "huid_raw=%r huid_code=%s huid_detected=%s hallmark_visible=%s bis_logo=%s",
+        detected.get("karat_marking"),
+        detected.get("karat_numeric"),
+        detected.get("karat_detected"),
+        raw_huid,
+        detected.get("huid_code"),
+        detected.get("huid_detected"),
+        detected.get("hallmark_visible"),
+        detected.get("bis_logo"),
+    )
+    return detected
+
+
 async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
     """
     Capture validation routing:
@@ -938,7 +1030,17 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
         return {"approved": True, "quality_score": 0.5, "feedback": "Captured", "issues": [], "detected": {}, "provider": "passthrough"}
 
     # ── Image frames: Groq PRIMARY → Gemini STRICT fallback ──────────────────
-    prompts = _build_frame_prompts(gold_price_24k=0)
+    # For macro frames we need a live price to enrich the per-gram estimate; the
+    # karat/HUID NORMALIZATION itself runs regardless of price (see below).
+    live_price = 0.0
+    if frame_type == "macro":
+        try:
+            from app.decision.ibja import current_price_24k
+            live_price = current_price_24k()
+        except Exception:
+            live_price = 0.0
+
+    prompts = _build_frame_prompts(gold_price_24k=live_price if frame_type == "macro" else 0)
     prompt = prompts.get(frame_type, prompts["top"])
 
     if GROQ_PRIMARY_API_KEYS:
@@ -958,6 +1060,11 @@ async def evaluate_frame(image_base64: str, frame_type: str) -> dict:
                 result["quality_score"] = max(0.0, min(1.0, float(result["quality_score"])))
                 result["provider"] = "groq"
                 result["model"] = GROQ_MODEL
+                # Normalize macro karat/HUID so photo-OCR evidence is reliably
+                # exposed to the frontend on the Groq-primary path too.
+                if frame_type == "macro":
+                    logger.info(f"Groq macro raw detected [{frame_type}]: {result.get('detected')}")
+                    result["detected"] = _normalize_macro_detected(result["detected"], live_price)
                 logger.info(f"Groq frame eval [{frame_type}]: approved={result['approved']}, score={result['quality_score']}")
                 return result
             logger.warning(f"Groq frame eval failed [{frame_type}], falling back to Gemini")
@@ -1148,31 +1255,17 @@ async def _evaluate_frame_gemini(
         # Clamp quality_score to [0.0, 1.0]
         result["quality_score"] = max(0.0, min(1.0, float(result["quality_score"])))
 
-        # For macro: compute estimated price per gram if karat detected and price available
-        if frame_type == "macro" and live_price > 0:
-            detected = result.get("detected", {})
-            karat_num = detected.get("karat_numeric")
-            if karat_num is None:
-                # Try parsing from karat_marking string
-                km = detected.get("karat_marking") or ""
-                import re as _re
-                m = _re.search(r"(\d{1,2})[Kk]", km)
-                if m:
-                    karat_num = int(m.group(1))
-                else:
-                    # fineness like "916" → 22K, "750" → 18K
-                    m2 = _re.search(r"(\d{3})", km)
-                    if m2:
-                        fineness = int(m2.group(1))
-                        karat_num = round(fineness * 24 / 1000)
-
-            if karat_num and 8 <= karat_num <= 24:
-                price_per_g = round(live_price * karat_num / 24, 0)
-                detected["estimated_price_per_g"] = price_per_g
-                detected["karat_numeric"] = karat_num
-                # Enrich feedback with price if hallmark was found
-                if detected.get("hallmark_visible") and "₹" not in result["feedback"]:
-                    result["feedback"] += f" Estimated ₹{int(price_per_g):,}/g at current IBJA rate."
+        # For macro: normalize karat/HUID (shared with the Groq-primary path) so
+        # photo-OCR karat + HUID evidence is reliably exposed regardless of how
+        # the model phrased it. Normalization runs even when live_price is 0.
+        if frame_type == "macro":
+            logger.info(f"Gemini macro raw detected [{frame_type}]: {result.get('detected')}")
+            detected = _normalize_macro_detected(result.get("detected", {}), live_price)
+            result["detected"] = detected
+            # Enrich feedback with price if a karat + hallmark were found.
+            price_per_g = detected.get("estimated_price_per_g")
+            if price_per_g and detected.get("hallmark_visible") and "₹" not in result["feedback"]:
+                result["feedback"] += f" Estimated ₹{int(price_per_g):,}/g at current IBJA rate."
 
         result["provider"] = provider_name
         result["model"] = GEMINI_MODEL

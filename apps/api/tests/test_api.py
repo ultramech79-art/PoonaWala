@@ -75,7 +75,7 @@ async def test_assess_returns_valid_schema(client):
     lo = data["loan_offer"]
     assert lo["band_low_inr"] <= lo["band_high_inr"]
     assert lo["ltv_applied_pct"] == 75   # RBI ceiling is 75% for NBFCs
-    assert lo["tier"] in ("under_2_5L", "above_2_5L")
+    assert lo["tier"] in ("under_2_5L", "2_5L_to_5L", "above_5L")
 
     conf = data["confidence"]
     assert 0.0 <= conf["score"] <= 1.0

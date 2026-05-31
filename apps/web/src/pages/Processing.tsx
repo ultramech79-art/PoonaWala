@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSessionStore, type AssessmentResult, type SessionState } from '../store/session'
-import { assessAPI, createUserSessionAPI, saveLoanPredictionAPI } from '../lib/api'
+import { assessAPI, createUserSessionAPI, saveLoanPredictionAPI, confidenceTraceAPI } from '../lib/api'
 import { computeEvidenceConfidence, type ConfidenceComputation } from '../lib/confidenceScoring'
 import { resizeDataUrl } from '../lib/utils'
 import { metalpriceapiToInrPerGram, computeGoldMarketValue, computeLoanOffer } from '../lib/goldCalc'
@@ -250,6 +250,71 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
   }
 }
 
+// Mirror the computed confidence to the SERVER log (debug beacon) so it can be
+// inspected when testing on a phone with no reachable browser console.
+function sendConfidenceTrace(state: SessionState, confidence: ConfidenceComputation) {
+  confidenceTraceAPI({
+    session_id: state.sessionId ?? null,
+    score: confidence.score,
+    base_score: confidence.baseScore,
+    route: confidence.route,
+    evidence: confidence.evidence,
+    components: confidence.components,
+    active_modifiers: confidence.modifiers.filter(m => m.active),
+  })
+}
+
+function buildConfidenceReasoning(
+  state: SessionState,
+  confidence: ConfidenceComputation,
+  karat: number,
+  weightG: number,
+  pricePerGram24K: number,
+) {
+  const evidence = confidence.evidence
+  const positives: string[] = []
+  const cautions: string[] = []
+
+  if (evidence.photoHuidEvidence && evidence.billHuidMatch) {
+    positives.push('photo-read HUID matches the bill')
+  } else if (evidence.photoHuidEvidence && evidence.huidVerified) {
+    positives.push('photo-read HUID is BIS verified')
+  } else if (evidence.photoHuidEvidence) {
+    positives.push('HUID was read from the hallmark photo')
+  } else if (evidence.huidVerified) {
+    positives.push('manual HUID is BIS verified')
+  } else if (evidence.billHuidMatch) {
+    positives.push('bill HUID matches the entered HUID')
+  }
+
+  if (evidence.photoKaratEvidence) {
+    positives.push(`${state.scannedKarat ?? karat}K purity was detected from the hallmark photo`)
+  } else if (state.scannedKarat) {
+    positives.push(`${state.scannedKarat}K purity was provided`)
+  }
+
+  if (evidence.stillCoverage >= 1) positives.push('all required item angles were captured')
+  else if (evidence.stillCoverage >= 0.75) positives.push('most item angles were captured')
+
+  if (evidence.videoScore !== null) positives.push(`video authenticity score was ${Math.round(evidence.videoScore)}/100`)
+  if (evidence.hasSelfie) positives.push('selfie with jewellery was captured')
+  if (state.certificateData?.weightG) positives.push(`bill net weight ${state.certificateData.weightG}g was used`)
+  else if (state.weightG) positives.push(`entered weight ${state.weightG}g was used`)
+
+  if (evidence.billHuidMismatch) cautions.push('bill HUID did not match the item HUID')
+  if (evidence.sameItemMismatch) cautions.push('different-item signal was detected')
+  if (evidence.hardMetalTrigger) cautions.push('visual metal warning was detected')
+  if (!evidence.photoHuidEvidence && !evidence.photoKaratEvidence && !evidence.huidVerified) {
+    cautions.push('hallmark identity could not be strongly verified')
+  }
+
+  const summary = positives.length
+    ? positives.slice(0, 4).join(', ')
+    : 'limited identity evidence was available'
+  const cautionText = cautions.length ? ` Caution: ${cautions.slice(0, 2).join(', ')}.` : ''
+  return `${Math.round(confidence.score * 100)}% confidence based on ${summary}. ${karat}K gold, ${weightG}g net weight, valued using ₹${pricePerGram24K.toLocaleString('en-IN')}/g 24K reference.${cautionText}`
+}
+
 // ── Enrich API result with live gold prices & complete logic ──────────────────
 // Backend may use stale or fixed prices; override value_inr and loan_offer
 // using the cached live price so the result always reflects current market.
@@ -257,7 +322,13 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
 function enrichWithLivePrices(result: AssessmentResult, state: SessionState): AssessmentResult {
   const karat = state.certificateData?.karat ?? state.scannedKarat ?? result.purity.point_estimate_karat
   const weightG = state.certificateData?.weightG ?? state.weightG ?? result.weight.estimated_g
-  const hasVerifiedHuid = Boolean(result.purity.huid_verified || state.certificateData?.huid || state.huidCode)
+  const huidEvidence = state.pageEvidence.huid ?? {}
+  const huidStatus = String(state.huidVerification?.status ?? huidEvidence.status ?? '').toUpperCase()
+  // Only a genuine BIS verification counts as "HUID verified". The backend's
+  // result.purity.huid_verified is a local purity-MARK heuristic (true even with
+  // no HUID), so we do NOT carry it through — this also fixes the false
+  // "HUID verified" badge shown on the result screen.
+  const hasVerifiedHuid = huidStatus === 'VERIFIED'
   const stoneExclusionG = state.certificateData?.weightG ? 0 : (result.value_inr.stone_weight_excluded_g ?? 0.4)
   const pricePerGram24K = getLiveGoldPer24KGram()
 
@@ -267,16 +338,10 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
   const goldValue = computeGoldMarketValue(pricePerGram24K, weightG, karat, stoneExclusionG)
   const loanOffer = computeLoanOffer(goldValue)
 
-  // Single source of truth for the confidence + routing shown to the user.
-  // Audio/tap/acoustic evidence is deliberately excluded; HUID, hallmark photo,
-  // bill, purity, weight, video and selfie evidence drive the score.
-  // See lib/confidenceScoring.ts for the full rubric.
-  const confidence = computeEvidenceConfidence(result, state)
-  const displayConfidence = confidence.score
-  const finalRouting = confidence.route
-
-  // Always override to ensure live price consistency and complete data
-  return {
+  // Always override to ensure live price consistency and complete data before
+  // confidence is computed. This keeps result.confidence and the stored
+  // confidenceBreakdown aligned with the same final purity/weight/HUID fields.
+  const enriched: AssessmentResult = {
     ...result,
     purity: {
       ...result.purity,
@@ -301,16 +366,33 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
       ibja_reference_date: new Date().toISOString(),
     },
     loan_offer: loanOffer,
+  }
+
+  // Single source of truth for the confidence + routing shown to the user.
+  // Audio/tap/acoustic evidence is deliberately excluded; HUID, hallmark photo,
+  // bill, purity, weight, video and selfie evidence drive the score.
+  // See lib/confidenceScoring.ts for the full rubric.
+  const confidence = computeEvidenceConfidence(enriched, state)
+  sendConfidenceTrace(state, confidence)
+  const displayConfidence = confidence.score
+  const finalRouting = confidence.route
+
+  return {
+    ...enriched,
     confidence: {
-      ...result.confidence,
+      ...enriched.confidence,
       score: displayConfidence,
-      calibration_method: result.confidence.calibration_method,
+      calibration_method: enriched.confidence.calibration_method,
     },
     routing: finalRouting,
+    reasoning_text: {
+      ...enriched.reasoning_text,
+      text: buildConfidenceReasoning(state, confidence, karat, weightG, pricePerGram24K),
+    },
     xai: {
-      ...result.xai,
-      shap_top_features: result.xai.shap_top_features.length > 0
-        ? result.xai.shap_top_features
+      ...enriched.xai,
+      shap_top_features: enriched.xai.shap_top_features.length > 0
+        ? enriched.xai.shap_top_features
         : buildShapFeatures(state, karat, finalRouting === 'REJECT'),
     },
   }
@@ -496,6 +578,7 @@ export function Processing() {
       // (signals, active caps/floors, evidence) is stored in the session and
       // persisted to the backend for the prequalification report.
       const confidence = computeEvidenceConfidence(result, state)
+      sendConfidenceTrace(state, confidence)
       setConfidenceBreakdown(confidence)
       persistAssessmentResult(result, state, confidence).catch(err => console.warn('[history] failed to save assessment result', err))
       setDone(true)

@@ -41,6 +41,7 @@ from app.routes.assistant_chat import router as assistant_chat_router
 from app.routes.auth import router as auth_router
 from app.routes.regions import router as regions_router
 from app.routes.user_assets import router as user_assets_router
+from app.routes.debug_trace import router as debug_trace_router
 from app.decision.ibja import price_metadata, _refresh_async
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -122,6 +123,7 @@ app.include_router(assistant_chat_router, prefix="/api",           tags=["Assist
 app.include_router(auth_router,           prefix="/api",           tags=["Auth"])
 app.include_router(regions_router,        prefix="/api",           tags=["Regions"])
 app.include_router(user_assets_router,    prefix="/api",           tags=["UserAssets"])
+app.include_router(debug_trace_router,    prefix="/api",           tags=["Debug"])
 
 
 @app.get("/health", tags=["Infra"])

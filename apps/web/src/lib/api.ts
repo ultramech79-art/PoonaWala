@@ -272,6 +272,18 @@ export function certificateOcrAPI(imageDataUrl: string, timeoutMs = 45000): Prom
   return post('/api/certificate-ocr', { image_data_url: imageDataUrl }, timeoutMs)
 }
 
+// Debug beacon: posts the fully-computed confidence breakdown to the server log
+// so it can be inspected when testing on a phone (no browser console needed).
+// Fire-and-forget; never throws. Disable with localStorage goldeye_debug_confidence='0'.
+export function confidenceTraceAPI(trace: unknown): void {
+  try {
+    if (localStorage.getItem('goldeye_debug_confidence') === '0') return
+  } catch { /* ignore */ }
+  try {
+    void post('/api/debug/confidence-trace', trace, 8000).catch(() => {})
+  } catch { /* ignore */ }
+}
+
 // ─── HUID Verifier (local Mac via ngrok) ─────────────────
 export type HuidStatus = 'VERIFIED' | 'NOT_VERIFIED' | 'NEEDS_MANUAL_REVIEW' | 'INVALID_FORMAT' | 'AGENT_ERROR'
 
