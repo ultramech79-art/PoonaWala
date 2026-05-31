@@ -33,5 +33,4 @@ test_venv/
 
 .agents/
 skills-lock.json
-apps/api/app/tutorial_videos/
 apps/ring_audio/
