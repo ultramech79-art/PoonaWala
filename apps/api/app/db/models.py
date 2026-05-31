@@ -148,3 +148,14 @@ class LoanPrediction(Base):
     result_json = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AudioDemoCommand(Base):
+    __tablename__ = "audio_demo_commands"
+
+    channel_id = Column(String, primary_key=True, index=True)
+    outcome = Column(String, nullable=False)
+    command_id = Column(String, nullable=False)
+    consumed = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
