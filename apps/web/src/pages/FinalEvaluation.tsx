@@ -11,7 +11,7 @@ import { apiBase } from '../lib/api'
 import loanParams from '../data/loan_params.json'
 import regionsData from '../data/regions.json'
 import {
-  ChevronRight, ChevronDown, ChevronUp, MapPin,
+  ChevronRight, MapPin,
   ArrowRight, CheckCircle, AlertTriangle, Info, Shield, CreditCard, Loader,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -115,9 +115,6 @@ export function FinalEvaluation() {
   const cityGoldValue = cityPriceForKarat > 0
     ? Math.round(cityPriceForKarat * netWeightG)
     : 0
-  const hallmarkVisible = Boolean(result.purity.huid_verified || state.certificateData?.huid || state.huidCode)
-  const weightVerified = result.weight.method === 'BILL_CERTIFICATE_OCR' || Boolean(state.certificateData?.weightG)
-
   // ── PAN + derived credit profile ────────────────────────────────────────────
   const [pan, setPan] = useState('')
   const panValidation = useMemo(() => validatePAN(pan), [pan])
@@ -125,25 +122,20 @@ export function FinalEvaluation() {
   const cibilTierKey  = useMemo(() => getCibilTierKey(derivedScore), [derivedScore])
   const cibilInfo     = useMemo(() => getCibilTierInfo(cibilTierKey), [cibilTierKey])
 
-  // ── LTV — gold quality only, no CIBIL/location ──────────────────────────────
+  // ── LTV — RBI tier ceiling, offered against the assessment confidence ────────
   const ltvResult = useMemo(() => {
     if (!region || cityGoldValue === 0) return null
     return computeLTV({
       goldValueInr: cityGoldValue,
-      karatEstimate: detectedKarat,
-      aiConfidence: result.confidence.score,
+      confidence: result.confidence.score,
       goldType: 'jewelry',
-      hallmarkVisible,
-      weightVerified,
     })
-  }, [region, cityGoldValue, detectedKarat, result, hallmarkVisible, weightVerified])
+  }, [region, cityGoldValue, result])
 
   const kycStatus = useMemo(
     () => getPANKYCStatus(ltvResult?.maxLoanInr ?? 0),
     [ltvResult],
   )
-
-  const [showBreakdown, setShowBreakdown] = useState(false)
 
   // ── Eligibility ──────────────────────────────────────────────────────────────
   const eligible = useMemo(() => {
@@ -169,7 +161,7 @@ export function FinalEvaluation() {
   const canProceed    = locationReady && panReady && eligible && !priceLoading && cityGoldValue > 0
 
   function handleContinue() {
-    if (!canProceed || !region || !ltvResult || !cityPrices) return
+    if (!canProceed || !region || !ltvResult || !cityPrices || !result) return
     setEvalData({
       state: region.state,
       city: region.city,
@@ -186,12 +178,14 @@ export function FinalEvaluation() {
       pan,
       ltvFinalPct: ltvResult.finalLtvPct,
       ltvLowPct: ltvResult.provisionalLowLtvPct,
+      tierCeilingPct: ltvResult.tierCeilingPct,
+      confidenceScore: result.confidence.score,
+      confidenceFactor: ltvResult.confidenceFactor,
       maxLoanInr: ltvResult.maxLoanInr,
       provisionalLoanLowInr: ltvResult.provisionalLowLoanInr,
-      ltvComponents: ltvResult.components,
-      ltvProvisionalComponents: ltvResult.provisionalComponents,
       ticketTierLabel: ltvResult.ticketTierLabel,
-      processingFeePct: cibilInfo.processing_fee_pct,
+      ticketTierDescription: ltvResult.ticketTierDescription,
+      processingFeePct: loanParams.charges.processing_fee_pct,
       eligible: true,
       rejectReason: null,
     })
@@ -398,11 +392,6 @@ export function FinalEvaluation() {
                 {derivedScore && <span className="text-[10px] font-mono opacity-80">~{derivedScore}</span>}
               </div>
               <p className="text-[10px] opacity-75">{cibilInfo.description}</p>
-              <p className="text-[10px] opacity-70">
-                {cibilInfo.processing_fee_pct === 0
-                  ? 'Processing fee waived'
-                  : `Processing fee: ${cibilInfo.processing_fee_pct}%`}
-              </p>
               <p className="text-[10px] opacity-60 pt-0.5">
                 Note: CIBIL affects interest rate only — not your loan eligibility or LTV
               </p>
@@ -457,73 +446,70 @@ export function FinalEvaluation() {
                     </p>
                   </div>
                   <div className="bg-white rounded-xl p-3 border border-stone-200">
-                    <p className="text-[10px] text-stone-400 mb-1">
-                      {ltvResult.provisionalLowLoanInr < ltvResult.maxLoanInr ? 'Provisional Loan Range' : `Max Loan (LTV ${ltvResult.finalLtvPct}%)`}
+                    <p className="text-[10px] text-stone-400 mb-1">Loan Available Now</p>
+                    <p className="font-display font-black text-base text-brand-600 tabular-nums">{fmt(ltvResult.provisionalLowLoanInr)}</p>
+                    <p className="text-[10px] text-stone-400 mt-0.5 tabular-nums">
+                      up to {fmt(ltvResult.maxLoanInr)} on verification
                     </p>
-                    {ltvResult.provisionalLowLoanInr < ltvResult.maxLoanInr ? (
-                      <>
-                        <p className="font-display font-black text-base text-brand-600">
-                          {fmt(ltvResult.provisionalLowLoanInr)} - {fmt(ltvResult.maxLoanInr)}
-                        </p>
-                        <p className="text-[10px] text-stone-400 mt-0.5">
-                          {ltvResult.provisionalLowLtvPct}% - {ltvResult.finalLtvPct}% LTV
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-display font-black text-base text-brand-600">{fmt(ltvResult.maxLoanInr)}</p>
-                        <p className="text-[10px] text-stone-400 mt-0.5">{ltvResult.ticketTierLabel}</p>
-                      </>
-                    )}
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setShowBreakdown(!showBreakdown)}
-                  className="w-full flex items-center justify-between text-xs text-stone-600 bg-stone-50 rounded-lg px-3 py-2 border border-stone-200"
-                >
-                  <span className="font-medium">How is {ltvResult.finalLtvPct}% LTV calculated?</span>
-                  {showBreakdown ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
-
-                {showBreakdown && (
-                  <div className="mt-2 rounded-lg bg-white border border-stone-200 divide-y divide-stone-100 overflow-hidden">
-                    {ltvResult.components.map((c, i) => (
-                      <div key={i} className="flex items-center justify-between px-3 py-2">
-                        <span className="text-[11px] text-stone-600 flex-1">{c.label}</span>
-                        <span className={clsx(
-                          'text-[11px] font-mono font-semibold w-12 text-right',
-                          c.deltaPct < 0 ? 'text-red-500' : c.deltaPct > 0 ? 'text-emerald-600' : 'text-stone-400',
-                        )}>
-                          {c.deltaPct === 0 ? '—' : `${c.deltaPct > 0 ? '+' : ''}${c.deltaPct}%`}
-                        </span>
-                        <span className="text-[11px] font-bold text-stone-800 w-14 text-right">{c.runningPct}%</span>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between px-3 py-2 bg-brand-50">
-                      <span className="text-xs font-bold text-brand-700">Upper LTV after verification</span>
-                      <span className="text-sm font-black text-brand-600">{ltvResult.finalLtvPct}%</span>
-                    </div>
-                    {ltvResult.provisionalComponents.map((c, i) => (
-                      <div key={`provisional-${i}`} className="flex items-center justify-between px-3 py-2 bg-amber-50">
-                        <span className="text-[11px] text-amber-700 flex-1">{c.label}</span>
-                        <span className="text-[11px] font-mono font-semibold text-amber-600 w-12 text-right">
-                          {c.deltaPct}%
-                        </span>
-                        <span className="text-[11px] font-bold text-amber-700 w-14 text-right">{c.runningPct}%</span>
-                      </div>
-                    ))}
-                    {ltvResult.provisionalLowLtvPct < ltvResult.finalLtvPct && (
-                      <div className="flex items-center justify-between px-3 py-2 bg-amber-100">
-                        <span className="text-xs font-bold text-amber-800">Provisional digital floor</span>
-                        <span className="text-sm font-black text-amber-700">{ltvResult.provisionalLowLtvPct}%</span>
-                      </div>
-                    )}
+                {/* Confidence → LTV — the one core formula */}
+                <div className="rounded-xl border border-stone-200 bg-white p-3.5">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <p className="label text-stone-500">Loan-to-Value</p>
+                    <span className="text-[10px] text-stone-400">
+                      {ltvResult.ticketTierDescription} · RBI cap {ltvResult.tierCeilingPct}%
+                    </span>
                   </div>
-                )}
+
+                  {/* Provisional (now) → Final (after verification) */}
+                  {(() => {
+                    const floorPct = loanParams.ltv_adjusters.ltv_floor_pct
+                    const span = Math.max(ltvResult.finalLtvPct - floorPct, 0.1)
+                    const provWidth = Math.max(6, Math.min(100, ((ltvResult.provisionalLowLtvPct - floorPct) / span) * 100))
+                    return (
+                      <>
+                        <div className="relative h-9 rounded-lg bg-stone-100 overflow-hidden">
+                          <div
+                            className="absolute inset-y-0 left-0 bg-brand-600 flex items-center justify-end pr-2 transition-all duration-500"
+                            style={{ width: `${provWidth}%` }}
+                          >
+                            <span className="text-[11px] font-bold text-white tabular-nums">{ltvResult.provisionalLowLtvPct}%</span>
+                          </div>
+                          {ltvResult.provisionalLowLtvPct < ltvResult.finalLtvPct && provWidth < 80 && (
+                            <span className="absolute inset-y-0 right-2 flex items-center text-[11px] font-bold text-stone-500 tabular-nums">
+                              {ltvResult.finalLtvPct}%
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex justify-between text-[10px] text-stone-400 mt-1">
+                          <span>Now (provisional)</span>
+                          <span>After verification (final)</span>
+                        </div>
+                      </>
+                    )
+                  })()}
+
+                  {/* One core formula */}
+                  <div className="mt-3 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2.5">
+                    <p className="text-[10px] text-stone-400 mb-1">Provisional LTV = floor + (RBI cap − floor) × confidence</p>
+                    <p className="font-mono text-[12px] text-stone-700 tabular-nums">
+                      {loanParams.ltv_adjusters.ltv_floor_pct} + ({ltvResult.finalLtvPct} − {loanParams.ltv_adjusters.ltv_floor_pct}) × {ltvResult.confidenceFactor}
+                      {' = '}
+                      <span className="font-bold text-brand-600">{ltvResult.provisionalLowLtvPct}%</span>
+                    </p>
+                  </div>
+
+                  <p className="text-[11px] text-stone-500 mt-2 leading-snug">
+                    Your assessment confidence of <b>{Math.round(result.confidence.score * 100)}%</b> unlocks{' '}
+                    <b className="text-brand-600">{ltvResult.provisionalLowLtvPct}%</b> now; a branch visit unlocks the full{' '}
+                    <b>{ltvResult.finalLtvPct}%</b>.
+                  </p>
+                </div>
 
                 <p className="text-[10px] text-stone-400 mt-2 text-center">
-                  LTV is up to 75% of accepted gold value · Range can increase after agent verification
+                  LTV up to {loanParams.rbi_rules.headline_ltv_pct}% of gold value (RBI 2025 tiered) · upper range after agent verification
                 </p>
 
                 {region && !region.serviceable && (

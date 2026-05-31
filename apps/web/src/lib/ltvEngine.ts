@@ -1,121 +1,117 @@
 import loanParams from '../data/loan_params.json'
 
-export interface LTVComponent {
-  label: string
-  deltaPct: number
-  runningPct: number
-}
-
 export interface LTVResult {
+  /** Final LTV (%) reachable after agent/branch physical verification = the full RBI tier ceiling. */
   finalLtvPct: number
+  /** Nominal RBI tier cap for this ticket (85 / 80 / 75) before the boundary plateau. */
+  tierCeilingPct: number
+  /** Provisional (offered-now) LTV (%), scaled by the assessment confidence between the floor and the ceiling. */
   provisionalLowLtvPct: number
+  /** Confidence factor f ∈ [0,1] that drives the provisional LTV up the curve. */
+  confidenceFactor: number
+  /** Max loan (₹) at the final LTV, rounded to ₹1,000. */
   maxLoanInr: number
+  /** Provisional loan (₹) at the provisional LTV, rounded to ₹1,000. */
   provisionalLowLoanInr: number
-  components: LTVComponent[]
-  provisionalComponents: LTVComponent[]
   ticketTierLabel: string
+  ticketTierDescription: string
+  /** Whether the assessment cleared the acceptance cutoff (else no offer). */
+  eligible: boolean
 }
 
 export interface LTVInput {
   goldValueInr: number
-  karatEstimate: number
-  aiConfidence: number
+  /** Gaurang's evidence-based assessment confidence (0..1). Already encodes HUID / hallmark / photo / purity / weight / bill / video. */
+  confidence: number
   goldType: 'jewelry' | 'coin' | 'bar'
-  hallmarkVisible: boolean
-  weightVerified: boolean
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+const roundToThousand = (v: number) => Math.floor(v / 1000) * 1000
+
+interface LtvTier {
+  label: string
+  description: string
+  max_inr: number
+  max_ltv_pct: number
 }
 
 /**
- * Computes eligible LTV based purely on gold collateral quality.
+ * Resolve the largest self-consistent loan against the RBI tiered LTV caps.
  *
- * Factors (all from loan_params.json):
- *   1. RBI ceiling: 75%
- *   2. Ticket tier cap (large loans have lower LTV)
- *   3. Low AI confidence: -10% or -5%
- *   4. Coin / bar: +2% (more liquid, easier to auction)
+ * The ceiling and the loan amount are mutually dependent (a bigger loan crosses
+ * into a stricter tier), so we take the maximum loan L such that L never exceeds
+ * its own tier's cap: for each tier, L is either the cap applied to the gold value
+ * (if it fits the bracket) or the bracket's top (the ₹2.5L / ₹5L plateau).
+ */
+function resolveTierCeiling(goldValueInr: number, tiers: LtvTier[]) {
+  let bestLoan = 0
+  let bestTier = tiers[tiers.length - 1]
+
+  for (const tier of tiers) {
+    const loanAtCap = goldValueInr * (tier.max_ltv_pct / 100)
+    const loan = Math.min(loanAtCap, tier.max_inr) // clamp to the bracket top
+    if (loan > bestLoan) {
+      bestLoan = loan
+      bestTier = tier
+    }
+  }
+
+  const effectiveCeilingPct = goldValueInr > 0 ? (bestLoan / goldValueInr) * 100 : 0
+  return { maxLoanInr: bestLoan, tierCeilingPct: bestTier.max_ltv_pct, effectiveCeilingPct, tier: bestTier }
+}
+
+/**
+ * Computes the offered LTV for a gold-loan assessment.
  *
- * Purity is already reflected in goldValueInr through 24K/22K/18K pricing.
- * Accepted 18K jewellery should not receive another LTV haircut for purity.
- * Hallmark/HUID visibility is not an LTV factor in the provisional offer.
- * Poonawalla states gold purity, gold value, and LTV as the basis; missing
- * hallmark in an image means physical verification is pending, not lower gold quality.
- * Missing digital proof only lowers the provisional floor; the upper bound remains
- * available subject to agent/branch verification.
- * CIBIL score does NOT affect LTV — this is a secured gold loan.
- * Location does NOT affect LTV — collateral value is independent of where the borrower lives.
+ * Two LTV numbers per offer:
+ *   • Final LTV  = the RBI tier ceiling (85% ≤₹2.5L · 80% ≤₹5L · 75% above) — reachable
+ *                  after agent/branch physical verification removes collateral uncertainty.
+ *   • Provisional LTV (offered now) = scaled by the assessment confidence:
+ *
+ *        ┌─────────────────────────────────────────────┐
+ *        │  LTV = floor + (ceiling − floor) × f         │   (the one core formula)
+ *        │  f   = (confidence − cutoff) / (anchor − cutoff)   clamped to [0,1]
+ *        └─────────────────────────────────────────────┘
+ *
+ * floor = 60%, ceiling = the resolved tier ceiling, cutoff = 0.47 (acceptance),
+ * anchor = 0.90 (full trust). Below the cutoff the assessment is not eligible.
+ *
+ * The confidence score already encodes HUID / hallmark / photo / purity / weight /
+ * bill / video evidence, so LTV does NOT re-penalise those. CIBIL and location do
+ * NOT affect LTV — this is a secured gold loan; they only adjust the interest rate.
  */
 export function computeLTV(input: LTVInput): LTVResult {
-  const { rbi_rules, ticket_tiers, ltv_adjusters } = loanParams
-  const components: LTVComponent[] = []
-  const provisionalComponents: LTVComponent[] = []
+  const { rbi_rules, ltv_adjusters } = loanParams
+  const tiers = rbi_rules.ltv_tiers as LtvTier[]
 
-  // 1. Start at RBI ceiling
-  let running = rbi_rules.max_ltv_pct
-  components.push({ label: 'RBI maximum (Master Direction 2023-24)', deltaPct: 0, runningPct: running })
+  const cutoff = ltv_adjusters.confidence_acceptance_cutoff
+  const anchor = ltv_adjusters.confidence_full_trust_anchor
+  const floor = ltv_adjusters.ltv_floor_pct
 
-  // 2. Ticket-tier cap — larger loans carry stricter LTV
-  const ticketAtMax = input.goldValueInr * (rbi_rules.max_ltv_pct / 100)
-  const tier = ticket_tiers.find(t => ticketAtMax <= t.max_inr) ?? ticket_tiers[ticket_tiers.length - 1]
-  if (tier.max_ltv_pct < running) {
-    const delta = tier.max_ltv_pct - running
-    running = tier.max_ltv_pct
-    components.push({ label: `Ticket tier cap (${tier.description})`, deltaPct: delta, runningPct: running })
-  }
+  const { maxLoanInr, tierCeilingPct, effectiveCeilingPct, tier } =
+    resolveTierCeiling(input.goldValueInr, tiers)
+  const finalLtvPct = Math.round(effectiveCeilingPct * 10) / 10
 
-  // 3. AI vision confidence penalty
-  if (input.aiConfidence < 0.55) {
-    const delta = ltv_adjusters.ai_confidence_below_55_delta_pct
-    running += delta
-    components.push({ label: 'AI assessment confidence < 55%', deltaPct: delta, runningPct: running })
-  } else if (input.aiConfidence < 0.70) {
-    const delta = ltv_adjusters.ai_confidence_55_to_70_delta_pct
-    running += delta
-    components.push({ label: 'AI assessment confidence 55–70%', deltaPct: delta, runningPct: running })
-  }
+  // The one core formula: confidence factor → provisional LTV.
+  const confidenceFactor = clamp((input.confidence - cutoff) / (anchor - cutoff), 0, 1)
+  let provisional = floor + (effectiveCeilingPct - floor) * confidenceFactor
 
-  // 4. Coin / bar — standardised weight and purity, higher liquidity on auction
+  // Coin / bar — standardised weight & purity, more liquid on auction.
   if (input.goldType === 'coin' || input.goldType === 'bar') {
-    const delta = ltv_adjusters.coin_or_bar_bonus_pct
-    running += delta
-    components.push({ label: 'Standardised coin / bar (higher liquidity)', deltaPct: delta, runningPct: running })
+    provisional += ltv_adjusters.coin_or_bar_bonus_pct
   }
-
-  // Clamp
-  const finalLtv = Math.max(ltv_adjusters.ltv_floor_pct, Math.min(ltv_adjusters.ltv_ceiling_pct, running))
-  let provisionalLow = finalLtv
-
-  if (!input.hallmarkVisible) {
-    const delta = ltv_adjusters.hallmark_pending_low_delta_pct
-    provisionalLow += delta
-    provisionalComponents.push({
-      label: 'Hallmark/HUID not visible digitally; can increase after agent verification',
-      deltaPct: delta,
-      runningPct: provisionalLow,
-    })
-  }
-
-  if (!input.weightVerified) {
-    const delta = ltv_adjusters.weight_pending_low_delta_pct
-    provisionalLow += delta
-    provisionalComponents.push({
-      label: 'Net weight not backed by bill/certificate; can increase after physical weighing',
-      deltaPct: delta,
-      runningPct: provisionalLow,
-    })
-  }
-
-  provisionalLow = Math.max(ltv_adjusters.ltv_floor_pct, Math.min(finalLtv, provisionalLow))
-
-  const maxLoanInr = Math.floor((input.goldValueInr * finalLtv / 100) / 1000) * 1000
-  const provisionalLowLoanInr = Math.floor((input.goldValueInr * provisionalLow / 100) / 1000) * 1000
+  provisional = clamp(provisional, floor, effectiveCeilingPct)
 
   return {
-    finalLtvPct: Math.round(finalLtv * 10) / 10,
-    provisionalLowLtvPct: Math.round(provisionalLow * 10) / 10,
-    maxLoanInr,
-    provisionalLowLoanInr,
-    components,
-    provisionalComponents,
+    finalLtvPct,
+    tierCeilingPct,
+    provisionalLowLtvPct: Math.round(provisional * 10) / 10,
+    confidenceFactor: Math.round(confidenceFactor * 100) / 100,
+    maxLoanInr: roundToThousand(maxLoanInr),
+    provisionalLowLoanInr: roundToThousand(input.goldValueInr * provisional / 100),
     ticketTierLabel: tier.label,
+    ticketTierDescription: tier.description,
+    eligible: input.confidence >= cutoff,
   }
 }
