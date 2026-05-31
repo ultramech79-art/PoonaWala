@@ -69,7 +69,7 @@ export function GoldLoanApplication() {
   // ── Charges ─────────────────────────────────────────────────────────────────
   const { charges } = loanParams
   const processingFeeInr = Math.round(loanAmount * evalData.processingFeePct / 100)
-  const gstOnFeeInr      = Math.round(processingFeeInr * charges.gst_on_processing_fee_pct / 100)
+  const gstOnFeeInr      = Math.round(processingFeeInr * charges.gst_on_fees_pct / 100)
   const stampDutyInr     = evalData.stampDutyInr
   const netWeightG       = state.result
     ? Math.max(
@@ -296,17 +296,10 @@ export function GoldLoanApplication() {
               )
             })}
           </div>
-          {tenure <= POONAWALLA_MAX ? (
-            <p className="text-[10px] text-stone-400 mt-2 flex items-center gap-1">
-              <Info className="w-3 h-3" />
-              Poonawalla standard product — up to {POONAWALLA_MAX} months (RBI/2023-24/107)
-            </p>
-          ) : (
-            <p className="text-[10px] text-amber-600 mt-2 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              NBFC variant — not Poonawalla's standard offering. Rates simulated.
-            </p>
-          )}
+          <p className="text-[10px] text-stone-400 mt-2 flex items-center gap-1">
+            <Info className="w-3 h-3" />
+            Poonawalla gold loan — up to {POONAWALLA_MAX} months. Bullet repayment is capped at {loanParams.rbi_rules.max_bullet_repayment_months} months per RBI.
+          </p>
         </div>
 
         {/* ── Repayment Type ─────────────────────────────────────────────────── */}
@@ -411,7 +404,7 @@ export function GoldLoanApplication() {
                     <span className="font-medium">{fmt(processingFeeInr)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-stone-500">GST on processing ({charges.gst_on_processing_fee_pct}%)</span>
+                    <span className="text-stone-500">GST on fees ({charges.gst_on_fees_pct}%)</span>
                     <span className="font-medium">{fmt(gstOnFeeInr)}</span>
                   </div>
                   {stampDutyInr > 0 && (
@@ -425,7 +418,7 @@ export function GoldLoanApplication() {
                     <span className="font-semibold">{fmt(safeCustodyInr)}</span>
                   </div>
                   <p className="text-[10px] text-stone-400 pt-1">
-                    Safe custody is billed separately, not deducted from disbursement. Foreclosure: {charges.foreclosure_after_30_days_pct}% after 30 days.
+                    Safe custody is billed separately, not deducted. GST applies only to fees — never to principal or interest.
                   </p>
                 </div>
               )}
@@ -445,11 +438,42 @@ export function GoldLoanApplication() {
                 <span className="text-xs font-bold text-stone-900">Total Customer Cost</span>
                 <span className="text-sm font-black text-brand-600">{fmt(totalCustomerCost)}</span>
               </div>
-              {evalData.processingFeePct === 0 && (
-                <p className="text-[10px] text-emerald-600 font-medium">Processing fee waived (Excellent credit)</p>
-              )}
             </div>
           </div>
+        </div>
+
+        {/* ── If a payment is late ─────────────────────────────────────────── */}
+        <div className="card p-4">
+          <p className="label mb-2.5 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            If a payment is late
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { rate: charges.late_payment_monthly_pct, label: 'Monthly-interest scheme', on: repayType !== 'bullet' },
+              { rate: charges.late_payment_bullet_pct,  label: 'Bullet / rear-ended',     on: repayType === 'bullet' },
+            ]).map((s, i) => (
+              <div
+                key={i}
+                className={clsx(
+                  'rounded-lg border px-3 py-2',
+                  s.on ? 'border-amber-300 bg-amber-50' : 'border-stone-200 bg-stone-50',
+                )}
+              >
+                <p className="font-display font-black text-lg text-stone-800 tabular-nums">
+                  {s.rate}%<span className="text-xs font-medium text-stone-400"> p.a.</span>
+                </p>
+                <p className="text-[10px] text-stone-500">
+                  {s.label}{s.on && <span className="text-amber-600 font-semibold"> · yours</span>}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-stone-500 mt-2.5 leading-snug">
+            Penal interest applies only to the <b>overdue amount</b> for the days it stays unpaid — your on-time
+            {repayType === 'bullet' ? ' bullet' : repayType === 'emi' ? ' EMI' : ' interest'} payment never changes.
+            A cheque/mandate bounce is ₹{charges.bounce_charge_inr}; foreclosure is up to {charges.foreclosure_within_30_days_pct}% within 30 days.
+          </p>
         </div>
 
         {/* ── ROI Breakdown ────────────────────────────────────────────────── */}
@@ -614,9 +638,9 @@ export function GoldLoanApplication() {
         <div className="flex items-start gap-2 p-3 bg-stone-50 border border-stone-200 rounded-xl text-[10px] text-stone-400 leading-relaxed">
           <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <p>
-            LTV capped at {loanParams.rbi_rules.max_ltv_pct}% per {loanParams.rbi_rules.circular_reference}.
+            LTV up to {loanParams.rbi_rules.headline_ltv_pct}% per {loanParams.rbi_rules.circular_reference}.
             Gold is primary collateral — credit score adjusts rate only.
-            All charges (GST, stamp duty, safe custody) deducted at disbursement or billed separately.
+            All charges (GST on fees, stamp duty, safe custody) deducted at disbursement or billed separately.
           </p>
         </div>
       </div>

@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import type { HuidVerificationResult } from '../lib/api'
 import type { ConfidenceComputation } from '../lib/confidenceScoring'
-import type { LTVComponent } from '../lib/ltvEngine'
 import type { ROIComponent } from '../lib/roiEngine'
 import type { RepaymentType, AmortizationRow } from '../lib/emiEngine'
 
@@ -36,13 +35,15 @@ export interface EvalData {
   cibilTierKey: string
   cibilTierLabel: string
   pan: string
-  ltvFinalPct: number
-  ltvLowPct: number
+  ltvFinalPct: number          // final LTV = full RBI tier ceiling (post physical verification)
+  ltvLowPct: number            // provisional (offered-now) LTV, scaled by assessment confidence
+  tierCeilingPct: number       // nominal RBI tier cap (85 / 80 / 75)
+  confidenceScore: number      // assessment confidence (0..1) that drove the provisional LTV
+  confidenceFactor: number     // f ∈ [0,1] = (conf − cutoff) / (anchor − cutoff)
   maxLoanInr: number
   provisionalLoanLowInr: number
-  ltvComponents: LTVComponent[]
-  ltvProvisionalComponents: LTVComponent[]
   ticketTierLabel: string
+  ticketTierDescription: string
   processingFeePct: number
   eligible: boolean
   rejectReason: string | null

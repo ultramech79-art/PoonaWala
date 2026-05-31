@@ -16,7 +16,6 @@ export interface CibilTierInfo {
   color: string
   description: string
   spread_adj_pct: number
-  processing_fee_pct: number
 }
 
 /** Derive the CIBIL tier key from a raw score (or null = NTC). */
