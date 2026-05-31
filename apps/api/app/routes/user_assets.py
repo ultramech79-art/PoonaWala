@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -110,7 +111,6 @@ async def upload_asset(
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="image is larger than 8MB")
 
-    meta = image_metadata(raw)
     meta = image_metadata(raw)
     
     from app.data.capture_assets import _upload_object
