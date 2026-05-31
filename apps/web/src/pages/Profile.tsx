@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronRight, History, Image as ImageIcon, LogOut, RefreshCw, Trash2, UserRound, X, AlertTriangle } from 'lucide-react'
-import { deleteUserAssetAPI, listLoanPredictionsAPI, listMyAssetsAPI, type UserAsset } from '../lib/api'
+import { assetImageDataUrlAPI, deleteUserAssetAPI, listLoanPredictionsAPI, listMyAssetsAPI, type UserAsset } from '../lib/api'
 import { useSessionStore } from '../store/session'
 
 const FRAME_LABELS: Record<string, string> = {
@@ -14,12 +14,13 @@ const FRAME_LABELS: Record<string, string> = {
 }
 
 function AssetLabel({ asset }: { asset: UserAsset }) {
+  const jewelleryType = String(asset.metadata?.jewelry_type || asset.metadata?.jewellery_type || '').replace(/_/g, ' ')
   const label = asset.frame_type
     ? FRAME_LABELS[asset.frame_type] || asset.frame_type
     : asset.asset_kind.replace(/_/g, ' ')
   return (
     <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 py-1 text-[9px] font-bold text-white capitalize truncate rounded-b-xl">
-      {label}
+      {jewelleryType ? `${jewelleryType} · ${label}` : label}
     </span>
   )
 }
@@ -35,6 +36,7 @@ export function Profile() {
   const [confirmDelete, setConfirmDelete] = useState<UserAsset | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [imgErrors, setImgErrors] = useState<Set<number>>(new Set())
+  const [assetImageSrcs, setAssetImageSrcs] = useState<Record<number, string>>({})
 
   const loadData = useCallback(async () => {
     if (!state.authToken) return
@@ -66,6 +68,18 @@ export function Profile() {
     loadData()
   }, [state.authToken, navigate, loadData])
 
+  useEffect(() => {
+    if (!state.authToken || state.authToken === 'guest') return
+    assets.forEach(asset => {
+      if (assetImageSrcs[asset.id]) return
+      assetImageDataUrlAPI(state.authToken!, asset.id)
+        .then(src => setAssetImageSrcs(prev => ({ ...prev, [asset.id]: src })))
+        .catch(() => {
+          if (!asset.public_url) handleImgError(asset.id)
+        })
+    })
+  }, [assets, assetImageSrcs, state.authToken])
+
   const handleDelete = async (asset: UserAsset) => {
     if (!state.authToken) return
     setDeleting(asset.id)
@@ -82,6 +96,11 @@ export function Profile() {
 
   const handleImgError = (id: number) => {
     setImgErrors(prev => new Set([...prev, id]))
+  }
+
+  const openAsset = (asset: UserAsset) => {
+    const src = assetImageSrcs[asset.id] || asset.public_url
+    if (src) setLightbox(src)
   }
 
   const user = state.userProfile
@@ -224,11 +243,11 @@ export function Profile() {
                               </div>
                             ) : (
                               <img
-                                src={asset.public_url!}
+                                src={assetImageSrcs[asset.id] || asset.public_url || ''}
                                 alt={asset.frame_type || asset.asset_kind}
                                 className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover:scale-105"
                                 onError={() => handleImgError(asset.id)}
-                                onClick={() => setLightbox(asset.public_url!)}
+                                onClick={() => openAsset(asset)}
                               />
                             )}
                             <AssetLabel asset={asset} />
@@ -274,9 +293,9 @@ export function Profile() {
                 <p className="text-xs text-stone-500">This will permanently remove it from your profile and cloud storage.</p>
               </div>
             </div>
-            {confirmDelete.public_url && (
+            {(assetImageSrcs[confirmDelete.id] || confirmDelete.public_url) && (
               <div className="w-full h-32 rounded-xl overflow-hidden bg-stone-100">
-                <img src={confirmDelete.public_url} className="w-full h-full object-cover" alt="" />
+                <img src={assetImageSrcs[confirmDelete.id] || confirmDelete.public_url || ''} className="w-full h-full object-cover" alt="" />
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">

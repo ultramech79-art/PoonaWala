@@ -9,7 +9,7 @@ import { createUserSessionAPI, initSessionAPI, recordConsentAPI } from '../lib/a
 export function Setup() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { state, resetAssessment } = useSessionStore()
+  const { state, resetAssessment, setPageEvidence } = useSessionStore()
 
   const ITEM_TYPES = [
     { id: 'necklace', icon: Gem,       label: t('item_necklace') },
@@ -36,6 +36,7 @@ export function Setup() {
       console.warn('[session] backend session init failed; using local session id', err)
     }
     resetAssessment(sessionId)
+    setPageEvidence('capture', { jewelleryType: selected, jewelryType: selected })
     navigate('/capture')
   }
 

@@ -11,7 +11,7 @@ import {
   Scale,
   Sparkles,
 } from 'lucide-react'
-import { estimateWeightAPI, listMyAssetsAPI, urlToDataUrl, type GoldKarat, type JewelryType, type UserAsset, type WeightEstimateResult } from '../lib/api'
+import { assetImageDataUrlAPI, estimateWeightAPI, listMyAssetsAPI, urlToDataUrl, type GoldKarat, type JewelryType, type UserAsset, type WeightEstimateResult } from '../lib/api'
 import { useSessionStore } from '../store/session'
 
 const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
@@ -34,6 +34,33 @@ const SLOT_FRAME_TYPE = {
 
 type WeightSlot = keyof typeof SLOT_FRAME_TYPE
 type WeightFrameType = (typeof SLOT_FRAME_TYPE)[WeightSlot]
+
+function normalizeJewelryType(value: unknown) {
+  const raw = String(value || '').trim().toLowerCase()
+  const aliases: Record<string, JewelryType | 'earring'> = {
+    bangles: 'bangle',
+    bangle: 'bangle',
+    rings: 'ring',
+    ring: 'ring',
+    necklaces: 'necklace',
+    necklace: 'necklace',
+    chains: 'chain',
+    chain: 'chain',
+    bracelets: 'bracelet',
+    bracelet: 'bracelet',
+    pendants: 'pendant',
+    pendant: 'pendant',
+    earrings: 'earring',
+    earring: 'earring',
+    other: 'irregular',
+    irregular: 'irregular',
+  }
+  return aliases[raw] || raw
+}
+
+function assetJewelryType(asset: UserAsset) {
+  return normalizeJewelryType(asset.metadata?.jewelry_type ?? asset.metadata?.jewellery_type)
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -110,6 +137,7 @@ export function WeightEntry() {
   const [result, setResult] = useState<WeightEstimateResult | null>(null)
   const [jewelryPoint, setJewelryPoint] = useState<{ x: number; y: number } | null>(null)
   const [savedAssets, setSavedAssets] = useState<UserAsset[]>([])
+  const [savedAssetSrcs, setSavedAssetSrcs] = useState<Record<number, string>>({})
   const [savedLoading, setSavedLoading] = useState(false)
 
   useEffect(() => {
@@ -123,7 +151,6 @@ export function WeightEntry() {
       .then(assets => {
         if (cancelled) return
         setSavedAssets(assets.filter(asset =>
-          !!asset.public_url &&
           (asset.asset_kind === 'verified_view' || asset.asset_kind === 'jewellery_capture') &&
           Object.values(SLOT_FRAME_TYPE).includes(asset.frame_type as WeightFrameType)
         ))
@@ -136,6 +163,16 @@ export function WeightEntry() {
       })
     return () => { cancelled = true }
   }, [state.authToken])
+
+  useEffect(() => {
+    if (!state.authToken || state.authToken === 'guest') return
+    savedAssets.forEach(asset => {
+      if (savedAssetSrcs[asset.id]) return
+      assetImageDataUrlAPI(state.authToken!, asset.id)
+        .then(src => setSavedAssetSrcs(prev => ({ ...prev, [asset.id]: src })))
+        .catch(() => {})
+    })
+  }, [savedAssets, savedAssetSrcs, state.authToken])
 
   // Auto-populate from CaptureFlow captures (top, 45deg, side)
   useEffect(() => {
@@ -202,22 +239,35 @@ export function WeightEntry() {
 
   function savedForSlot(slot: WeightSlot) {
     const expectedFrame = SLOT_FRAME_TYPE[slot]
+    const selectedType = normalizeJewelryType(jewelryType)
     return savedAssets
-      .filter(asset => asset.frame_type === expectedFrame && !!asset.public_url)
+      .filter(asset => (
+        asset.frame_type === expectedFrame &&
+        (selectedType === 'auto' || assetJewelryType(asset) === selectedType)
+      ))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(0, 8)
   }
 
   async function applySavedAsset(slot: WeightSlot, asset: UserAsset) {
     const expectedFrame = SLOT_FRAME_TYPE[slot]
-    if (asset.frame_type !== expectedFrame || !asset.public_url) {
+    if (asset.frame_type !== expectedFrame) {
       setError(`That saved image is not a ${expectedFrame} view.`)
+      return
+    }
+    const selectedType = normalizeJewelryType(jewelryType)
+    if (selectedType !== 'auto' && assetJewelryType(asset) !== selectedType) {
+      setError(`That saved image is not a ${jewelryType} item.`)
       return
     }
     setError('')
     setResult(null)
     if (slot === 'top') setJewelryPoint(null)
-    const imageUrl = await urlToDataUrl(asset.public_url).catch(() => asset.public_url!)
+    const imageUrl = savedAssetSrcs[asset.id] || (
+      state.authToken && state.authToken !== 'guest'
+        ? await assetImageDataUrlAPI(state.authToken, asset.id)
+        : await urlToDataUrl(asset.public_url || '')
+    )
     setFileNames(current => ({ ...current, [slot]: `saved_${expectedFrame}.jpg` }))
     if (slot === 'top') setTopImageDataUrl(imageUrl)
     if (slot === 'angle') setAngleImageDataUrl(imageUrl)
@@ -360,7 +410,11 @@ export function WeightEntry() {
                   className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   title={`Use saved ${title}`}
                 >
-                  <img src={asset.public_url!} alt={`Saved ${title}`} className="h-full w-full object-cover" />
+                  {savedAssetSrcs[asset.id] ? (
+                    <img src={savedAssetSrcs[asset.id]} alt={`Saved ${title}`} className="h-full w-full object-cover" />
+                  ) : (
+                    <FileImage className="m-auto h-5 w-5 text-stone-400" />
+                  )}
                 </button>
               ))}
             </div>

@@ -522,6 +522,7 @@ export interface UserAsset {
   width_px: number | null
   height_px: number | null
   size_bytes: number | null
+  metadata: Record<string, unknown> | null
   created_at: string
 }
 
@@ -531,12 +532,14 @@ export async function uploadUserAssetAPI(
   assetKind: string,
   sessionId?: string | null,
   frameType?: string | null,
+  metadata?: Record<string, unknown> | null,
 ): Promise<UserAsset> {
   const form = new FormData()
   form.append('file', file)
   form.append('asset_kind', assetKind)
   if (sessionId) form.append('session_id', sessionId)
   if (frameType) form.append('frame_type', frameType)
+  if (metadata) form.append('metadata_json', JSON.stringify(metadata))
   const res = await fetch(`${BASE}/api/assets/upload`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
@@ -544,6 +547,20 @@ export async function uploadUserAssetAPI(
   })
   if (!res.ok) throw new Error(`/api/assets/upload -> ${res.status}: ${(await res.text()).slice(0, 500)}`)
   return res.json() as Promise<UserAsset>
+}
+
+export async function assetImageDataUrlAPI(token: string, assetId: number): Promise<string> {
+  const res = await fetch(`${BASE}/api/me/assets/${assetId}/image`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`/api/me/assets/${assetId}/image -> ${res.status}: ${(await res.text()).slice(0, 500)}`)
+  const blob = await res.blob()
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
 }
 
 export function listMyAssetsAPI(token: string, sessionId?: string): Promise<UserAsset[]> {

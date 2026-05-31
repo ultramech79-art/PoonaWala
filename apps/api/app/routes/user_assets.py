@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+import httpx
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +35,7 @@ class AssetResponse(BaseModel):
     width_px: Optional[int]
     height_px: Optional[int]
     size_bytes: Optional[int]
+    metadata: Optional[dict[str, Any]] = None
     created_at: str
 
 
@@ -78,6 +81,14 @@ class SaveLoanPredictionRequest(BaseModel):
 
 
 def _asset_response(asset: UserAsset) -> AssetResponse:
+    metadata = None
+    if asset.metadata_json:
+        try:
+            parsed = json.loads(asset.metadata_json)
+            if isinstance(parsed, dict):
+                metadata = parsed
+        except Exception:
+            metadata = None
     return AssetResponse(
         id=asset.id,
         session_id=asset.session_id,
@@ -88,6 +99,7 @@ def _asset_response(asset: UserAsset) -> AssetResponse:
         width_px=asset.width_px,
         height_px=asset.height_px,
         size_bytes=asset.size_bytes,
+        metadata=metadata,
         created_at=asset.created_at.isoformat() if asset.created_at else "",
     )
 
@@ -97,6 +109,7 @@ async def upload_asset(
     asset_kind: str = Form(...),
     session_id: Optional[str] = Form(default=None),
     frame_type: Optional[str] = Form(default=None),
+    metadata_json: Optional[str] = Form(default=None),
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -112,6 +125,14 @@ async def upload_asset(
         raise HTTPException(status_code=413, detail="image is larger than 8MB")
 
     meta = image_metadata(raw)
+    extra_metadata: dict[str, Any] = {}
+    if metadata_json:
+        try:
+            parsed = json.loads(metadata_json)
+            if isinstance(parsed, dict):
+                extra_metadata = parsed
+        except Exception:
+            extra_metadata = {}
     
     from app.data.capture_assets import _upload_object
     ts = int(time.time() * 1000)
@@ -142,6 +163,7 @@ async def upload_asset(
             {
                 "original_filename": file.filename,
                 "storage_enabled": upload.get("storage_enabled"),
+                **extra_metadata,
             }
         ),
     )
@@ -162,6 +184,50 @@ async def my_assets(
         query = query.where(UserAsset.session_id == session_id)
     result = await db.execute(query.order_by(desc(UserAsset.created_at)).limit(100))
     return [_asset_response(asset) for asset in result.scalars().all()]
+
+
+async def _read_asset_bytes(asset: UserAsset) -> bytes:
+    if asset.public_url:
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.get(asset.public_url)
+            if response.status_code == 200 and response.content:
+                return response.content
+        except Exception as exc:
+            logger.warning("public asset fetch failed asset=%s: %s", asset.id, exc)
+
+    if asset.source == "supabase" and asset.cloudinary_public_id:
+        supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+        service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+        bucket = os.getenv("SUPABASE_STORAGE_BUCKET", "jewelry-captures").strip() or "jewelry-captures"
+        if supabase_url and service_key:
+            url = f"{supabase_url}/storage/v1/object/{bucket}/{asset.cloudinary_public_id}"
+            headers = {"Authorization": f"Bearer {service_key}", "apikey": service_key}
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.get(url, headers=headers)
+            if response.status_code == 200 and response.content:
+                return response.content
+
+    raise HTTPException(status_code=404, detail="asset_image_unavailable")
+
+
+@router.get("/me/assets/{asset_id}/image")
+async def my_asset_image(
+    asset_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    asset = await db.get(UserAsset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="asset_not_found")
+    if asset.user_id != user.id:
+        raise HTTPException(status_code=403, detail="not_your_asset")
+    raw = await _read_asset_bytes(asset)
+    return Response(
+        content=raw,
+        media_type=asset.content_type or "image/jpeg",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 @router.post("/me/sessions", response_model=UserSessionResponse)

@@ -7,7 +7,7 @@ import { TutorialOverlay } from '../components/TutorialOverlay'
 import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon, PlayCircle } from 'lucide-react'
 import { speak, prefetchSpeech } from '../lib/tts'
 import { clsx } from 'clsx'
-import { evaluateFrameAPI, listMyAssetsAPI, urlToDataUrl, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
+import { assetImageDataUrlAPI, evaluateFrameAPI, listMyAssetsAPI, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
 
 interface Step {
@@ -34,6 +34,33 @@ const WEIGHT_VIEW_TYPES = new Set<CaptureType>(['top', '45deg', 'side'])
 
 function isWeightView(type: CaptureType) {
   return WEIGHT_VIEW_TYPES.has(type)
+}
+
+function normalizeJewelryType(value: unknown) {
+  const raw = String(value || '').trim().toLowerCase()
+  const aliases: Record<string, string> = {
+    bangles: 'bangle',
+    bangle: 'bangle',
+    rings: 'ring',
+    ring: 'ring',
+    necklaces: 'necklace',
+    necklace: 'necklace',
+    chains: 'chain',
+    chain: 'chain',
+    bracelets: 'bracelet',
+    bracelet: 'bracelet',
+    pendants: 'pendant',
+    pendant: 'pendant',
+    earrings: 'earring',
+    earring: 'earring',
+    other: 'irregular',
+    irregular: 'irregular',
+  }
+  return aliases[raw] || raw
+}
+
+function assetJewelryType(asset: UserAsset) {
+  return normalizeJewelryType(asset.metadata?.jewelry_type ?? asset.metadata?.jewellery_type)
 }
 
 /**
@@ -160,8 +187,10 @@ export function CaptureFlow() {
   const [huidVerifyResult, setHuidVerifyResult] = useState<HuidVerificationResult | null>(state.huidVerification ?? null)
   const spokenStep = useRef(-1)
   const [previousAssets, setPreviousAssets] = useState<UserAsset[]>([])
+  const [previousAssetSrcs, setPreviousAssetSrcs] = useState<Record<number, string>>({})
   const [loadingPrevious, setLoadingPrevious] = useState(false)
   const step = STEPS[stepIdx]
+  const selectedJewelryType = normalizeJewelryType((state.pageEvidence.capture as { jewelryType?: unknown; jewelleryType?: unknown } | undefined)?.jewelryType ?? (state.pageEvidence.capture as { jewelleryType?: unknown } | undefined)?.jewelleryType)
 
   // Fetch previously uploaded images from user's profile
   useEffect(() => {
@@ -172,17 +201,27 @@ export function CaptureFlow() {
       .then(assets => {
         if (!cancelled) {
           setPreviousAssets(assets.filter(a =>
-            a.public_url &&
             a.frame_type &&
             isWeightView(a.frame_type as CaptureType) &&
-            (a.asset_kind === 'verified_view' || a.asset_kind === 'jewellery_capture')
+            (a.asset_kind === 'verified_view' || a.asset_kind === 'jewellery_capture') &&
+            (!selectedJewelryType || assetJewelryType(a) === selectedJewelryType)
           ))
         }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoadingPrevious(false) })
     return () => { cancelled = true }
-  }, [state.authToken])
+  }, [state.authToken, selectedJewelryType])
+
+  useEffect(() => {
+    if (!state.authToken || state.authToken === 'guest') return
+    previousAssets.forEach(asset => {
+      if (previousAssetSrcs[asset.id]) return
+      assetImageDataUrlAPI(state.authToken!, asset.id)
+        .then(src => setPreviousAssetSrcs(prev => ({ ...prev, [asset.id]: src })))
+        .catch(() => {})
+    })
+  }, [previousAssets, previousAssetSrcs, state.authToken])
 
   // Find previous upload for current step
   const previousForStep = previousAssets.find(a => a.frame_type === step.type)
@@ -295,7 +334,10 @@ export function CaptureFlow() {
       }
 
       if (result.approved && state.authToken && state.authToken !== 'guest' && !isDemo && isWeightView(currentStepConfig.type)) {
-        uploadUserAssetAPI(state.authToken, blob, 'verified_view', sessionId, currentStepConfig.type)
+        uploadUserAssetAPI(state.authToken, blob, 'verified_view', sessionId, currentStepConfig.type, {
+          jewelry_type: selectedJewelryType || null,
+          jewellery_type: selectedJewelryType || null,
+        })
           .then(asset => {
             setPreviousAssets(prev => [asset, ...prev.filter(item => item.id !== asset.id)])
           })
@@ -319,7 +361,7 @@ export function CaptureFlow() {
       })
       speak(fallback)
     }
-  }, [stepIdx, addCapture, setPageEvidence, setHuid, setScannedKarat, state.sessionId, state.authToken, state.captures, state.skippedCaptures, initSession, t])
+  }, [stepIdx, addCapture, setPageEvidence, setHuid, setScannedKarat, state.sessionId, state.authToken, state.captures, state.skippedCaptures, initSession, t, selectedJewelryType])
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
@@ -396,16 +438,20 @@ export function CaptureFlow() {
   }, [step.demoUrl, handleCapture])
 
   const handleUsePreviousUpload = useCallback(async (asset: UserAsset) => {
-    if (!asset.public_url) return
     if (asset.frame_type !== step.type || !isWeightView(step.type)) {
       speak('This saved image belongs to a different view. Please use the matching view.')
       return
     }
+    if (selectedJewelryType && assetJewelryType(asset) !== selectedJewelryType) {
+      speak('This saved image belongs to a different jewellery type.')
+      return
+    }
+    if (!state.authToken || state.authToken === 'guest') return
     speak(t('speak_analysing'))
     setEvals(prev => ({ ...prev, [stepIdx]: { state: 'evaluating', dataUrl: undefined } }))
     try {
-      const dataUrl = await urlToDataUrl(asset.public_url)
-      const res = await fetch(asset.public_url)
+      const dataUrl = previousAssetSrcs[asset.id] || await assetImageDataUrlAPI(state.authToken, asset.id)
+      const res = await fetch(dataUrl)
       const blob = await res.blob()
       addCapture({ type: step.type, blob, dataUrl, timestamp: Date.now() })
       setCaptured(prev => new Set([...prev, stepIdx]))
@@ -424,7 +470,7 @@ export function CaptureFlow() {
       setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle', dataUrl: undefined } }))
       speak('Could not load previous image. Please capture a new one.')
     }
-  }, [step.type, stepIdx, addCapture, t])
+  }, [step.type, stepIdx, addCapture, t, selectedJewelryType, previousAssetSrcs, state.authToken])
 
   const next = () => {
     if (stepIdx < STEPS.length - 1) {
@@ -540,11 +586,15 @@ export function CaptureFlow() {
                 disabled={evalState === 'evaluating'}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 hover:bg-emerald-100 transition-colors font-medium disabled:opacity-50"
               >
-                <img
-                  src={previousForStep.public_url!}
-                  className="w-4 h-4 rounded object-cover"
-                  alt=""
-                />
+                {previousAssetSrcs[previousForStep.id] ? (
+                  <img
+                    src={previousAssetSrcs[previousForStep.id]}
+                    className="w-4 h-4 rounded object-cover"
+                    alt=""
+                  />
+                ) : (
+                  <ImageIcon className="w-4 h-4" />
+                )}
                 Use Previous Upload
               </button>
             )}
