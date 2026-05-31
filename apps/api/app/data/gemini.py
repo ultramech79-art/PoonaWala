@@ -670,7 +670,7 @@ def _build_frame_prompts(gold_price_24k: float = 0.0) -> dict:
 
     return {
         "top": f"""You are a strict gold loan assessment agent evaluating a photo for a gold appraisal service.
-CRITICAL VALIDATION: This image MUST contain ACTUAL PHYSICAL GOLD JEWELRY. Reject immediately if it does not.
+CRITICAL VALIDATION: This image MUST contain ACTUAL PHYSICAL GOLD JEWELRY and an Indian Rs 10 coin. Reject immediately if either is missing.
 
 REJECT THESE IMMEDIATELY (approved=false):
 - Laptops, phones, computers, screens, electronics
@@ -680,13 +680,17 @@ REJECT THESE IMMEDIATELY (approved=false):
 - Plants, nature, landscapes
 - People, faces, portraits
 - ANY non-physical-gold items
+- Images with no Indian Rs 10 coin present
 
-ACCEPT ONLY IF the image shows ACTUAL GOLD JEWELRY like:
-- Gold rings, bangles, bracelets, chains, pendants, earrings, necklaces
-- Must be PHYSICAL GOLD items, not pictures/photos of gold
-
-This should be a TOP-DOWN (overhead) shot of gold jewelry placed flat on a surface.
-A ₹10 rupee coin may or may not be present — it is OPTIONAL and its absence must NOT cause rejection.
+STEP 0: COIN CHECK (MANDATORY — evaluate this before everything else)
+This top-down view is used directly for weight estimation. Weight is computed as volume × gold density,
+and the Indian Rs 10 coin (27 mm diameter) is the ONLY accepted scale reference. Without it the weight
+calculation cannot proceed at all.
+- Is a physical Indian Rs 10 coin present and FULLY visible (no part cut off by the frame edge)?
+- Is it lying flat on the surface (not standing upright on its edge)?
+- Is it clearly identifiable as a circular bimetallic metallic coin?
+If the coin is absent, partially cut off, or standing upright → set approved=false, coin_visible=false,
+add "no_coin" or "coin_partially_cut_off" to issues, and state the reason clearly in feedback.
 
 STEP 1: GOLD DETECTION (MANDATORY)
 - Is this a PHYSICAL GOLD JEWELRY item? (Not a picture, not a laptop, not electronics)
@@ -695,24 +699,24 @@ STEP 1: GOLD DETECTION (MANDATORY)
 - If this is a LAPTOP/PHONE/COMPUTER → REJECT with approved=false immediately
 - If NO ACTUAL PHYSICAL gold jewelry is visible → REJECT with approved=false immediately
 
-STEP 2: QUALITY SCORING (if gold is present)
-  +0.30  jewelry clearly visible and recognisable
+STEP 2: QUALITY SCORING (only if both coin and gold jewelry are confirmed present)
+  +0.25  Indian Rs 10 coin present, flat, fully in frame, and in focus (mandatory scale reference)
+  +0.25  jewelry clearly visible and recognisable
   +0.20  image in sharp focus (not blurry)
-  +0.20  good lighting (not too dark, not overexposed / washed out)
-  +0.15  top-down / overhead angle (not a steep side-angle)
-  +0.10  ₹10 coin present (optional scale reference — adds confidence)
+  +0.15  good lighting (not too dark, not overexposed / washed out)
+  +0.10  top-down / overhead angle (not a steep side-angle)
   +0.05  full piece fits inside the frame
-  Deduct 0.25 if jewelry is barely or not visible at all.
+  Deduct 0.30 if jewelry is barely or not visible at all.
 
-approved = true if quality_score >= 0.55 AND jewelry is clearly visible.
-Reject (approved=false) if: NO GOLD DETECTED, jewelry cannot be assessed (blurry, too dark), or jewelry is barely visible.
+approved = true if quality_score >= 0.55 AND jewelry clearly visible AND coin present and valid.
+Reject if: no gold jewelry, no coin, coin cut off, coin standing upright, image too blurry or too dark.
 
 Return ONLY valid JSON (no markdown fences):
 {{
   "approved": boolean,
   "quality_score": 0.0-1.0,
-  "feedback": "One direct sentence. If approved, compliment and note any hallmarks/item type seen. If rejected, explain exactly why (not gold jewelry, too blurry, not visible, etc.)",
-  "issues": ["list real blocking issues"],
+  "feedback": "One direct sentence. If rejected, state the exact reason (e.g. no Rs 10 coin visible, coin partially cut off, gold not visible, etc.).",
+  "issues": ["list blocking issues e.g. no_coin, coin_partially_cut_off, coin_standing_upright, no_gold"],
   "detected": {{
     "gold_jewelry_present": boolean,
     "jewelry_visible": boolean,
@@ -725,32 +729,43 @@ Return ONLY valid JSON (no markdown fences):
 }}""",
 
         "45deg": f"""You are a strict gold loan assessment agent evaluating a 45-DEGREE ANGLE photo of gold jewelry.
-CRITICAL: This image MUST contain gold jewelry. Reject if it does not.
+CRITICAL: This image MUST contain gold jewelry AND an Indian Rs 10 coin. Reject if either is missing.
 The goal: verify depth and thickness of the piece are clearly visible.
+
+STEP 0: COIN CHECK (MANDATORY — evaluate this before everything else)
+This 45-degree view is reused directly for weight estimation. Weight is computed as volume × gold density,
+and the Indian Rs 10 coin (27 mm diameter) is the ONLY accepted scale reference. Without it the weight
+calculation cannot proceed at all.
+- Is a physical Indian Rs 10 coin present and FULLY visible (no part cut off by the frame edge)?
+- Is it lying flat or nearly flat (not standing upright on its edge)?
+- Is it clearly identifiable as a circular bimetallic metallic coin?
+If the coin is absent or partially cut off → set approved=false, coin_visible=false,
+add "no_coin" or "coin_partially_cut_off" to issues, and state the reason in feedback.
 
 STEP 1: GOLD DETECTION (MANDATORY)
 - Does the image show recognizable gold jewelry (ring, bangle, chain, pendant, bracelet, earring)?
 - If NO gold is visible → REJECT immediately with approved=false
 
-STEP 2: QUALITY SCORING (if gold present)
-  +0.30  jewelry clearly visible
-  +0.25  angled view (not flat top-down, not purely side-on) showing 3D form
+STEP 2: QUALITY SCORING (only if both coin and gold jewelry are confirmed present)
+  +0.25  Indian Rs 10 coin present, flat, fully in frame (mandatory scale reference)
+  +0.25  jewelry clearly visible
+  +0.20  angled view (not flat top-down, not purely side-on) showing 3D form
   +0.20  depth or thickness visible
-  +0.15  in focus
-  +0.10  good lighting
-  Deduct 0.30 if jewelry is not visible; 0.15 if angle is wrong.
+  +0.10  in focus and good lighting
+  Deduct 0.30 if jewelry is not visible; 0.25 if coin is missing.
 
-approved = true if quality_score >= 0.55 AND gold jewelry clearly visible.
+approved = true if quality_score >= 0.55 AND gold jewelry clearly visible AND coin present.
 
 Return ONLY valid JSON:
 {{
   "approved": boolean,
   "quality_score": 0.0-1.0,
-  "feedback": "One direct sentence. If rejected, explain why (not gold jewelry, wrong angle, not visible, etc.)",
+  "feedback": "One direct sentence. If rejected, explain why (e.g. no Rs 10 coin, wrong angle, gold not visible, etc.).",
   "issues": [],
   "detected": {{
     "gold_jewelry_present": boolean,
     "jewelry_visible": boolean,
+    "coin_visible": boolean,
     "angle_correct": boolean,
     "depth_visible": boolean,
     "in_focus": boolean,
@@ -759,32 +774,42 @@ Return ONLY valid JSON:
 }}""",
 
         "side": f"""You are a strict gold loan assessment agent evaluating a SIDE/PROFILE view of gold jewelry.
-CRITICAL: This image MUST contain gold jewelry. Reject if it does not.
+CRITICAL: This image MUST contain gold jewelry AND an Indian Rs 10 coin. Reject if either is missing.
 Goal: clearly show thickness and cross-section of the piece.
+
+STEP 0: COIN CHECK (MANDATORY — evaluate this before everything else)
+This side view is reused directly for weight estimation. Weight is computed as volume × gold density,
+and the Indian Rs 10 coin (27 mm diameter) is the ONLY accepted scale reference. Without it the weight
+calculation cannot proceed at all.
+- Is a physical Indian Rs 10 coin present and FULLY visible (no part cut off by the frame edge)?
+- Is it clearly identifiable as a circular bimetallic metallic coin?
+If the coin is absent or partially cut off → set approved=false, coin_visible=false,
+add "no_coin" or "coin_partially_cut_off" to issues, and state the reason in feedback.
 
 STEP 1: GOLD DETECTION (MANDATORY)
 - Does the image show recognizable gold jewelry in side profile?
 - If NO gold jewelry visible → REJECT immediately with approved=false
 
-STEP 2: QUALITY SCORING (if gold present)
-  +0.30  jewelry visible
-  +0.30  side profile view (not top-down, not angled)
+STEP 2: QUALITY SCORING (only if both coin and gold jewelry are confirmed present)
+  +0.25  Indian Rs 10 coin present, fully in frame (mandatory scale reference)
+  +0.25  jewelry visible
+  +0.20  side profile view (not top-down, not angled)
   +0.20  thickness/cross-section clearly visible
-  +0.15  in focus
-  +0.05  good lighting
-  Deduct 0.30 if jewelry not visible; 0.20 if angle is wrong.
+  +0.10  in focus and good lighting
+  Deduct 0.30 if jewelry not visible; 0.25 if coin is missing.
 
-approved = true if quality_score >= 0.55 AND gold jewelry visible.
+approved = true if quality_score >= 0.55 AND gold jewelry visible AND coin present.
 
 Return ONLY valid JSON:
 {{
   "approved": boolean,
   "quality_score": 0.0-1.0,
-  "feedback": "One direct sentence. If rejected, explain why (not gold jewelry, wrong angle, not visible, etc.)",
+  "feedback": "One direct sentence. If rejected, explain why (e.g. no Rs 10 coin, wrong angle, gold not visible, etc.).",
   "issues": [],
   "detected": {{
     "gold_jewelry_present": boolean,
     "jewelry_visible": boolean,
+    "coin_visible": boolean,
     "side_profile_visible": boolean,
     "thickness_visible": boolean,
     "in_focus": boolean
