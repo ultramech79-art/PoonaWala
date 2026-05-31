@@ -19,6 +19,13 @@ import { apiBase } from '../lib/api'
 import { speak } from '../lib/tts'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { useTranslation } from 'react-i18next'
+import { AudioDemoControl } from '../components/AudioDemoControl'
+import {
+  REMOTE_AUDIO_DEMO_CHANNEL,
+  buildAudioDemoResult,
+  consumeRemoteAudioDemoCommand,
+  type AudioDemoOutcome,
+} from '../lib/audioDemoOverride'
 
 const AUDIO_DURATION_MS = 5_000   // 5 s: one drop from 15–20 cm on glass
 
@@ -58,6 +65,9 @@ interface TapResult {
   reject_reason:       string | null
   label:               string
   reasoning:           string
+  demo_override?:      boolean
+  decay_ms?:           number
+  dominant_freq_hz?:   number
 }
 
 const ORNAMENTS = [
@@ -94,6 +104,9 @@ export function AudioEval() {
   const [showTutorial, setShowTutorial] = useState(true)
   const tapCountRef = useRef(0)
   const lastTapRef  = useRef(0)
+  const audioAttemptRef = useRef(0)
+  const analysisRunRef = useRef(0)
+  const demoResultSelectedRef = useRef(false)
 
   // Speak voice guide on intro
   useEffect(() => {
@@ -106,6 +119,35 @@ export function AudioEval() {
     const rec = ORNAMENTS.find(o => o.id === ornament)
     if (rec) setMode(rec.safe)
   }, [ornament])
+
+  useEffect(() => {
+    if (phase === 'result') return
+
+    let cancelled = false
+    let inFlight = false
+
+    const pollRemoteCommand = async () => {
+      if (cancelled || inFlight || demoResultSelectedRef.current) return
+      inFlight = true
+      try {
+        const command = await consumeRemoteAudioDemoCommand(REMOTE_AUDIO_DEMO_CHANNEL)
+        if (!cancelled && command.outcome && !demoResultSelectedRef.current) {
+          showDemoResult(command.outcome, Date.now())
+        }
+      } catch (error) {
+        console.warn('[AudioDemoRemote] poll failed:', error)
+      } finally {
+        inFlight = false
+      }
+    }
+
+    pollRemoteCommand()
+    const pollTimer = window.setInterval(pollRemoteCommand, 350)
+    return () => {
+      cancelled = true
+      window.clearInterval(pollTimer)
+    }
+  }, [phase, mode, ornament])
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach(t => t.stop())
@@ -134,8 +176,14 @@ export function AudioEval() {
   }, [])
 
   async function startRecording() {
+    const attemptId = audioAttemptRef.current + 1
+    audioAttemptRef.current = attemptId
+    const shouldContinueAttempt = () =>
+      audioAttemptRef.current === attemptId && !demoResultSelectedRef.current
+
     setError('')
     setTapCount(0)
+    demoResultSelectedRef.current = false
     tapCountRef.current = 0
     peakDbRef.current = -60
     lastTapRef.current = 0
@@ -155,9 +203,18 @@ export function AudioEval() {
         },
         video: false,
       })
+      if (!shouldContinueAttempt()) {
+        stream.getTracks().forEach(t => t.stop())
+        return
+      }
       streamRef.current = stream
 
       const ctx     = new AudioContext({ sampleRate: 48000 })
+      if (!shouldContinueAttempt()) {
+        await ctx.close().catch(() => {})
+        stream.getTracks().forEach(t => t.stop())
+        return
+      }
       audioCtxRef.current  = ctx
       sampleRateRef.current = ctx.sampleRate
 
@@ -189,9 +246,12 @@ export function AudioEval() {
       await ctx.close().catch(() => {})
       stream.getTracks().forEach(t => t.stop()); streamRef.current = null
 
+      if (!shouldContinueAttempt()) return
+
       setPhase('analyzing')
       await runAnalysis()
     } catch (e: any) {
+      if (!shouldContinueAttempt()) return
       cancelAnimationFrame(levelRafRef.current)
       setError(e?.message ?? 'Microphone access denied — grant permission and try again.')
       setPhase('intro')
@@ -199,6 +259,11 @@ export function AudioEval() {
   }
 
   async function runAnalysis() {
+    const runId = analysisRunRef.current + 1
+    analysisRunRef.current = runId
+    const shouldApplyAnalysis = () =>
+      analysisRunRef.current === runId && !demoResultSelectedRef.current
+
     try {
       const total = chunksRef.current.reduce((n, c) => n + c.length, 0)
       const flat  = new Float32Array(total)
@@ -221,6 +286,7 @@ export function AudioEval() {
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data: TapResult = await res.json()
+      if (!shouldApplyAnalysis()) return
       setResult(data)
       setTapTestResult(data as any)
       setPageEvidence('audio', {
@@ -237,6 +303,7 @@ export function AudioEval() {
       })
       if (data.verdict) speak(data.verdict)
     } catch (e: any) {
+      if (!shouldApplyAnalysis()) return
       setError(e?.message ?? 'Analysis failed.')
       setPageEvidence('audio', {
         skipped: false,
@@ -248,7 +315,46 @@ export function AudioEval() {
         ornament,
       })
     }
+    if (shouldApplyAnalysis()) setPhase('result')
+  }
+
+  function showDemoResult(outcome: Exclude<AudioDemoOutcome, 'off'>, updatedAt: number) {
+    audioAttemptRef.current += 1
+    demoResultSelectedRef.current = true
+    analysisRunRef.current += 1
+    cancelAnimationFrame(levelRafRef.current)
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    audioCtxRef.current?.close().catch(() => {})
+    audioCtxRef.current = null
+    const data = buildAudioDemoResult({ outcome, mode, ornament, updatedAt }) as TapResult
+    setError('')
+    setShowTutorial(false)
+    setResult(data)
+    setTapTestResult(data as any)
+    setPageEvidence('audio', {
+      skipped: false,
+      captured: true,
+      analysed: true,
+      ignoredForConfidence: true,
+      score: data.score,
+      valid: data.valid,
+      confidence: data.confidence,
+      verdict: data.verdict,
+      mode,
+      ornament,
+      demoOverride: true,
+      demoOutcome: outcome,
+    })
     setPhase('result')
+  }
+
+  function returnToIntro() {
+    audioAttemptRef.current += 1
+    demoResultSelectedRef.current = false
+    setResult(null)
+    setError('')
+    setPhase('intro')
   }
 
   function skipAudio() {
@@ -292,7 +398,6 @@ export function AudioEval() {
 
   return (
     <div className="page app-page-bg overflow-y-auto">
-
       {/* Tutorial overlay */}
       {showTutorial && phase === 'intro' && (
         <TutorialOverlay stepType="audio" onDismiss={() => setShowTutorial(false)} />
@@ -521,9 +626,16 @@ export function AudioEval() {
         {/* ── ANALYZING ─────────────────────────────────────────────────────── */}
         {phase === 'analyzing' && (
           <div className="flex flex-col items-center justify-center gap-5 py-24">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-blue-100 rounded-full" />
-              <div className="absolute inset-0 w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="relative -mx-5 flex w-[calc(100%+2.5rem)] items-center justify-center">
+              <AudioDemoControl
+                onOutcomeSelect={(outcome, updatedAt) => {
+                  if (outcome !== 'off') showDemoResult(outcome, updatedAt)
+                }}
+              />
+              <div className="relative">
+                <div className="w-16 h-16 border-4 border-blue-100 rounded-full" />
+                <div className="absolute inset-0 w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              </div>
             </div>
             <div className="text-center">
               <p className="font-bold text-stone-900 text-base">Analysing acoustic signature…</p>
@@ -543,6 +655,11 @@ export function AudioEval() {
                   <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center">
                     <AlertCircle className="w-6 h-6 text-red-500" />
                   </div>
+                  {result.demo_override && (
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                      Demo override
+                    </span>
+                  )}
                   <p className="font-bold text-red-800">Recording not usable</p>
                   <p className="text-sm text-red-700 leading-relaxed">{result.reject_reason}</p>
                   <div className="bg-red-100/60 rounded-xl px-3 py-2 w-full text-left">
@@ -553,7 +670,7 @@ export function AudioEval() {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => { setResult(null); setError(''); setPhase('intro') }} className="w-full btn-primary">
+                <button onClick={returnToIntro} className="w-full btn-primary">
                   <Mic className="w-5 h-5" /> Try Again
                 </button>
                 <button onClick={skipAudio} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
@@ -580,6 +697,11 @@ export function AudioEval() {
                         <p className="text-stone-400 text-xs mt-0.5">out of 100</p>
                       </div>
                       <div className="text-right space-y-1.5">
+                        {result.demo_override && (
+                          <span className="block text-[10px] font-bold px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700">
+                            Demo override
+                          </span>
+                        )}
                         <span className={clsx('inline-block text-[10px] font-bold px-2.5 py-1 rounded-full border', confColor(result.confidence))}>
                           {result.confidence} confidence
                         </span>
@@ -689,6 +811,9 @@ export function AudioEval() {
                 </div>
                 <button onClick={() => navigate('/certificate-scan')} className="w-full btn-primary">
                   Continue to Bill Scan <ChevronRight className="w-5 h-5" />
+                </button>
+                <button onClick={returnToIntro} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
+                  <Mic className="w-4 h-4" /> Try Acoustic Test Again
                 </button>
               </div>
 
