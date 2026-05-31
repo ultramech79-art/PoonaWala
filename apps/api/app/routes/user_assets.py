@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.cloudinary_storage import delete_image, image_metadata, upload_image_bytes
 from app.db.database import get_db
-from app.db.models import LoanPrediction, User, UserAsset, UserSession
+from app.db.models import ImageBlob, LoanPrediction, User, UserAsset, UserSession
 from app.routes.auth import get_current_user
 
 logger = logging.getLogger("goldeye.user_assets")
@@ -178,6 +178,17 @@ async def upload_asset(
         ),
     )
     db.add(asset)
+    await db.flush()
+    db.add(
+        ImageBlob(
+            asset_id=asset.id,
+            session_id=session_id or "",
+            frame_type=frame_type or asset_kind,
+            content_type=content_type,
+            size_bytes=len(raw),
+            image_bytes=raw,
+        )
+    )
     await db.commit()
     await db.refresh(asset)
     return _asset_response(asset)
@@ -196,7 +207,18 @@ async def my_assets(
     return [_asset_response(asset) for asset in result.scalars().all()]
 
 
-async def _read_asset_bytes(asset: UserAsset) -> bytes:
+async def _read_asset_bytes(asset: UserAsset, db: AsyncSession) -> bytes:
+    blob = (
+        await db.execute(
+            select(ImageBlob)
+            .where(ImageBlob.asset_id == asset.id)
+            .order_by(desc(ImageBlob.created_at))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if blob and blob.image_bytes:
+        return bytes(blob.image_bytes)
+
     if asset.public_url:
         try:
             async with httpx.AsyncClient(timeout=20) as client:
@@ -243,7 +265,7 @@ async def my_asset_image(
         raise HTTPException(status_code=404, detail="asset_not_found")
     if asset.user_id != user.id:
         raise HTTPException(status_code=403, detail="not_your_asset")
-    raw = await _read_asset_bytes(asset)
+    raw = await _read_asset_bytes(asset, db)
     return Response(
         content=raw,
         media_type=asset.content_type or "image/jpeg",
@@ -383,4 +405,9 @@ async def delete_asset(
             )
 
     await db.delete(asset)
+    blobs = (
+        await db.execute(select(ImageBlob).where(ImageBlob.asset_id == asset_id))
+    ).scalars().all()
+    for blob in blobs:
+        await db.delete(blob)
     await db.commit()
