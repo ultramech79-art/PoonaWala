@@ -420,7 +420,7 @@ export function estimateWeightAPI(
     karat,
     reference_object: 'rs10_coin',
     include_visualizations: false,
-    include_mask_preview: true,
+    include_mask_preview: false,
     jewelry_point: jewelryPoint ?? null,
     use_vlm_roi: true,
   }, timeoutMs)
