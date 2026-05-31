@@ -4,11 +4,12 @@ import { useTranslation } from 'react-i18next'
 import { ChevronRight, ArrowRight, Gem, Circle, Sparkles, RotateCcw, Link2, Package } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useSessionStore } from '../store/session'
+import { createUserSessionAPI, initSessionAPI, recordConsentAPI } from '../lib/api'
 
 export function Setup() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { state } = useSessionStore()
+  const { state, resetAssessment } = useSessionStore()
 
   const ITEM_TYPES = [
     { id: 'necklace', icon: Gem,       label: t('item_necklace') },
@@ -19,6 +20,24 @@ export function Setup() {
     { id: 'other',    icon: Package,   label: t('item_other') },
   ]
   const [selected, setSelected] = useState<string | null>(null)
+
+  async function startCapture() {
+    const fallbackSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    let sessionId = fallbackSessionId
+    try {
+      const res = await initSessionAPI(state.lang, state.userProfile?.phone ?? state.phone ?? undefined)
+      sessionId = res.session_id
+      recordConsentAPI(sessionId).catch(() => {})
+      if (state.authToken && state.authToken !== 'guest') {
+        createUserSessionAPI(state.authToken, sessionId, state.userProfile?.region_code, 'setup')
+          .catch(err => console.warn('[session] failed to create user session', err))
+      }
+    } catch (err) {
+      console.warn('[session] backend session init failed; using local session id', err)
+    }
+    resetAssessment(sessionId)
+    navigate('/capture')
+  }
 
   return (
     <div className="page animate-slide-up">
@@ -110,7 +129,7 @@ export function Setup() {
       <div className="px-5 pb-6 pt-4 border-t border-stone-200">
         <button
           id="setup-ready"
-          onClick={() => navigate('/capture')}
+          onClick={startCapture}
           disabled={!selected}
           className={clsx('w-full text-lg py-4', selected ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed')}
         >

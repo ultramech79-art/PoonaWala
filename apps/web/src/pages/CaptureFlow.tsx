@@ -61,7 +61,16 @@ function referenceForStep(
 export function CaptureFlow() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { addCapture, state, setScannedKarat, setHuid, setHuidVerification, initSession } = useSessionStore()
+  const {
+    addCapture,
+    skipCapture,
+    state,
+    setScannedKarat,
+    setHuid,
+    setHuidVerification,
+    setPageEvidence,
+    initSession,
+  } = useSessionStore()
 
   const STEPS: Step[] = [
     {
@@ -92,6 +101,7 @@ export function CaptureFlow() {
       voiceGuide: t('voice_selfie'),
       facingMode: 'user',
       demoUrl: '/assets/demo/selfie.jpg',
+      optional: true,
     },
     {
       type: 'macro',
@@ -183,10 +193,17 @@ export function CaptureFlow() {
   const handleCapture = useCallback(async (blob: Blob, dataUrl: string, exif?: Record<string, unknown>, isDemo?: boolean) => {
     const currentStep = stepIdx
     const currentStepConfig = STEPS[currentStep]
+    const nextCapturedTypes = Array.from(new Set([...Object.keys(state.captures), currentStepConfig.type]))
 
     const sessionId = state.sessionId || initSession()
 
     addCapture({ type: currentStepConfig.type, blob, dataUrl, timestamp: Date.now(), exif })
+    setPageEvidence('capture', {
+      capturedTypes: nextCapturedTypes,
+      skippedTypes: Object.keys(state.skippedCaptures ?? {}).filter(type => type !== currentStepConfig.type),
+      lastCapturedType: currentStepConfig.type,
+      lastCapturedAt: Date.now(),
+    })
     setCaptured(prev => new Set([...prev, currentStep]))
 
     if (currentStepConfig.isAudio) {
@@ -222,15 +239,48 @@ export function CaptureFlow() {
         result = await evaluateFrameAPI(currentStepConfig.type, optimizedDataUrl, 45000, evalOptions)
       }
 
-      if (currentStepConfig.type === 'macro' && result.detected?.karat_numeric && typeof result.detected.karat_numeric === 'number') {
-        setScannedKarat(result.detected.karat_numeric)
-        setSelectedKarat(result.detected.karat_numeric)
+      if (currentStepConfig.type === 'macro') {
+        const detectedHuid = typeof result.detected?.huid_code === 'string'
+          ? result.detected.huid_code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
+          : ''
+        const detectedKarat = typeof result.detected?.karat_numeric === 'number'
+          ? result.detected.karat_numeric
+          : null
+
+        if (detectedHuid.length === 6) {
+          setHuid(detectedHuid)
+          setManualHuid(detectedHuid)
+          setPageEvidence('huid', {
+            code: detectedHuid,
+            source: 'photo',
+            status: 'PHOTO_DETECTED',
+            verified: false,
+          })
+        }
+        if (detectedKarat) {
+          setScannedKarat(detectedKarat)
+          setSelectedKarat(detectedKarat)
+          setPageEvidence('huid', {
+            source: detectedHuid.length === 6 ? 'photo' : 'photo_karat',
+            photoKarat: detectedKarat,
+            photoKaratDetected: true,
+          })
+        }
       }
 
       setEvals(prev => ({
         ...prev,
         [currentStep]: { state: result.approved ? 'approved' : 'rejected', result, dataUrl: optimizedDataUrl },
       }))
+      setPageEvidence('capture', {
+        capturedTypes: nextCapturedTypes,
+        skippedTypes: Object.keys(state.skippedCaptures ?? {}).filter(type => type !== currentStepConfig.type),
+        lastEvaluatedType: currentStepConfig.type,
+        lastApproved: result.approved,
+        lastQualityScore: result.quality_score,
+        lastIssues: result.issues ?? [],
+        lastDetected: result.detected ?? {},
+      })
       speak(result.feedback)
 
       // Background upload on success
@@ -245,6 +295,15 @@ export function CaptureFlow() {
         ...prev,
         [currentStep]: { state: 'approved', dataUrl, result: { approved: true, quality_score: 0.7, feedback: fallback, issues: [], detected: {} } },
       }))
+      setPageEvidence('capture', {
+        capturedTypes: nextCapturedTypes,
+        skippedTypes: Object.keys(state.skippedCaptures ?? {}).filter(type => type !== currentStepConfig.type),
+        lastEvaluatedType: currentStepConfig.type,
+        lastApproved: true,
+        lastQualityScore: 0.7,
+        lastIssues: [],
+        fallbackAccepted: true,
+      })
       speak(fallback)
 
       // Fallback background upload since we are marking it approved
@@ -253,7 +312,7 @@ export function CaptureFlow() {
           .catch(err => console.error('[CaptureFlow] Immediate fallback upload failed:', err))
       }
     }
-  }, [stepIdx, addCapture, setScannedKarat, state.sessionId, state.authToken, state.captures, initSession, t])
+  }, [stepIdx, addCapture, setPageEvidence, setHuid, setScannedKarat, state.sessionId, state.authToken, state.captures, state.skippedCaptures, initSession, t])
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
@@ -262,21 +321,46 @@ export function CaptureFlow() {
     setCameraKey(k => k + 1)
   }
 
-  const handleVerifyHuid = async (huid: string) => {
+  const handleVerifyHuid = async (huid: string, origin: 'photo' | 'manual' = 'manual') => {
     if (!huid || huid.length !== 6) return
+    setHuid(huid)
     setHuidVerifying(true)
     setHuidVerifyResult(null)
     try {
       const result = await verifyHuidAPI(huid)
+      const isVerified = String(result.status).toUpperCase() === 'VERIFIED'
       setHuidVerifyResult(result)
       setHuidVerification(result)
+      // Preserve how the HUID was obtained ('photo' vs 'manual') so the scoring
+      // system can tell a photo-verified HUID apart from a manually-typed one.
+      setPageEvidence('huid', {
+        code: huid,
+        source: origin,
+        verifiedVia: isVerified ? origin : null,
+        status: result.status,
+        verified: isVerified,
+        confidence: result.confidence,
+        purity: result.purity,
+        articleType: result.article_type,
+        jewellerName: result.jeweller_name,
+        hallmarkDate: result.hallmark_date,
+      })
       if (result.purity) {
         const kMap: Record<string, number> = { '24K999': 24, '22K916': 22, '18K750': 18, '14K585': 14, '9K375': 9 }
         const k = kMap[result.purity]
         if (k) { setScannedKarat(k); setSelectedKarat(k) }
       }
     } catch {
-      setHuidVerifyResult({ huid, status: 'AGENT_ERROR', confidence: 0, purity: null, article_type: null, jeweller_name: null, hallmark_date: null, error: 'Verifier unavailable — check ngrok URL' })
+      const errorResult = { huid, status: 'AGENT_ERROR' as const, confidence: 0, purity: null, article_type: null, jeweller_name: null, hallmark_date: null, error: 'Verifier unavailable — check ngrok URL' }
+      setHuidVerifyResult(errorResult)
+      setPageEvidence('huid', {
+        code: huid,
+        source: origin,
+        verifiedVia: null,
+        status: errorResult.status,
+        verified: false,
+        confidence: 0,
+      })
     }
     setHuidVerifying(false)
   }
@@ -341,7 +425,19 @@ export function CaptureFlow() {
     }
   }
 
-  const skip = () => { if (step.optional) { speak(t('speak_skip')); next() } }
+  const skip = () => {
+    if (!step.optional) return
+    skipCapture(step.type)
+    setPageEvidence(step.type === 'selfie' ? 'selfie' : 'capture', {
+      skipped: true,
+      captured: false,
+      type: step.type,
+    })
+    setCaptured(prev => { const s = new Set(prev); s.delete(stepIdx); return s })
+    setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle', dataUrl: undefined } }))
+    speak(t('speak_skip'))
+    next()
+  }
 
   // ── Hallmark confidence score ─────────────────────────────────────────────
   const hallmarkConfidence = step.type === 'macro' ? (() => {
@@ -368,7 +464,7 @@ export function CaptureFlow() {
   const canProceed = !sameItemMismatch && (
     macroCanProceed ||
     evalState === 'approved' ||
-    step.optional ||
+    (step.optional && step.type !== 'selfie') ||
     (evalState === 'rejected' && hasManualHuidOverride)
   )
 
@@ -593,7 +689,10 @@ export function CaptureFlow() {
                           {/* Verify HUID via BIS when detected */}
                           {((currentEval?.result?.detected?.huid_code as string) || manualHuid) && !huidVerifyResult && (
                             <button
-                              onClick={() => handleVerifyHuid((currentEval?.result?.detected?.huid_code as string) || manualHuid)}
+                              onClick={() => {
+                                const detectedCode = currentEval?.result?.detected?.huid_code as string
+                                handleVerifyHuid(detectedCode || manualHuid, detectedCode ? 'photo' : 'manual')
+                              }}
                               disabled={huidVerifying}
                               className="w-full py-2 rounded-xl text-xs font-bold bg-brand-600 text-white disabled:opacity-50"
                             >
@@ -656,7 +755,7 @@ export function CaptureFlow() {
                             maxLength={6}
                           />
                           <button
-                            onClick={() => handleVerifyHuid(manualHuid)}
+                            onClick={() => handleVerifyHuid(manualHuid, 'manual')}
                             disabled={manualHuid.length !== 6 || huidVerifying}
                             className={clsx(
                               'px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap',

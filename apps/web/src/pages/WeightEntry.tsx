@@ -89,7 +89,7 @@ function Visualization({ title, src }: { title: string; src: string }) {
 
 export function WeightEntry() {
   const navigate = useNavigate()
-  const { setWeight, state } = useSessionStore()
+  const { setWeight, setPageEvidence, state } = useSessionStore()
   const [topImageDataUrl, setTopImageDataUrl] = useState<string | null>(null)
   const [angleImageDataUrl, setAngleImageDataUrl] = useState<string | null>(null)
   const [sideImageDataUrl, setSideImageDataUrl] = useState<string | null>(null)
@@ -192,6 +192,18 @@ export function WeightEntry() {
       const estimate = await estimateWeightAPI(topImageDataUrl, angleImageDataUrl, sideImageDataUrl, jewelryType, karat, jewelryPoint)
       setResult(estimate)
       setWeight(estimate.weight.estimated_g)
+      setPageEvidence('weight', {
+        skipped: false,
+        source: 'estimate',
+        estimatedG: estimate.weight.estimated_g,
+        confidence: estimate.confidence.score,
+        method: estimate.weight.method,
+        karat,
+        jewelryType,
+        hasTop: Boolean(topImageDataUrl),
+        has45deg: Boolean(angleImageDataUrl),
+        hasSide: Boolean(sideImageDataUrl),
+      })
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -201,11 +213,24 @@ export function WeightEntry() {
 
   function continueFlow() {
     setWeight(result?.weight.estimated_g ?? null)
+    setPageEvidence('weight', {
+      skipped: !result,
+      source: result ? 'estimate' : 'none',
+      estimatedG: result?.weight.estimated_g ?? null,
+      confidence: result?.confidence.score ?? null,
+      method: result?.weight.method ?? null,
+    })
     navigate('/processing')
   }
 
   function skipWeightEstimate() {
     setWeight(null)
+    setPageEvidence('weight', {
+      skipped: true,
+      source: 'skipped',
+      estimatedG: null,
+      confidence: null,
+    })
     navigate('/processing')
   }
 

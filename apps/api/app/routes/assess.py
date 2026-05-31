@@ -207,24 +207,55 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
     # S13 liveness: strong multiplier (if no selfie, neutral 0.5)
     liveness_mult = max(0.5, s13.confidence) if req.selfie and not s13.error else 1.0
 
-    # ── Dynamic Fraud Penalty (Increases with fraud severity) ────────────────────
-    if fraud_score < 0.1:
-        fraud_penalty = fraud_score * 0.10
-    elif fraud_score < 0.3:
-        fraud_penalty = fraud_score * 0.25
-    elif fraud_score < 0.6:
-        fraud_penalty = fraud_score * 0.40
+    # ── Dynamic Fraud Penalty (Increases with visual/document severity) ──────────
+    # Final confidence intentionally excludes S11 audio evidence. Audio can remain
+    # an auxiliary fraud signal, but the confidence shown to users should be driven
+    # by visual profile, HUID/hallmark, dimensions, video frames, liveness, catalog
+    # reuse, graph reuse, and same-item consistency.
+    standalone_plated_signal = (
+        solid_prob < 0.5
+        and not same_item_mismatch
+        and specular_score >= 0.35
+        and catalog_match < 0.85
+        and graph_anomaly < 0.4
+    )
+    solid_fraud_weight = 0.24 if standalone_plated_signal else 0.42
+
+    confidence_fraud_score = min(1.0, max(0.0,
+        (1 - solid_prob)    * solid_fraud_weight +  # S7 visual plated/solid detector
+        specular_score      * 0.18  +  # S4 metal signature
+        catalog_match       * 0.15  +  # S9 stock/catalog reuse
+        tele_anomaly        * 0.08  +  # S10 device/session telemetry
+        graph_anomaly       * 0.07     # S12 cross-session graph
+    ))
+    if standalone_plated_signal:
+        confidence_fraud_score = min(confidence_fraud_score, 0.32)
+    confidence_fraud_score = min(
+        1.0,
+        max(confidence_fraud_score, item_mismatch_score * 0.85 if same_item_mismatch else confidence_fraud_score),
+    )
+
+    if confidence_fraud_score < 0.1:
+        fraud_penalty = confidence_fraud_score * 0.10
+    elif confidence_fraud_score < 0.3:
+        fraud_penalty = confidence_fraud_score * 0.25
+    elif confidence_fraud_score < 0.6:
+        fraud_penalty = confidence_fraud_score * 0.40
     else:
-        fraud_penalty = fraud_score * 0.60
+        fraud_penalty = confidence_fraud_score * 0.60
 
     confidence = max(0.0, min(1.0, base_conf * liveness_mult - fraud_penalty))
 
-    routing = route_session(confidence, fraud_score, rbi["loan_inr"], huid_verified,
+    routing = route_session(confidence, confidence_fraud_score, rbi["loan_inr"], huid_verified,
                             rbi_reject_reason=rbi.get("reject_reason"))
 
     # ── Phase 3: XAI ─────────────────────────────────────────────────────────
     shap_data = explain(features)
-    shap_features = [SHAPFeature(feature=d["feature"], contribution=d["contribution"]) for d in shap_data]
+    shap_features = [
+        SHAPFeature(feature=d["feature"], contribution=d["contribution"])
+        for d in shap_data
+        if d["feature"] != "audio_solid_prob"
+    ]
 
     expert_review = await analyze_multimodal_fusion(
         signals=signals_dict,
@@ -300,7 +331,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
             trace_id=trace_id,
             session_id=req.session_id,
             event_type="assessment_complete",
-            payload=result.model_dump_json(),
+            payload=result.model_dump_json() if hasattr(result, "model_dump_json") else result.json(),
         )
         db.add(audit_log)
         await db.commit()

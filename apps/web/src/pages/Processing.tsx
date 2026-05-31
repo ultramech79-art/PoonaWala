@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSessionStore, type AssessmentResult, type SessionState } from '../store/session'
-import { assessAPI } from '../lib/api'
+import { assessAPI, createUserSessionAPI, saveLoanPredictionAPI } from '../lib/api'
+import { computeEvidenceConfidence, type ConfidenceComputation } from '../lib/confidenceScoring'
 import { resizeDataUrl } from '../lib/utils'
 import { metalpriceapiToInrPerGram, computeGoldMarketValue, computeLoanOffer } from '../lib/goldCalc'
 import { CheckCircle, Lock } from 'lucide-react'
@@ -136,13 +137,11 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
   const has = (k: keyof SessionState['captures']) => !!state.captures[k]
   const hasWeight = state.weightG != null || state.certificateData?.weightG != null
   const hasHuid = Boolean(state.huidCode || state.certificateData?.huid)
-  const hasTapTest = !!state.tapTestResult
   const hasVideoEval = !!state.liveAuthResult
 
   if (isFail) {
     return [
       { feature: 'huid_verified',     contribution: hasHuid ? -0.14 : -0.28 },
-      { feature: 'audio_solid_prob',  contribution: hasTapTest ? -0.12 : -0.22 },
       { feature: 'plated_probability',contribution: -0.15 },
       { feature: 'weight_consistency',contribution: hasWeight ? 0.11 : 0.04 },
       { feature: 'vlm_confidence',    contribution: has('macro') ? -0.08 : -0.18 },
@@ -152,9 +151,9 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
   // Happy path: weight each signal by what we actually captured with some noise to look realistic
   const jitter = () => (Math.random() * 0.04) - 0.02
   const huidContrib  = hasHuid ? 0.31 : has('macro') ? 0.18 : 0.08
-  const audioContrib = hasTapTest ? 0.15 : 0.02
   const weightContrib = hasWeight ? 0.20 : hasVideoEval ? 0.10 : 0.04
   const hallmarkContrib = has('macro') ? 0.12 : 0.05
+  const videoContrib = hasVideoEval ? 0.15 : 0.04
   // 18K shows lower solid-score certainty than 22K/24K
   const platedContrib = karatEstimate >= 22 ? 0.22 : karatEstimate >= 18 ? 0.14 : 0.06
 
@@ -162,7 +161,7 @@ function buildShapFeatures(state: SessionState, karatEstimate: number, isFail: b
     { feature: 'huid_verified',      contribution: +(huidContrib + jitter()).toFixed(4) },
     { feature: 'plated_solid_score', contribution: +(platedContrib + jitter()).toFixed(4) },
     { feature: 'weight_consistency', contribution: +(weightContrib + jitter()).toFixed(4) },
-    { feature: 'audio_solid_prob',   contribution: +(audioContrib + jitter()).toFixed(4) },
+    { feature: 'vlm_confidence',     contribution: +(videoContrib + jitter()).toFixed(4) },
     { feature: 'hallmark_quality',   contribution: +(hallmarkContrib + jitter()).toFixed(4) },
   ].sort((a, b) => b.contribution - a.contribution)
 }
@@ -268,20 +267,13 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
   const goldValue = computeGoldMarketValue(pricePerGram24K, weightG, karat, stoneExclusionG)
   const loanOffer = computeLoanOffer(goldValue)
 
-  // Complete routing logic based on final state:
-  let finalRouting = result.routing
-  if (!result.fraud_signals?.triggers?.length) {
-    // No fraud detected
-    if (hasVerifiedHuid && result.confidence.score > 0.75) {
-      finalRouting = 'INSTANT'
-    } else if (result.confidence.score > 0.65) {
-      finalRouting = 'AGENT'
-    } else if (result.confidence.score > 0.40) {
-      finalRouting = 'RECAPTURE'
-    } else {
-      finalRouting = 'REJECT'
-    }
-  }
+  // Single source of truth for the confidence + routing shown to the user.
+  // Audio/tap/acoustic evidence is deliberately excluded; HUID, hallmark photo,
+  // bill, purity, weight, video and selfie evidence drive the score.
+  // See lib/confidenceScoring.ts for the full rubric.
+  const confidence = computeEvidenceConfidence(result, state)
+  const displayConfidence = confidence.score
+  const finalRouting = confidence.route
 
   // Always override to ensure live price consistency and complete data
   return {
@@ -309,6 +301,11 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
       ibja_reference_date: new Date().toISOString(),
     },
     loan_offer: loanOffer,
+    confidence: {
+      ...result.confidence,
+      score: displayConfidence,
+      calibration_method: result.confidence.calibration_method,
+    },
     routing: finalRouting,
     xai: {
       ...result.xai,
@@ -319,6 +316,64 @@ function enrichWithLivePrices(result: AssessmentResult, state: SessionState): As
   }
 }
 
+async function persistAssessmentResult(
+  result: AssessmentResult,
+  state: SessionState,
+  confidence: ConfidenceComputation,
+) {
+  const token = state.authToken
+  const sessionId = state.sessionId ?? result.session_id
+  if (!token || token === 'guest' || !sessionId) return
+
+  const regionCode = state.userProfile?.region_code || 'IN'
+  const estimatedGoldValue = Math.round((result.value_inr.band_low + result.value_inr.band_high) / 2)
+  const eligibleLoan = Math.round((result.loan_offer.band_low_inr + result.loan_offer.band_high_inr) / 2)
+
+  await createUserSessionAPI(token, sessionId, regionCode, 'assessment_complete')
+  await saveLoanPredictionAPI(token, {
+    session_id: sessionId,
+    status: result.routing.toLowerCase(),
+    region_code: regionCode,
+    estimated_weight_g: result.weight.estimated_g,
+    estimated_gold_value_inr: estimatedGoldValue,
+    eligible_loan_inr: eligibleLoan,
+    ltv_pct: result.loan_offer.ltv_applied_pct,
+    result: {
+      assessment: result,
+      confidence_breakdown: {
+        score: confidence.score,
+        base_score: confidence.baseScore,
+        route: confidence.route,
+        components: confidence.components,
+        active_modifiers: confidence.modifiers.filter(modifier => modifier.active),
+        evidence: confidence.evidence,
+      },
+      evidence: {
+        capture_types: Object.keys(state.captures),
+        skipped_types: Object.keys(state.skippedCaptures ?? {}),
+        has_certificate: Boolean(state.certificateData),
+        certificate: state.certificateData,
+        huid_code: state.huidCode,
+        huid_verification: state.huidVerification,
+        huid_present: confidence.evidence.huidPresent,
+        huid_verified: confidence.evidence.huidVerified,
+        huid_source: confidence.evidence.huidSource,
+        huid_verified_via: confidence.evidence.huidVerifiedVia,
+        manual_huid_entry: confidence.evidence.manualHuidEntry,
+        photo_huid_evidence: confidence.evidence.photoHuidEvidence,
+        photo_karat_evidence: confidence.evidence.photoKaratEvidence,
+        bill_huid_match: confidence.evidence.billHuidMatch,
+        bill_huid_mismatch: confidence.evidence.billHuidMismatch,
+        assessed_item_type: confidence.evidence.assessedItemType,
+        bill_item_type_match: confidence.evidence.billItemTypeMatch,
+        video_score: state.liveAuthResult?.video_score ?? null,
+        video_skipped: Boolean(state.skippedCaptures?.video),
+        face_selfie_skipped: Boolean(state.skippedCaptures?.selfie),
+        audio_skipped_or_ignored_for_confidence: true,
+      },
+    },
+  })
+}
 
 async function assessSession(state: SessionState): Promise<AssessmentResult> {
   const sessionId = state.sessionId ?? 'demo'
@@ -382,9 +437,28 @@ async function assessSession(state: SessionState): Promise<AssessmentResult> {
     const result = enrichWithLivePrices(rawResult, state)
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(result)) } catch {}
     return result
-  } catch {
+  } catch (err) {
+    console.warn('[Assessment] Backend assessment failed; returning conservative fallback result:', err)
     await minDelay
-    return buildMockResult(sessionId, state, Math.random() < 0.1)
+    const fallback = buildMockResult(sessionId, state, false)
+    fallback.confidence = {
+      ...fallback.confidence,
+      score: 0.45,
+      coverage_guarantee_pct: 0,
+      calibration_method: 'FALLBACK_CONSERVATIVE',
+    }
+    fallback.fraud_signals = {
+      score: Math.max(fallback.fraud_signals.score, 0.22),
+      triggers: ['assessment_unavailable'],
+    }
+    fallback.routing = 'RECAPTURE'
+    fallback.reasoning_text = {
+      ...fallback.reasoning_text,
+      text: 'Server assessment could not complete, so this result is conservative. Please retry with the same captures or visit a branch for verification.',
+    }
+    const result = enrichWithLivePrices(fallback, state)
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(result)) } catch {}
+    return result
   }
 }
 
@@ -399,7 +473,7 @@ export function Processing() {
     { key: 'processing_step4', label: t('processing_step4_label') },
     { key: 'processing_step5', label: t('processing_step5_label') },
   ]
-  const { state, setResult } = useSessionStore()
+  const { state, setResult, setConfidenceBreakdown } = useSessionStore()
   const [activeStep, setActiveStep] = useState(0)
   const [activeFact, setActiveFact] = useState(0)
   const [done, setDone] = useState(false)
@@ -418,6 +492,12 @@ export function Processing() {
 
     assessSession(state).then(result => {
       setResult(result)
+      // Recompute the evidence-based confidence breakdown so the full rubric
+      // (signals, active caps/floors, evidence) is stored in the session and
+      // persisted to the backend for the prequalification report.
+      const confidence = computeEvidenceConfidence(result, state)
+      setConfidenceBreakdown(confidence)
+      persistAssessmentResult(result, state, confidence).catch(err => console.warn('[history] failed to save assessment result', err))
       setDone(true)
       clearInterval(factInterval)
       setTimeout(() => navigate('/result'), 600)

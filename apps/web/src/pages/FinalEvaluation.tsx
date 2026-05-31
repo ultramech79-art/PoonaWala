@@ -38,7 +38,14 @@ export function FinalEvaluation() {
   const { state, setEvalData } = useSessionStore()
   const result = state.result
 
-  if (!result || (result.routing !== 'INSTANT' && result.routing !== 'AGENT')) {
+  const canShowFinalEvaluation =
+    result && (
+      result.routing === 'INSTANT' ||
+      result.routing === 'AGENT' ||
+      ((result.routing === 'RECAPTURE' || result.routing === 'REJECT') && result.confidence.score > 0.50)
+    )
+
+  if (!canShowFinalEvaluation) {
     navigate('/result')
     return null
   }

@@ -71,7 +71,7 @@ const ORNAMENTS = [
 
 export function AudioEval() {
   const navigate = useNavigate()
-  const { setTapTestResult } = useSessionStore()
+  const { setTapTestResult, skipCapture, setPageEvidence } = useSessionStore()
   const { t } = useTranslation()
   const lang = (localStorage.getItem('goldeye_lang') ?? 'en') as 'en' | 'hi'
 
@@ -223,11 +223,45 @@ export function AudioEval() {
       const data: TapResult = await res.json()
       setResult(data)
       setTapTestResult(data as any)
+      setPageEvidence('audio', {
+        skipped: false,
+        captured: true,
+        analysed: true,
+        ignoredForConfidence: true,
+        score: data.score,
+        valid: data.valid,
+        confidence: data.confidence,
+        verdict: data.verdict,
+        mode,
+        ornament,
+      })
       if (data.verdict) speak(data.verdict)
     } catch (e: any) {
       setError(e?.message ?? 'Analysis failed.')
+      setPageEvidence('audio', {
+        skipped: false,
+        captured: true,
+        analysed: false,
+        ignoredForConfidence: true,
+        error: e?.message ?? 'analysis_failed',
+        mode,
+        ornament,
+      })
     }
     setPhase('result')
+  }
+
+  function skipAudio() {
+    skipCapture('audio')
+    setTapTestResult(null)
+    setPageEvidence('audio', {
+      skipped: true,
+      captured: false,
+      analysed: false,
+      ignoredForConfidence: true,
+      score: null,
+    })
+    navigate('/certificate-scan')
   }
 
   const scoreColor = (s: number) => s >= 70 ? 'text-emerald-600' : s >= 45 ? 'text-amber-500' : 'text-red-500'
@@ -417,7 +451,7 @@ export function AudioEval() {
               <Mic className="w-5 h-5" />
               Start 10-Second Recording
             </button>
-            <button onClick={() => navigate('/certificate-scan')}
+            <button onClick={skipAudio}
               className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
               <SkipForward className="w-4 h-4" /> Skip Acoustic Test
             </button>
@@ -522,7 +556,7 @@ export function AudioEval() {
                 <button onClick={() => { setResult(null); setError(''); setPhase('intro') }} className="w-full btn-primary">
                   <Mic className="w-5 h-5" /> Try Again
                 </button>
-                <button onClick={() => navigate('/certificate-scan')} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
+                <button onClick={skipAudio} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
                   <SkipForward className="w-4 h-4" /> Skip — Continue Without Acoustic Test
                 </button>
               </div>
