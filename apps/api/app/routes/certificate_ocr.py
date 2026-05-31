@@ -4,6 +4,7 @@ POST /api/certificate-ocr
 Extracts bill/certificate details from a captured jewellery invoice or
 authenticity certificate using Groq vision with Gemini fallback.
 """
+import re
 import logging
 from typing import Optional
 
@@ -23,9 +24,16 @@ from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
 logger = logging.getLogger("goldeye.certificate_ocr")
 router = APIRouter()
 
+_HUID_RE = re.compile(r'^[A-Z0-9]{6}$')
+
 
 class CertificateOCRRequest(BaseModel):
     image_data_url: str = Field(..., description="Base64 data URL captured by browser camera")
+    item_type_hint: Optional[str] = Field(
+        default=None,
+        description="Jewellery type from previously analysed photos (e.g. 'ring'). "
+                    "Used to select the matching line item when a bill lists multiple items.",
+    )
 
 
 class CertificateOCRResponse(BaseModel):
@@ -33,6 +41,7 @@ class CertificateOCRResponse(BaseModel):
     karat: Optional[float] = None
     weight_g: Optional[float] = None
     huid: Optional[str] = None
+    huid_explicit: bool = False  # True when a proper 6-char BIS HUID was found (not an HSN tariff code)
     item_description: Optional[str] = None
     bill_number: Optional[str] = None
     jeweller_name: Optional[str] = None
@@ -41,7 +50,7 @@ class CertificateOCRResponse(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
-PROMPT = """You are extracting structured data from an Indian gold jewellery bill, invoice, hallmark card, or certificate of authenticity.
+_BASE_PROMPT = """You are extracting structured data from an Indian gold jewellery bill, invoice, hallmark card, or certificate of authenticity.
 
 Return ONLY valid JSON with this exact schema:
 {
@@ -62,12 +71,24 @@ Rules:
 - Convert 750→18, 916→22, 995/999→24.
 - Extract net gold weight in grams if available. Prefer net weight over gross weight.
 - If only gross weight is visible, use it only if it clearly refers to gold item weight and note that it is gross.
-- Extract HUID/BIS certificate ID if printed.
+- Extract the BIS HUID if printed. A HUID is exactly 6 alphanumeric characters (e.g. "AB1234"). Do NOT extract HSN codes (purely numeric tariff codes like 711311 or 7113).
 - Extract item_description from the bill line item, e.g. ring, chain, bangle, necklace, earrings, coin, or pendant. Include short identifying wording only.
 - authenticity_found is true if the document appears to be a bill, invoice, certificate, BIS/HUID record, or authenticity card related to gold jewellery.
 - confidence must be 0 to 1.
 - If uncertain, use null and explain briefly in notes.
 """
+
+
+def _build_prompt(item_type_hint: Optional[str]) -> str:
+    if not item_type_hint:
+        return _BASE_PROMPT
+    hint = item_type_hint.strip().lower()
+    return (
+        _BASE_PROMPT
+        + f"\nIMPORTANT: This bill may list multiple jewellery items. "
+          f"Extract details ONLY for the {hint} item. "
+          f"If no {hint} is listed, return the closest matching item and note the mismatch."
+    )
 
 
 def _normalize_result(raw: dict) -> CertificateOCRResponse:
@@ -97,11 +118,17 @@ def _normalize_result(raw: dict) -> CertificateOCRResponse:
 
     notes = raw.get("notes") if isinstance(raw.get("notes"), list) else []
 
+    # HUID: must be exactly 6 alphanumeric characters and not purely numeric (HSN codes are numeric).
+    raw_huid = str(raw.get("huid")).strip().upper() if raw.get("huid") else None
+    huid_explicit = bool(raw_huid and _HUID_RE.match(raw_huid) and not raw_huid.isdigit())
+    huid_val = raw_huid if huid_explicit else None
+
     return CertificateOCRResponse(
         authenticity_found=bool(raw.get("authenticity_found")),
         karat=karat,
         weight_g=weight,
-        huid=(str(raw.get("huid")).strip().upper() if raw.get("huid") else None),
+        huid=huid_val,
+        huid_explicit=huid_explicit,
         item_description=(str(raw.get("item_description")).strip() if raw.get("item_description") else None),
         bill_number=(str(raw.get("bill_number")).strip() if raw.get("bill_number") else None),
         jeweller_name=(str(raw.get("jeweller_name")).strip() if raw.get("jeweller_name") else None),
@@ -118,12 +145,13 @@ async def certificate_ocr(req: CertificateOCRRequest):
         return CertificateOCRResponse(notes=["OCR unavailable: provider API keys not configured"])
 
     image_b64 = req.image_data_url.split(",", 1)[-1]
+    prompt = _build_prompt(req.item_type_hint)
 
     errors: list[str] = []
     if GROQ_PRIMARY_API_KEYS:
         try:
             data, success = await call_groq_vision_with_keys(
-                PROMPT,
+                prompt,
                 image_b64,
                 GROQ_PRIMARY_API_KEYS,
                 "image/jpeg",
@@ -144,7 +172,7 @@ async def certificate_ocr(req: CertificateOCRRequest):
     payload = {
         "contents": [{
             "parts": [
-                {"text": PROMPT},
+                {"text": prompt},
                 {"inlineData": {"mimeType": "image/jpeg", "data": image_b64}},
             ]
         }],

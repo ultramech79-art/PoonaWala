@@ -246,6 +246,35 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
 
     confidence = max(0.0, min(1.0, base_conf * liveness_mult - fraud_penalty))
 
+    # ── Bill/certificate HUID cross-validation boost ──────────────────────────
+    # Runs after all other scoring so it only adds to, never replaces, fraud signals.
+    if req.bill_data:
+        bill_huid = (req.bill_data.get("huid") or "").strip().upper()
+        bill_huid_explicit = bool(req.bill_data.get("huid_explicit", False))
+        photo_huid = (s1.payload.get("huid_code") or "").strip().upper()
+        bill_item = (req.bill_data.get("item_description") or "").lower()
+        photo_item_type = (s8.payload.get("item_type") or "").lower()
+
+        item_type_matches = bool(
+            bill_item and photo_item_type
+            and (
+                photo_item_type in bill_item
+                or bill_item in photo_item_type
+                or any(w in bill_item for w in photo_item_type.split())
+            )
+        )
+
+        if bill_huid_explicit and photo_huid and bill_huid == photo_huid:
+            # HUID on bill matches HUID visible on the jewellery → strongest possible signal
+            confidence = max(confidence, 0.90)
+        elif bill_huid_explicit:
+            # Bill carries a proper BIS HUID (not just an HSN tariff code) → strong boost
+            confidence = min(1.0, confidence + 0.12)
+
+        if item_type_matches and bill_huid_explicit:
+            # Bill item type also matches photographed jewellery → small additional boost
+            confidence = min(1.0, confidence + 0.03)
+
     routing = route_session(confidence, confidence_fraud_score, rbi["loan_inr"], huid_verified,
                             rbi_reject_reason=rbi.get("reject_reason"))
 
