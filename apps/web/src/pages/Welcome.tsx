@@ -16,9 +16,8 @@ function MarketTicker() {
   const displayMetals = data.metals.filter(m => ['xau_24k', 'xau_22k', 'xau_18k'].includes(m.id))
 
   return (
-    <div className="mx-5 overflow-hidden rounded-2xl bg-gradient-to-r from-brand-50 via-brand-50/80 to-brand-50 border border-brand-200 py-3 shadow-sm relative">
-      {/* Decorative accent */}
-      <div className="absolute left-0 top-0 w-1 h-full bg-gradient-to-b from-brand-400 via-brand-500 to-transparent" />
+    <div className="mx-5 overflow-hidden rounded-2xl surface-panel py-3 relative">
+      <div className="absolute left-0 top-0 w-1 h-full bg-brand-500/70" />
       <div className="flex items-center gap-8 animate-marquee whitespace-nowrap px-4">
         {[...displayMetals, ...displayMetals].map((metal, i) => {
           const positive = metal.changePercent24h >= 0
@@ -63,11 +62,11 @@ function NativeGoldChart() {
   const pathData = `${lineData} L 100,100 L 0,100 Z`
 
   return (
-    <div className="mx-5 mt-4 p-5 rounded-3xl border border-brand-100 bg-white shadow-card relative overflow-hidden" style={{ height: '180px' }}>
+    <div className="mx-5 mt-4 p-5 rounded-3xl surface-panel relative overflow-hidden" style={{ height: '180px' }}>
       <div className="relative z-10 flex justify-between items-start">
         <div>
-          <p className="text-[10px] font-black text-brand-600/40 uppercase tracking-[0.2em]">{gold.name}</p>
-          <p className="text-2xl font-display font-black text-brand-600 mt-1">
+          <p className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">{gold.name}</p>
+          <p className="text-2xl font-display font-black text-stone-950 mt-1 numeric-hero">
             ₹{gold.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             <span className="text-sm font-medium text-stone-400 ml-1">/ g</span>
           </p>
@@ -103,16 +102,16 @@ export function Welcome() {
   ]
 
   return (
-    <div className="page animate-fade-in bg-white pb-40">
+    <div className="page app-page-bg animate-fade-in pb-40">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-5 pt-6 pb-4 bg-white border-b border-stone-100">
-        <div className="flex items-center gap-2.5 bg-gradient-to-br from-brand-50 to-brand-100 py-3 px-4 rounded-xl shadow-sm border border-brand-200 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between px-5 pt-6 pb-4 bg-white/75 backdrop-blur-xl border-b border-stone-200/70">
+        <div className="flex items-center gap-2.5 bg-white/70 py-3 px-4 rounded-2xl shadow-xs border border-stone-200/80 hover:bg-white transition-colors">
           <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" className="h-10 object-contain" />
         </div>
         <button
           id="change-language"
           onClick={() => navigate('/language')}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-50 border border-brand-200 text-xs font-medium text-brand-700 hover:bg-brand-100 hover:text-brand-800 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-white/70 border border-stone-200 text-xs font-medium text-stone-700 hover:bg-white transition-colors"
         >
           <ChevronRight className="w-3 h-3 rotate-90" />
           {t('lang_button')}
@@ -121,7 +120,7 @@ export function Welcome() {
 
       {/* Hero section - With background image */}
       <div
-        className="relative mx-5 mt-6 rounded-3xl overflow-hidden mb-8 shadow-lg border border-brand-200"
+        className="relative mx-5 mt-6 rounded-3xl overflow-hidden mb-8 hero-card"
         style={{
           minHeight: '240px',
           backgroundImage: 'url(https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&q=85&fm=jpg)',
@@ -130,20 +129,19 @@ export function Welcome() {
         }}
       >
         {/* Enhanced gradient overlay for better readability */}
-        <div className="absolute inset-0 bg-gradient-to-r from-brand-600/95 via-brand-600/85 to-brand-600/50" />
+        <div className="absolute inset-0 bg-gradient-to-r from-stone-950/92 via-stone-900/78 to-brand-700/52" />
 
         {/* Decorative circles */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-brand-400/20 to-brand-500/10 rounded-full -mr-32 -mt-32" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-brand-400/15 to-transparent rounded-full -ml-24 -mb-24" />
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-stone-950/50 to-transparent" />
 
         <div className="relative z-10 p-6 flex flex-col justify-between h-full">
           <div>
-            <p className="text-xs font-bold text-brand-200 uppercase tracking-widest mb-2 opacity-95">{t('welcome_ai_powered')}</p>
-            <h1 className="font-display font-black text-3xl text-white leading-tight">
+            <p className="text-xs font-bold text-gold-200 uppercase tracking-widest mb-2 opacity-95">{t('welcome_ai_powered')}</p>
+            <h1 className="font-display font-black text-3xl text-white leading-tight tracking-[-0.04em]">
               {t('welcome_hero_title')}
             </h1>
           </div>
-          <p className="text-xs text-brand-100 font-medium">{t('welcome_hero_subtitle')}</p>
+          <p className="text-xs text-white/75 font-medium">{t('welcome_hero_subtitle')}</p>
         </div>
       </div>
 
@@ -153,13 +151,11 @@ export function Welcome() {
           {FEATURES.map(({ icon: Icon, label }, index) => (
             <div
               key={label}
-              className="relative flex flex-col items-center p-4 rounded-2xl bg-gradient-to-br from-brand-50 via-brand-50 to-white border border-brand-200 hover:shadow-md hover:border-brand-300 transition-all overflow-hidden group"
+              className="relative flex flex-col items-center p-4 rounded-2xl surface-panel hover:border-brand-200 transition-all overflow-hidden group"
             >
               {/* Decorative background accent */}
-              <div className="absolute top-0 right-0 w-20 h-20 bg-brand-100/50 rounded-full -mr-10 -mt-10 group-hover:scale-110 transition-transform" />
-
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center flex-shrink-0 mb-3 shadow-md relative z-10">
-                <Icon className="w-6 h-6 text-white" strokeWidth={2} />
+              <div className="w-12 h-12 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0 mb-3 relative z-10">
+                <Icon className="w-6 h-6 text-brand-700" strokeWidth={2} />
               </div>
               <span className="text-xs text-center text-stone-700 font-medium leading-snug relative z-10">{label}</span>
             </div>
@@ -172,7 +168,7 @@ export function Welcome() {
 
       {/* Gold Chart - Enhanced with better spacing */}
       <div className="mx-5 mt-6 mb-8">
-        <div className="bg-gradient-to-br from-white via-white to-brand-50/30 rounded-2xl border border-stone-200 shadow-md hover:shadow-lg transition-shadow overflow-hidden">
+        <div className="surface-panel rounded-2xl overflow-hidden">
           <div className="p-5 border-b border-stone-100 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -199,17 +195,16 @@ export function Welcome() {
       {/* CTA */}
       <div className="px-5 pb-8 space-y-4">
         <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-brand-500/20 to-brand-600/20 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity" />
           <button
             id="welcome-cta"
-            onClick={() => navigate(state.authToken ? '/consent' : '/auth')}
+            onClick={() => navigate(state.authToken ? '/consent' : '/register')}
             className="btn-primary w-full text-base py-4 relative font-semibold flex items-center justify-center gap-2"
           >
             {t('welcome_cta')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-brand-50/50 border border-brand-200/50">
+        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-white/70 border border-stone-200/80">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           <p className="text-center text-xs text-stone-600">
             {t('welcome_trusted')}

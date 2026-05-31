@@ -193,7 +193,7 @@ export function FinalEvaluation() {
   }
 
   return (
-    <div className="page overflow-y-auto no-scrollbar animate-fade-in bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
+    <div className="page app-page-bg overflow-y-auto no-scrollbar animate-fade-in">
       <div className="page-header">
         <button onClick={() => navigate('/result')} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
@@ -205,15 +205,15 @@ export function FinalEvaluation() {
       <div className="px-5 pb-24 space-y-4 pt-4">
 
         {/* Gold summary */}
-        <div className="card p-4 border-amber-200 bg-amber-50/50">
-          <p className="label mb-2 text-amber-700">Gold Assessment</p>
+        <div className="copper-panel rounded-3xl p-5">
+          <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-gold-200/85 mb-2">Gold Assessment</p>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-display font-black text-xl text-stone-900">
+              <p className="font-display font-black text-2xl text-white">
                 {detectedKarat}K · {result.weight.estimated_g.toFixed(1)}g
               </p>
               {cityGoldValue > 0 ? (
-                <p className="text-xs text-stone-500 mt-0.5">
+                <p className="text-xs text-white/62 mt-1">
                   City value ~{fmt(cityGoldValue)}
                   {priceSource === 'timesofindia' && (
                     <span className="ml-1 text-emerald-600 font-medium">· live city rate</span>
@@ -223,7 +223,7 @@ export function FinalEvaluation() {
                   )}
                 </p>
               ) : (
-                <p className="text-xs text-stone-400">Select city to load live rate…</p>
+                <p className="text-xs text-white/55">Select city to load live rate…</p>
               )}
             </div>
             <div className="text-right">
@@ -233,13 +233,13 @@ export function FinalEvaluation() {
               {!result.purity.huid_verified && (
                 <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-semibold">Verification pending</span>
               )}
-              <p className="text-xs text-stone-400 mt-1">AI conf. {Math.round(result.confidence.score * 100)}%</p>
+              <p className="text-xs text-white/55 mt-1">AI conf. {Math.round(result.confidence.score * 100)}%</p>
             </div>
           </div>
         </div>
 
         {/* Step 1: Location */}
-        <div className="card p-4">
+        <div className="surface-panel rounded-3xl p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-bold text-white">1</span>
@@ -348,7 +348,7 @@ export function FinalEvaluation() {
         </div>
 
         {/* Step 2: PAN + auto credit profile */}
-        <div className="card p-4">
+        <div className="surface-panel rounded-3xl p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-bold text-white">2</span>
@@ -421,7 +421,7 @@ export function FinalEvaluation() {
 
         {/* Live Eligibility Card */}
         {locationReady && !priceLoading && ltvResult && cityGoldValue > 0 && (
-          <div className={clsx('card p-5', eligible ? 'border-emerald-200 bg-emerald-50/40' : 'border-red-200 bg-red-50/40')}>
+          <div className={clsx('rounded-3xl p-5 border', eligible ? 'bg-emerald-50/70 border-emerald-200' : 'bg-red-50/70 border-red-200')}>
             <div className="flex items-center justify-between mb-3">
               <p className="font-display font-semibold text-sm text-stone-900">Your Eligibility</p>
               {eligible
@@ -532,7 +532,7 @@ export function FinalEvaluation() {
       </div>
 
       {/* Sticky CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-5 pb-6 pt-4 bg-white/90 backdrop-blur-sm border-t border-stone-200">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-5 pb-6 pt-4 sticky-action">
         <button
           onClick={handleContinue}
           disabled={!canProceed}

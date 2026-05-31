@@ -547,22 +547,8 @@ export function CaptureFlow() {
   )
 
   return (
-    <div className="page animate-fade-in overflow-y-auto relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
-      {/* Premium gradient overlays */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-        {/* Radial glow */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-gradient-to-br from-brand-400/15 via-amber-400/10 to-transparent blur-3xl" />
-        {/* Left accent */}
-        <div className="absolute top-20 left-0 w-64 h-64 rounded-full bg-gradient-to-r from-blue-300/5 to-transparent blur-3xl" />
-        {/* Right accent */}
-        <div className="absolute top-1/3 right-0 w-80 h-80 rounded-full bg-gradient-to-l from-amber-300/5 to-transparent blur-3xl" />
-        {/* Popping circles */}
-        <div className="absolute top-1/3 left-1/4 w-12 h-12 rounded-full bg-gradient-to-br from-brand-400 to-amber-400 animate-pop-expand" style={{ animationDelay: '0s' }} />
-        <div className="absolute top-2/3 right-1/4 w-8 h-8 rounded-full bg-gradient-to-br from-amber-300 to-orange-400 animate-pop-pulse" style={{ animationDelay: '0.3s' }} />
-        <div className="absolute top-1/2 left-1/3 w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-amber-500 animate-pop-contract" style={{ animationDelay: '0.6s' }} />
-        <div className="absolute top-1/4 right-1/3 w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-yellow-400 animate-pop-expand" style={{ animationDelay: '0.9s' }} />
-        <div className="absolute top-3/5 left-1/2 w-9 h-9 rounded-full bg-gradient-to-br from-brand-300 to-amber-400 animate-pop-pulse" style={{ animationDelay: '1.2s' }} />
-      </div>
+    <div className="page app-page-bg animate-fade-in overflow-y-auto relative">
+      <div className="absolute inset-x-8 top-24 h-px bg-gradient-to-r from-transparent via-brand-300/40 to-transparent pointer-events-none z-0" />
       <div className="relative z-10">
         {/* Header */}
         <div className="page-header">
@@ -596,14 +582,13 @@ export function CaptureFlow() {
             {step.demoUrl && (
               <button
                 onClick={() => setShowDemo(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-100 transition-colors font-medium"
+                className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-50 transition-colors font-semibold shadow-xs"
               >
-                <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
                 Enter Example Demo
               </button>
             )}
             {previousForStep.length > 0 && step.type !== 'macro' && step.type !== 'selfie' && (
-              <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 font-medium">
+              <span className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 font-semibold shadow-xs">
                 <ImageIcon className="w-4 h-4" />
                 {previousForStep.length} saved {step.type} view{previousForStep.length === 1 ? '' : 's'}
               </span>
@@ -656,10 +641,12 @@ export function CaptureFlow() {
 
         {/* Step hint */}
         <div className="px-5 pb-3">
-          <p className="text-sm font-semibold text-stone-800 leading-relaxed">
-            {t(step.hintKey)}
-            {step.optional && <span className="ml-2 text-xs text-stone-500">(optional)</span>}
-          </p>
+          <div className="scan-panel rounded-3xl px-4 py-3">
+            <p className="text-sm font-semibold text-stone-800 leading-relaxed">
+              {t(step.hintKey)}
+              {step.optional && <span className="ml-2 text-xs text-stone-500">(optional)</span>}
+            </p>
+          </div>
         </div>
 
         {/* Camera */}
@@ -680,7 +667,7 @@ export function CaptureFlow() {
 
               {/* Confidence Score */}
               {hallmarkConfidence > 0 && (
-                <div className="bg-white border border-stone-200 rounded-2xl p-3 shadow-card">
+                <div className="surface-panel rounded-2xl p-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold text-stone-600">Hallmark Confidence</span>
                     <span className={clsx('text-sm font-black', hallmarkConfidence >= 80 ? 'text-emerald-600' : hallmarkConfidence >= 55 ? 'text-amber-600' : 'text-red-500')}>
@@ -703,7 +690,7 @@ export function CaptureFlow() {
               )}
 
               {/* Hallmark Symbol Guide */}
-              <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-card">
+              <div className="surface-panel rounded-2xl overflow-hidden">
                 <button
                   onClick={() => setShowHallmarkGuide(v => !v)}
                   className="w-full flex items-center justify-between px-4 py-3 text-left"
@@ -740,7 +727,7 @@ export function CaptureFlow() {
                 )}
               </div>
 
-              <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-card">
+              <div className="surface-panel rounded-2xl overflow-hidden">
                 {/* Tabs */}
                 <div className="flex border-b border-stone-200">
                   <button
@@ -1049,7 +1036,7 @@ export function CaptureFlow() {
         </div>
 
         {/* Bottom actions */}
-        <div className="px-5 pb-6 pt-3 border-t border-stone-200 space-y-2 sticky bottom-0 bg-white/95 backdrop-blur-sm">
+        <div className="px-5 pb-6 pt-3 space-y-2 sticky-action">
           {evalState === 'rejected' && !hasManualHuidOverride && !hasSelectedPurity && !huidVerifyResult ? (
             <button onClick={handleRetake} className="w-full btn-primary">
               <RotateCcw className="w-5 h-5" />
@@ -1119,20 +1106,20 @@ export function CaptureFlow() {
                   <img src={step.demoUrl} className="w-full h-full object-cover" alt="Example demo" />
                 )}
               </div>
-              <p className="mt-6 text-black font-semibold text-center">Reference: {STEP_LABELS[stepIdx]}</p>
-              <p className="mt-2 text-stone-700 text-xs text-center px-6">
+              <p className="mt-6 text-white font-semibold text-center">Reference: {STEP_LABELS[stepIdx]}</p>
+              <p className="mt-2 text-white/70 text-xs text-center px-6">
                 This is how your photo should look. Ensure the gold is clear and well-lit.
               </p>
               <div className="mt-8 flex gap-3 w-full px-2">
                 <button
                   onClick={handleEnterDemo}
-                  className="flex-1 px-6 py-3 rounded-full bg-brand-600 text-white font-semibold text-sm shadow-brand active:scale-95 transition-transform hover:bg-brand-700"
+                  className="flex-1 btn-primary px-4 py-3 text-sm"
                 >
                   Enter Demo
                 </button>
                 <button
                   onClick={() => setShowDemo(false)}
-                  className="flex-1 px-6 py-3 rounded-full bg-white text-stone-700 font-semibold text-sm border border-stone-300 active:scale-95 transition-transform hover:bg-stone-50"
+                  className="flex-1 btn-secondary px-4 py-3 text-sm"
                 >
                   View Only
                 </button>

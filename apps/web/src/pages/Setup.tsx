@@ -54,7 +54,7 @@ export function Setup() {
       <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-6">
         {/* Heading */}
         <div className="pt-6 pb-8">
-          <h1 className="font-display font-bold text-2xl text-stone-900 mb-1">
+          <h1 className="font-display font-black text-3xl text-stone-950 tracking-[-0.04em] mb-1">
             What are you assessing?
           </h1>
           <p className="text-sm text-stone-500">Select the type of gold item</p>
@@ -71,19 +71,19 @@ export function Setup() {
                 className={clsx(
                   'flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-200 active:scale-[0.96]',
                   active
-                    ? 'border-brand-600 bg-brand-50 shadow-brand-sm'
+                    ? 'border-charcoal bg-white shadow-sm'
                     : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50'
                 )}
               >
                 <div className={clsx(
                   'w-11 h-11 rounded-2xl flex items-center justify-center transition-colors',
-                  active ? 'bg-brand-600' : 'bg-stone-100'
+                  active ? 'bg-charcoal' : 'bg-stone-100'
                 )}>
                   <Icon className={clsx('w-5 h-5', active ? 'text-white' : 'text-stone-500')} strokeWidth={1.8} />
                 </div>
                 <span className={clsx(
                   'text-xs font-semibold transition-colors',
-                  active ? 'text-brand-700' : 'text-stone-700'
+                  active ? 'text-stone-950' : 'text-stone-700'
                 )}>
                   {label}
                 </span>
@@ -102,7 +102,7 @@ export function Setup() {
               { n: 3, text: t('setup_tip3') },
             ].map(({ n, text }) => (
               <div key={n} className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-brand-50 border border-brand-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-6 h-6 rounded-lg bg-brand-50 border border-brand-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <span className="text-xs font-bold text-brand-600">{n}</span>
                 </div>
                 <p className="text-sm text-stone-600 leading-relaxed">{text}</p>
@@ -114,7 +114,7 @@ export function Setup() {
         {/* Coin callout */}
         <div className="card-gold p-4 mb-2">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-gold-200 border-2 border-gold-300 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-gold-100 border border-gold-200 flex items-center justify-center flex-shrink-0">
               <span className="text-[10px] font-bold text-gold-700">₹10</span>
             </div>
             <div>
@@ -127,7 +127,7 @@ export function Setup() {
         </div>
       </div>
 
-      <div className="px-5 pb-6 pt-4 border-t border-stone-200">
+      <div className="px-5 pb-6 pt-4 border-t border-stone-200/80 bg-white/70 backdrop-blur-xl">
         <button
           id="setup-ready"
           onClick={startCapture}

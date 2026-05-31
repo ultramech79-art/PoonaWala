@@ -1,0 +1,218 @@
+import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, Delete } from 'lucide-react'
+import { clsx } from 'clsx'
+import { sendOtpAPI, otpLoginAPI } from '../lib/api'
+import { useSessionStore } from '../store/session'
+import { shouldShowTutorial } from './Tutorial'
+
+export function Login() {
+  const navigate = useNavigate()
+  const { setAuth } = useSessionStore()
+
+  const [step, setStep] = useState<1 | 2>(1)
+  const [animKey, setAnimKey] = useState(0)
+  const [dir, setDir] = useState<'fwd' | 'back'>('fwd')
+
+  const [phone, setPhone] = useState('')
+  const [sessionId, setSessionId] = useState('')
+  const [pin, setPin] = useState('')
+  const [pinShake, setPinShake] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const advance = useCallback(() => {
+    setDir('fwd'); setAnimKey(k => k + 1); setStep(2); setError('')
+  }, [])
+
+  const retreat = useCallback(() => {
+    setDir('back'); setAnimKey(k => k + 1); setStep(1); setPin(''); setError('')
+  }, [])
+
+  const handleContinue = async () => {
+    if (phone.length !== 10) return
+    setBusy(true); setError('')
+    try {
+      const res = await sendOtpAPI(phone)
+      if (!res.success || !res.session_id) throw new Error(res.message || 'Failed to send OTP')
+      setSessionId(res.session_id)
+      advance()
+    } catch (e: any) {
+      setError(e.message || 'Could not send OTP')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handlePinPress = (key: string) => {
+    if (key === '⌫') { setPin(p => p.slice(0, -1)); return }
+    const next = pin + key
+    if (next.length > 6) return
+    setPin(next)
+    if (next.length === 6) setTimeout(() => verifyPin(next), 260)
+  }
+
+  const verifyPin = async (enteredPin: string) => {
+    const stored = localStorage.getItem('goldeye_pin')
+    if (stored && enteredPin !== stored) {
+      setPinShake(true)
+      setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
+      return
+    }
+    // Use PIN as OTP for server auth (or verify via OTP flow)
+    setBusy(true); setError('')
+    try {
+      // Send OTP and use entered PIN — for prod, server validates PIN separately
+      // For now, use otpLoginAPI with the session we already have
+      const res = await otpLoginAPI(phone, sessionId, enteredPin)
+      setAuth(res.access_token, res.user)
+      navigate(shouldShowTutorial() ? '/tutorial' : '/dashboard-home')
+    } catch {
+      // If server rejects, still allow local PIN match for demo
+      const stored = localStorage.getItem('goldeye_pin')
+      if (stored && enteredPin === stored) {
+        navigate(shouldShowTutorial() ? '/tutorial' : '/dashboard-home')
+      } else {
+        setPinShake(true)
+        setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const inputCls = 'w-full bg-white border border-[#E2DDD6] rounded-2xl px-5 py-[18px] text-[18px] font-semibold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors'
+  const btnCls = 'w-full h-[60px] rounded-2xl bg-stone-950 text-white font-semibold text-[16px] tracking-[-0.01em] disabled:opacity-25 active:opacity-75 transition-opacity'
+
+  return (
+    <div className="page" style={{ position: 'relative' }}>
+
+      {/* Dev skip button */}
+      <button
+        onClick={() => navigate('/tutorial')}
+        className="absolute top-3 right-4 text-[11px] font-medium text-stone-300 z-50"
+        style={{ zIndex: 50 }}
+      >
+        skip →
+      </button>
+
+      {/* Progress bar */}
+      <div className="h-[3px] bg-stone-100">
+        <div className="h-full transition-all duration-500 ease-out"
+          style={{ width: step === 1 ? '50%' : '100%', background: '#C0392B' }} />
+      </div>
+
+      {/* Top bar */}
+      <div className="flex items-center px-5 pt-4 pb-1 relative z-10">
+        <button
+          onClick={step === 1 ? () => navigate(-1) : retreat}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-stone-950 text-white active:opacity-70 transition-opacity"
+        >
+          <ArrowLeft className="w-4 h-4" strokeWidth={2.2} />
+        </button>
+      </div>
+
+      {/* Animated content */}
+      <div key={animKey} className={clsx('flex-1 flex flex-col relative z-10', dir === 'fwd' ? 'register-step-fwd' : 'register-step-back')}>
+
+        {/* Step 1: Phone */}
+        {step === 1 && (
+          <>
+            <div className="px-6 pt-7 pb-6">
+              <h1 className="font-display font-bold text-[34px] text-stone-950 leading-[1.08] tracking-[-0.03em]">
+                Welcome<br />back
+              </h1>
+              <p className="text-[15px] text-stone-500 mt-3 leading-relaxed">
+                Enter your registered mobile number.
+              </p>
+            </div>
+
+            {error && (
+              <div className="mx-6 mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] font-medium">{error}</div>
+            )}
+
+            <div className="flex-1 flex flex-col px-6">
+              <div className="flex-1">
+                <div className="flex gap-3">
+                  <div className="flex items-center justify-center h-[60px] px-4 bg-white border border-[#E2DDD6] rounded-2xl shrink-0">
+                    <span className="text-[17px] font-bold text-stone-500">+91</span>
+                  </div>
+                  <input
+                    autoFocus
+                    type="tel"
+                    inputMode="numeric"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="9876543210"
+                    className="flex-1 bg-white border border-[#E2DDD6] rounded-2xl px-5 text-[20px] font-bold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors tracking-[0.06em]"
+                  />
+                </div>
+              </div>
+              <div className="pb-8">
+                <button disabled={phone.length !== 10 || busy} onClick={handleContinue} className={btnCls}>
+                  {busy ? 'Sending…' : 'Continue'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Step 2: PIN */}
+        {step === 2 && (
+          <>
+            <div className="px-6 pt-7 pb-4 text-center">
+              <h1 className="font-display font-bold text-[34px] text-stone-950 leading-[1.08] tracking-[-0.03em]">
+                Enter your<br />PIN
+              </h1>
+              <p className="text-[15px] text-stone-500 mt-3">
+                6-digit PIN for <span className="font-semibold text-stone-800">+91 {phone}</span>
+              </p>
+            </div>
+
+            {error && (
+              <div className="mx-6 mb-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] font-medium">{error}</div>
+            )}
+
+            <div className="flex-1 flex flex-col">
+              {/* PIN dots */}
+              <div className={clsx('flex justify-center gap-5 py-6', pinShake && 'animate-pin-shake')}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} style={{
+                    width: 16, height: 16, borderRadius: '50%',
+                    border: `2px solid ${i < pin.length ? '#0F0F0F' : '#D4CFC7'}`,
+                    background: i < pin.length ? '#0F0F0F' : 'transparent',
+                    transform: i < pin.length ? 'scale(1.18)' : 'scale(1)',
+                    transition: 'all 180ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  }} />
+                ))}
+              </div>
+
+              {/* Numpad */}
+              <div className="flex-1 flex flex-col justify-end px-5 pb-6">
+                <div className="grid grid-cols-3 gap-2.5">
+                  {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k, idx) => (
+                    <button key={idx} onClick={() => k !== '' && handlePinPress(k)} disabled={k === ''}
+                      className={clsx(
+                        'h-[66px] rounded-2xl font-semibold transition-all active:scale-95 select-none',
+                        k === '' ? 'invisible' :
+                        k === '⌫' ? 'text-stone-500 text-[20px] active:bg-stone-100' :
+                        'bg-white text-stone-950 text-[22px] border border-[#E2DDD6] active:bg-stone-100 shadow-sm'
+                      )}>
+                      {k === '⌫' ? <Delete className="w-5 h-5 mx-auto" strokeWidth={1.8} /> : k}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => navigate('/register')}
+                  className="w-full pt-5 pb-2 text-[13px] font-medium text-stone-400 active:text-stone-600"
+                >
+                  Forgot PIN? Register again
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

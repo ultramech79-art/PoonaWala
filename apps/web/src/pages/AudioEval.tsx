@@ -291,7 +291,7 @@ export function AudioEval() {
   const instructions = mode === 'drop' ? dropInstructions : tapInstructions
 
   return (
-    <div className="page bg-gradient-to-b from-stone-50 to-white overflow-y-auto">
+    <div className="page app-page-bg overflow-y-auto">
 
       {/* Tutorial overlay */}
       {showTutorial && phase === 'intro' && (
@@ -326,16 +326,16 @@ export function AudioEval() {
           <div className="space-y-4 animate-fade-in">
 
             {/* Hero */}
-            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900 to-blue-900 p-6">
-              <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-blue-500/10 -translate-y-12 translate-x-12" />
+            <div className="relative rounded-3xl overflow-hidden copper-panel p-6">
+              <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-gold-200/10 -translate-y-12 translate-x-12" />
               <div className="relative">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center shadow-lg">
+                  <div className="w-12 h-12 rounded-2xl bg-white/12 border border-white/12 flex items-center justify-center shadow-lg">
                     <Mic className="w-6 h-6 text-white" />
                   </div>
                   <div>
                     <p className="font-bold text-white">Gold Ring Test</p>
-                    <p className="text-blue-200 text-xs">Acoustic fingerprint analysis</p>
+                    <p className="text-gold-100/75 text-xs">Acoustic fingerprint analysis</p>
                   </div>
                 </div>
                 <p className="text-white/80 text-sm leading-relaxed">
@@ -344,28 +344,28 @@ export function AudioEval() {
                 <div className="mt-4 flex gap-3">
                   <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5 text-center">
                     <p className="text-white font-bold text-sm">Drop test</p>
-                    <p className="text-blue-200 text-[10px] mt-0.5">Most accurate · one drop, 15–20 cm on glass</p>
+                    <p className="text-gold-100/70 text-[10px] mt-0.5">Most accurate · one drop, 15–20 cm on glass</p>
                   </div>
                   <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5 text-center">
                     <p className="text-white font-bold text-sm">Tap test</p>
-                    <p className="text-blue-200 text-[10px] mt-0.5">Safer · for delicate pieces</p>
+                    <p className="text-gold-100/70 text-[10px] mt-0.5">Safer · for delicate pieces</p>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Ornament picker */}
-            <div className="bg-white border border-stone-200 rounded-2xl p-4">
+            <div className="surface-panel rounded-2xl p-4">
               <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">What are you testing?</p>
               <div className="grid grid-cols-3 gap-2">
                 {ORNAMENTS.map(({ id, label, safe }) => (
                   <button key={id} onClick={() => setOrnament(id)}
                     className={clsx(
                       'py-2.5 rounded-xl text-xs font-semibold border transition-all',
-                      ornament === id ? 'bg-blue-600 border-blue-600 text-white' : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                      ornament === id ? 'bg-brand-700 border-brand-700 text-white' : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
                     )}>
                     <span className="block">{label}</span>
-                    <span className={clsx('text-[9px] mt-0.5 block font-medium', ornament === id ? 'text-blue-200' : 'text-stone-400')}>
+                    <span className={clsx('text-[9px] mt-0.5 block font-medium', ornament === id ? 'text-gold-100/80' : 'text-stone-400')}>
                       {safe === 'drop' ? '→ drop' : '→ tap'}
                     </span>
                   </button>
@@ -374,30 +374,30 @@ export function AudioEval() {
             </div>
 
             {/* Mode toggle */}
-            <div className="bg-white border border-stone-200 rounded-2xl p-4">
+            <div className="surface-panel rounded-2xl p-4">
               <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">Test method</p>
               <div className="grid grid-cols-2 gap-2">
                 {/* Drop */}
                 <button onClick={() => setMode('drop')}
-                  className={clsx('rounded-2xl p-3 border text-left transition-all', mode === 'drop' ? 'bg-blue-600 border-blue-600' : 'bg-stone-50 border-stone-200 hover:bg-stone-100')}>
+                  className={clsx('rounded-2xl p-3 border text-left transition-all', mode === 'drop' ? 'bg-brand-700 border-brand-700' : 'bg-stone-50 border-stone-200 hover:bg-stone-100')}>
                   <div className="flex items-center gap-2 mb-1">
-                    <Zap className={clsx('w-4 h-4', mode === 'drop' ? 'text-blue-200' : 'text-blue-600')} />
+                    <Zap className={clsx('w-4 h-4', mode === 'drop' ? 'text-gold-100' : 'text-brand-600')} />
                     <span className={clsx('text-xs font-bold', mode === 'drop' ? 'text-white' : 'text-stone-800')}>Drop test</span>
                     {!isFragile && <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">Best</span>}
                   </div>
-                  <p className={clsx('text-[10px] leading-snug', mode === 'drop' ? 'text-blue-100' : 'text-stone-500')}>
+                  <p className={clsx('text-[10px] leading-snug', mode === 'drop' ? 'text-gold-100/80' : 'text-stone-500')}>
                     One drop from 15–20 cm onto glass. Gold's long resonance is the clearest discriminator. Recommended for rings and bangles.
                   </p>
                 </button>
                 {/* Tap */}
                 <button onClick={() => setMode('tap')}
-                  className={clsx('rounded-2xl p-3 border text-left transition-all', mode === 'tap' ? 'bg-blue-600 border-blue-600' : 'bg-stone-50 border-stone-200 hover:bg-stone-100')}>
+                  className={clsx('rounded-2xl p-3 border text-left transition-all', mode === 'tap' ? 'bg-brand-700 border-brand-700' : 'bg-stone-50 border-stone-200 hover:bg-stone-100')}>
                   <div className="flex items-center gap-2 mb-1">
-                    <Hand className={clsx('w-4 h-4', mode === 'tap' ? 'text-blue-200' : 'text-amber-500')} />
+                    <Hand className={clsx('w-4 h-4', mode === 'tap' ? 'text-gold-100' : 'text-amber-500')} />
                     <span className={clsx('text-xs font-bold', mode === 'tap' ? 'text-white' : 'text-stone-800')}>Tap test</span>
                     {isFragile && <span className="text-[9px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-bold">Safer</span>}
                   </div>
-                  <p className={clsx('text-[10px] leading-snug', mode === 'tap' ? 'text-blue-100' : 'text-stone-500')}>
+                  <p className={clsx('text-[10px] leading-snug', mode === 'tap' ? 'text-gold-100/80' : 'text-stone-500')}>
                     Tap with coin edge on glass. Use if the piece is fragile or has stones.
                   </p>
                 </button>
@@ -412,14 +412,14 @@ export function AudioEval() {
             </div>
 
             {/* Step-by-step instructions */}
-            <div className="bg-white border border-stone-200 rounded-2xl p-4">
+            <div className="surface-panel rounded-2xl p-4">
               <p className="text-xs text-stone-400 uppercase tracking-widest font-semibold mb-3">
                 How to record — {mode === 'drop' ? 'Drop Test' : 'Tap Test'}
               </p>
               <div className="space-y-3">
-                {instructions.map(({ icon, step, note }, i) => (
+                {instructions.map(({ step, note }, i) => (
                   <div key={i} className="flex items-start gap-3">
-                    <span className="text-base flex-shrink-0 mt-0.5">{icon}</span>
+                    <span className="w-5 h-5 rounded-full bg-brand-50 text-brand-600 border border-brand-100 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
                     <div>
                       <p className="text-sm text-stone-800 font-medium">{step}</p>
                       <p className="text-xs text-stone-400 mt-0.5">{note}</p>

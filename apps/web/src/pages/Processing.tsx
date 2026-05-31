@@ -590,20 +590,21 @@ export function Processing() {
   }, [state.lang, facts.length])
 
   return (
-    <div className="page flex flex-col items-center justify-center bg-[#FBFBFA] animate-fade-in relative min-h-screen">
+    <div className="page app-page-bg flex flex-col items-center justify-center animate-fade-in relative min-h-screen">
       
       <div className="flex flex-col items-center px-6 sm:px-8 text-center w-full max-w-lg relative z-10 space-y-8">
         
         {/* Typographic Header & Facts */}
-        <div className="space-y-4">
-          <h1 className="font-display font-bold text-[28px] sm:text-3xl text-[#111111] tracking-tight leading-tight">
+        <div className="space-y-4 surface-panel rounded-3xl px-5 py-6 w-full">
+          <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-brand-600">Gold assessment</p>
+          <h1 className="font-display font-bold text-[28px] sm:text-3xl text-stone-950 tracking-tight leading-tight">
             {done ? t('processing_complete') : t('processing_analysing')}
           </h1>
           
           <div className="min-h-[4rem] flex items-start justify-center">
             <p 
               key={activeFact} 
-              className="text-[15px] sm:text-base text-[#787774] leading-relaxed animate-fade-in text-balance font-medium"
+              className="text-[15px] sm:text-base text-stone-500 leading-relaxed animate-fade-in text-balance font-medium"
             >
               {done ? t('processing_note') : facts[activeFact]}
             </p>
@@ -640,17 +641,17 @@ export function Processing() {
                 >
                   <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
                     {isPast ? (
-                      <CheckCircle className="w-4.5 h-4.5 text-[#346538]" strokeWidth={2.5} />
-                    ) : isCurrent ? (
-                      <div className="w-2 h-2 rounded-full bg-[#111111] animate-pulse" />
-                    ) : (
-                      <div className="w-2 h-2 rounded-full bg-[#EAEAEA]" />
-                    )}
+                    <CheckCircle className="w-4.5 h-4.5 text-emerald-600" strokeWidth={2.5} />
+                  ) : isCurrent ? (
+                      <div className="w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                  ) : (
+                      <div className="w-2 h-2 rounded-full bg-stone-300" />
+                  )}
                   </div>
                   <p className={`text-[14px] font-medium transition-colors duration-300 ${
-                    isPast ? 'text-[#111111]' : 
-                    isCurrent ? 'text-[#111111]' : 
-                    'text-[#787774]'
+                    isPast ? 'text-stone-950' : 
+                    isCurrent ? 'text-stone-950' : 
+                    'text-stone-500'
                   }`}>
                     {label}
                   </p>
@@ -661,7 +662,7 @@ export function Processing() {
         </div>
 
         {/* Trust Indicator */}
-        <div className="pt-8 flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#787774]">
+        <div className="pt-8 flex items-center gap-2 text-[11px] uppercase tracking-widest text-stone-500">
           <Lock className="w-3 h-3" />
           <span>{t('consent_secure')}</span>
         </div>

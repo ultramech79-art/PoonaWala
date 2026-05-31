@@ -40,12 +40,12 @@ export function DashboardDetail() {
   };
 
   if (loading) return (
-    <div className="flex h-screen items-center justify-center bg-zinc-950">
-      <Loader2 className="h-8 w-8 animate-spin text-brand-400" />
+    <div className="page app-page-bg flex h-screen items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
     </div>
   );
   if (!data || !data.assessment) return (
-    <div className="flex h-screen items-center justify-center text-white bg-zinc-950">
+    <div className="page app-page-bg flex h-screen items-center justify-center text-stone-800">
       {t('detail_not_found')}
     </div>
   );
@@ -53,61 +53,61 @@ export function DashboardDetail() {
   const { assessment, session } = data;
 
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 text-white overflow-y-auto">
+    <div className="page app-page-bg min-h-screen p-6 text-stone-900 overflow-y-auto">
       <div className="max-w-5xl mx-auto space-y-6">
-        <Button variant="ghost" className="text-zinc-400 hover:text-white mb-4" onClick={() => navigate('/dashboard')}>
+        <Button variant="ghost" className="text-stone-500 hover:text-stone-900 mb-4" onClick={() => navigate('/dashboard')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> {t('detail_back')}
         </Button>
 
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="surface-panel">
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>{t('detail_session_review')}</CardTitle>
                   <Badge variant="outline" className="border-brand-400/50 text-brand-400">{assessment.routing}</Badge>
                 </div>
-                <CardDescription className="text-zinc-400">
+                <CardDescription className="text-stone-500">
                   {session.phone} · {new Date(session.created_at).toLocaleString()}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="space-y-1">
-                    <span className="text-zinc-500">{t('result_purity')}</span>
+                    <span className="text-stone-500">{t('result_purity')}</span>
                     <p className="font-medium">{assessment.purity.point_estimate_karat}K</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-zinc-500">{t('detail_estimated_value')}</span>
+                    <span className="text-stone-500">{t('detail_estimated_value')}</span>
                     <p className="font-medium text-emerald-400">₹{assessment.value_inr.band_low.toLocaleString()}</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-zinc-500">{t('result_confidence')}</span>
+                    <span className="text-stone-500">{t('result_confidence')}</span>
                     <p className="font-medium">{(assessment.confidence.score * 100).toFixed(1)}%</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-zinc-500">{t('detail_fraud_score')}</span>
+                    <span className="text-stone-500">{t('detail_fraud_score')}</span>
                     <p className="font-medium text-rose-400">{(assessment.fraud_signals.score * 100).toFixed(1)}%</p>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-zinc-800">
-                  <h4 className="text-sm font-medium text-zinc-300 mb-2">{t('detail_ai_reasoning')}</h4>
-                  <p className="text-sm text-zinc-400 bg-black/20 p-3 rounded-md italic">
+                <div className="pt-4 border-t border-stone-200">
+                  <h4 className="text-sm font-medium text-stone-700 mb-2">{t('detail_ai_reasoning')}</h4>
+                  <p className="text-sm text-stone-500 bg-white/70 border border-stone-200 p-3 rounded-md italic">
                     "{assessment.reasoning_text.text}"
                   </p>
                 </div>
 
                 {assessment.xai?.gradcam_url && (
-                  <div className="pt-4 border-t border-zinc-800">
-                    <h4 className="text-sm font-medium text-zinc-300 mb-2">{t('detail_gradcam')}</h4>
+                  <div className="pt-4 border-t border-stone-200">
+                    <h4 className="text-sm font-medium text-stone-700 mb-2">{t('detail_gradcam')}</h4>
                     <img src={assessment.xai.gradcam_url} alt="Grad-CAM" className="rounded-md max-w-full h-auto max-h-64 object-contain bg-black/50" />
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="surface-panel">
               <CardHeader>
                 <CardTitle>{t('detail_shap')}</CardTitle>
               </CardHeader>
@@ -115,7 +115,7 @@ export function DashboardDetail() {
                 <div className="space-y-3">
                   {assessment.xai?.shap_top_features.map((f: any) => (
                     <div key={f.feature} className="flex justify-between text-sm">
-                      <span className="text-zinc-400">{f.feature}</span>
+                      <span className="text-stone-500">{f.feature}</span>
                       <span className={f.contribution > 0 ? 'text-emerald-400' : 'text-rose-400'}>
                         {f.contribution > 0 ? '+' : ''}{f.contribution.toFixed(3)}
                       </span>
@@ -127,15 +127,15 @@ export function DashboardDetail() {
           </div>
 
           <div className="space-y-6">
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="surface-panel">
               <CardHeader>
                 <CardTitle>{t('detail_risk_action')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">{t('detail_notes_label')}</label>
+                  <label className="text-sm text-stone-500">{t('detail_notes_label')}</label>
                   <Textarea
-                    className="bg-black/20 border-zinc-800 focus:border-brand-500 text-white min-h-[100px]"
+                    className="input-field min-h-[100px]"
                     placeholder={t('detail_notes_placeholder')}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}

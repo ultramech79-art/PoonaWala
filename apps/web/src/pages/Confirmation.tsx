@@ -18,7 +18,7 @@ export function Confirmation() {
   // Fallback if someone lands here directly without data
   if (!loan || !evalD || !result) {
     return (
-      <div className="page flex flex-col items-center justify-center px-5 bg-stone-50">
+      <div className="page app-page-bg flex flex-col items-center justify-center px-5">
         <div className="w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center mb-6">
           <CheckCircle className="w-10 h-10 text-emerald-500" />
         </div>
@@ -39,7 +39,7 @@ export function Confirmation() {
   const totalCustomerCost = loan.totalPayment + loan.safeCustodyInr
 
   return (
-    <div className="page overflow-y-auto no-scrollbar animate-fade-in bg-gradient-to-b from-[#FEFDFC] via-white to-emerald-50/20">
+    <div className="page app-page-bg overflow-y-auto no-scrollbar animate-fade-in">
       {/* Branding */}
       <div className="flex justify-center pt-8 pb-2">
         <div className="bg-white py-3 px-5 rounded-2xl shadow-sm border border-stone-100">
@@ -63,8 +63,8 @@ export function Confirmation() {
         </div>
 
         {/* Loan summary card */}
-        <div className="card p-5 border-brand-600/20 bg-brand-50/40">
-          <p className="font-display font-bold text-sm text-stone-900 mb-4">Your Confirmed Loan Terms</p>
+        <div className="copper-panel rounded-3xl p-5">
+          <p className="font-display font-bold text-sm text-white mb-4">Your Confirmed Loan Terms</p>
           <div className="space-y-3">
             <LoanRow icon={<IndianRupee className="w-4 h-4 text-brand-600" />}
               label="Loan Amount" value={fmt(loan.requestedLoanInr)} bold />
@@ -80,7 +80,7 @@ export function Confirmation() {
         </div>
 
         {/* Cost breakdown */}
-        <div className="card p-4">
+        <div className="surface-panel rounded-3xl p-4">
           <button
             onClick={() => setShowDetails(!showDetails)}
             className="w-full flex items-center justify-between"
@@ -112,7 +112,7 @@ export function Confirmation() {
         </div>
 
         {/* Gold + location summary */}
-        <div className="card p-4">
+        <div className="surface-panel rounded-3xl p-4">
           <p className="label mb-3">Assessment Summary</p>
           <div className="space-y-2 text-xs text-stone-600">
             <div className="flex justify-between">
@@ -166,9 +166,9 @@ function LoanRow({ icon, label, value, bold = false }: {
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
         {icon}
-        <span className={clsx('text-xs', bold ? 'font-semibold text-stone-800' : 'text-stone-500')}>{label}</span>
+        <span className={clsx('text-xs', bold ? 'font-semibold text-white' : 'text-white/65')}>{label}</span>
       </div>
-      <span className={clsx('text-sm', bold ? 'font-black text-brand-600' : 'font-medium text-stone-800')}>{value}</span>
+      <span className={clsx('text-sm', bold ? 'font-black text-white' : 'font-medium text-white/82')}>{value}</span>
     </div>
   )
 }

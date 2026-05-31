@@ -160,7 +160,7 @@ export function GoldLoanApplication() {
   }
 
   return (
-    <div className="page overflow-y-auto no-scrollbar animate-fade-in bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
+    <div className="page overflow-y-auto no-scrollbar animate-fade-in">
       {/* Header */}
       <div className="page-header">
         <button onClick={() => navigate('/final-eval')} className="btn-icon">
@@ -173,7 +173,7 @@ export function GoldLoanApplication() {
       <div className="px-5 pb-28 space-y-4 pt-4">
 
         {/* Eligibility pill */}
-        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3 surface-panel rounded-2xl px-4 py-3">
           <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-stone-800">
@@ -204,7 +204,7 @@ export function GoldLoanApplication() {
 
           {/* Amount display */}
           <div className="text-center mb-4">
-            <p className="font-display font-black text-3xl text-brand-600">{fmt(loanAmount)}</p>
+          <p className="font-display font-black text-4xl text-stone-950 numeric-hero">{fmt(loanAmount)}</p>
             <p className="text-[10px] text-stone-400 mt-0.5">
               Effective LTV: <span className="font-bold text-stone-600">{effectiveLtvPct}%</span>
               <span className="mx-1 text-stone-300">·</span>
@@ -221,7 +221,7 @@ export function GoldLoanApplication() {
           <div className="relative px-1 mb-5 mt-6">
             {/* Floating bubble tracks thumb */}
             <div
-              className="absolute -top-8 bg-brand-600 text-white text-[10px] font-black px-2 py-1 rounded-lg pointer-events-none shadow-sm whitespace-nowrap transition-all duration-75"
+              className="absolute -top-8 bg-charcoal text-white text-[10px] font-black px-2 py-1 rounded-lg pointer-events-none shadow-sm whitespace-nowrap transition-all duration-75"
               style={{
                 left: `clamp(20px, calc(${sliderPct}% - 20px), calc(100% - 20px))`,
               }}
@@ -255,7 +255,7 @@ export function GoldLoanApplication() {
                   className={clsx(
                     'flex-1 py-1.5 text-[11px] font-semibold rounded-lg border transition-all',
                     loanAmount === v
-                      ? 'border-brand-600 bg-brand-600 text-white'
+                      ? 'border-charcoal bg-charcoal text-white'
                       : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300',
                   )}
                 >
@@ -282,7 +282,7 @@ export function GoldLoanApplication() {
                   className={clsx(
                     'relative px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all',
                     tenure === m
-                      ? 'border-brand-600 bg-brand-600 text-white'
+                      ? 'border-charcoal bg-charcoal text-white'
                       : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300',
                   )}
                 >
@@ -339,10 +339,10 @@ export function GoldLoanApplication() {
         )}
 
         {/* ── Live Offer Card ─────────────────────────────────────────────────── */}
-        <div className="card p-5 border-brand-600/20 bg-brand-50/40">
+        <div className="card p-5 border-brand-200/70 bg-white/90">
           <div className="flex items-center justify-between mb-4">
             <p className="font-display font-bold text-sm text-stone-900">Your Loan Offer</p>
-            <span className="text-[10px] bg-brand-600 text-white px-2 py-0.5 rounded-full font-semibold">LIVE</span>
+            <span className="text-[10px] bg-charcoal text-white px-2 py-0.5 rounded-full font-semibold">LIVE</span>
           </div>
 
           {/* Primary figure */}
@@ -350,21 +350,21 @@ export function GoldLoanApplication() {
             {repayType === 'emi' && (
               <>
                 <p className="text-xs text-stone-500 mb-1">Monthly EMI</p>
-                <p className="font-display font-black text-4xl text-brand-600">{fmt(emiResult.monthlyPayment)}</p>
+                <p className="font-display font-black text-4xl text-stone-950 numeric-hero">{fmt(emiResult.monthlyPayment)}</p>
                 <p className="text-xs text-stone-400 mt-1">for {tenure} months</p>
               </>
             )}
             {repayType === 'interest_only' && (
               <>
                 <p className="text-xs text-stone-500 mb-1">Monthly Interest Payment</p>
-                <p className="font-display font-black text-4xl text-brand-600">{fmt(emiResult.monthlyPayment)}</p>
+                <p className="font-display font-black text-4xl text-stone-950 numeric-hero">{fmt(emiResult.monthlyPayment)}</p>
                 <p className="text-xs text-stone-400 mt-1">+ {fmt(emiResult.bulletPayment)} principal at month {tenure}</p>
               </>
             )}
             {repayType === 'bullet' && (
               <>
                 <p className="text-xs text-stone-500 mb-1">Due at End (Month {tenure})</p>
-                <p className="font-display font-black text-4xl text-brand-600">{fmt(emiResult.bulletPayment)}</p>
+                <p className="font-display font-black text-4xl text-stone-950 numeric-hero">{fmt(emiResult.bulletPayment)}</p>
                 <p className="text-xs text-stone-400 mt-1">No monthly payments during tenure</p>
               </>
             )}
@@ -546,7 +546,7 @@ export function GoldLoanApplication() {
                     onClick={() => setScheduleLimit(emiResult.schedule.length)}
                     className="w-full text-xs text-brand-600 font-medium py-2.5 hover:bg-stone-50"
                   >
-                    Show all {emiResult.schedule.length} payments ↓
+                    Show all {emiResult.schedule.length} payments
                   </button>
                 )}
                 <div className="grid grid-cols-4 gap-1 px-3 py-2.5 bg-brand-50 border-t border-brand-200">
@@ -620,7 +620,7 @@ export function GoldLoanApplication() {
                       roiResult.roiPaPct <= deal.roi_max_pct ? 'text-emerald-600' : 'text-amber-600',
                     )}>
                       {roiResult.roiPaPct <= deal.roi_max_pct
-                        ? `✓ Your offer (${fmtPct(roiResult.roiPaPct)}) is within scheme range`
+                        ? `Your offer (${fmtPct(roiResult.roiPaPct)}) is within scheme range`
                         : `Your rate (${fmtPct(roiResult.roiPaPct)}) — verify at branch`
                       }
                     </p>
@@ -646,7 +646,7 @@ export function GoldLoanApplication() {
       </div>
 
       {/* Sticky CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-5 pb-6 pt-4 bg-white/90 backdrop-blur-sm border-t border-stone-200">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-5 pb-6 pt-4 bg-white/90 backdrop-blur-xl border-t border-stone-200/80">
         <div className="flex items-center justify-between mb-3 text-xs text-stone-500">
           <span>Loan <span className="font-bold text-stone-800">{fmt(loanAmount)}</span></span>
           <span>ROI <span className="font-bold text-brand-600">{fmtPct(roiResult.roiPaPct)}</span></span>

@@ -410,7 +410,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
 
       {status === 'idle' && (
         <div className="space-y-3">
-          <div className="camera-viewport flex items-center justify-center bg-black rounded-3xl">
+          <div className="camera-viewport flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 rounded-full border-2 border-gold-400 border-t-transparent animate-spin" />
               <p className="text-sm text-white/50">Starting camera…</p>
@@ -418,13 +418,13 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
           </div>
           <button id={`demo-capture-${type}`} onClick={useDemoCapture}
             className="w-full py-2.5 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5">
-            ⚡ TenzorX Hackathon Demo
+            Use Demo Capture
           </button>
         </div>
       )}
 
       {status === 'starting' && (
-        <div className="camera-viewport flex items-center justify-center bg-black rounded-3xl">
+        <div className="camera-viewport flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 rounded-full border-2 border-gold-400 border-t-transparent animate-spin" />
             <p className="text-sm text-white/50">Starting camera…</p>
@@ -435,7 +435,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
       <div className="relative" style={{ display: isLive ? 'block' : 'none' }}>
         {/* Tap-to-focus overlay */}
         <div
-          className="camera-viewport rounded-3xl overflow-hidden bg-black relative cursor-crosshair"
+          className="camera-viewport relative cursor-crosshair"
           onClick={!isVideo && !isAudio ? tapToFocus : undefined}
         >
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-black" style={{ display: 'block' }} />
@@ -491,7 +491,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
             <div className="absolute top-3 left-3">
               <div className={clsx('text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm',
                 quality.ok ? 'bg-emerald-500/70 text-white' : 'bg-red-500/70 text-white')}>
-                {quality.ok ? '✓ Good' : quality.reasons[0]}
+                {quality.ok ? 'Good' : quality.reasons[0]}
               </div>
             </div>
           )}
@@ -536,20 +536,20 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
               )
             ) : (
               <button id={`capture-${type}`} onClick={capture}
-                className="w-20 h-20 rounded-full border-4 flex items-center justify-center shadow-lg transition-all bg-white border-brand-400/40 active:scale-90 shadow-brand">
-                <div className="w-14 h-14 rounded-full bg-white" />
+                className="w-20 h-20 rounded-full border-[6px] flex items-center justify-center transition-all bg-white/95 border-white/35 active:scale-90 shadow-[0_14px_36px_rgba(184,82,42,0.32)]">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-800" />
               </button>
             )}
           </div>
           <button id={`demo-capture-live-${type}`} onClick={useDemoCapture}
             className="px-4 py-1.5 text-[11px] font-semibold text-brand-400 hover:text-brand-300 transition-colors border border-brand-500/20 rounded-full hover:border-brand-500/40 hover:bg-brand-500/5">
-            ⚡ TenzorX Hackathon Demo
+            Use Demo Capture
           </button>
         </div>
       </div>
 
       {status === 'error' && (
-        <div className="camera-viewport flex flex-col items-center justify-center gap-4 bg-red-500/5 border border-red-500/20 rounded-3xl p-6">
+        <div className="camera-viewport flex flex-col items-center justify-center gap-4 p-6">
           <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
             <CameraIcon className="w-6 h-6 text-red-400" strokeWidth={1.8} />
           </div>
@@ -567,7 +567,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
             <button id={`camera-retry-${type}`} onClick={() => startCamera(currentFacing)} className="w-full btn-primary">Retry Camera</button>
             <button id={`demo-capture-error-${type}`} onClick={useDemoCapture}
               className="w-full py-2.5 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5">
-              ⚡ TenzorX Hackathon Demo
+              Use Demo Capture
             </button>
           </div>
         </div>
@@ -578,7 +578,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
           {isVideo ? (
             <video src={capturedUrl} controls className="w-full rounded-3xl" playsInline />
           ) : isAudio ? (
-            <div className="camera-viewport flex flex-col items-center justify-center gap-4 bg-ink-800 rounded-3xl border border-emerald-500/20">
+            <div className="camera-viewport flex flex-col items-center justify-center gap-4 border border-emerald-500/20">
               <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
                 <Music className="w-7 h-7 text-emerald-400" strokeWidth={1.8} />
               </div>
@@ -595,7 +595,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
             <button id={`retake-${type}`} onClick={retake} className="w-full btn-secondary text-sm">Retake</button>
             <button id={`demo-capture-done-${type}`} onClick={useDemoCapture}
               className="w-full py-2 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5">
-              ⚡ TenzorX Hackathon Demo
+              Use Demo Capture
             </button>
           </div>
         </div>

@@ -2,6 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { Home } from './pages/Home'
 import { LanguagePicker } from './pages/LanguagePicker'
 import { Auth } from './pages/Auth'
+import { Register } from './pages/Register'
+import { Login } from './pages/Login'
+import { Tutorial } from './pages/Tutorial'
 import { Profile } from './pages/Profile'
 import { Welcome } from './pages/Welcome'
 import { Consent } from './pages/Consent'
@@ -15,7 +18,6 @@ import { Processing } from './pages/Processing'
 import { Result } from './pages/Result'
 import { FinalEvaluation } from './pages/FinalEvaluation'
 import { GoldLoanApplication } from './pages/GoldLoanApplication'
-import { Dashboard } from './pages/Dashboard'
 import { DashboardHome } from './pages/DashboardHome'
 import { DashboardDetail } from './pages/DashboardDetail'
 import { FieldAgent } from './pages/FieldAgent'
@@ -30,15 +32,27 @@ function ProfileShortcut() {
   const navigate = useNavigate()
   const location = useLocation()
   const { state } = useSessionStore()
-  if (!state.authToken || location.pathname === '/profile' || location.pathname === '/auth') return null
+  const hiddenRoutes = new Set([
+    '/',
+    '/auth',
+    '/register',
+    '/login',
+    '/profile',
+    '/welcome',
+    '/consent',
+    '/setup',
+    '/dashboard-home',
+    '/gold-loan-app',
+  ])
+  if (!state.authToken || hiddenRoutes.has(location.pathname)) return null
   return (
     <button
       onClick={() => navigate('/profile', { state: { from: location.pathname } })}
-      className="fixed right-4 top-4 z-[200] h-10 w-10 rounded-full border border-stone-200 bg-white/95 shadow-lg backdrop-blur flex items-center justify-center"
+      className="absolute right-4 top-4 z-[200] h-10 w-10 rounded-2xl border border-stone-200/80 bg-white/90 shadow-sm backdrop-blur-xl flex items-center justify-center"
       aria-label="Open profile"
     >
       {state.userProfile?.profile_photo_url
-        ? <img src={state.userProfile.profile_photo_url} className="h-full w-full rounded-full object-cover" alt="" />
+        ? <img src={state.userProfile.profile_photo_url} className="h-full w-full rounded-2xl object-cover" alt="" />
         : <UserRound className="h-4 w-4 text-stone-600" />}
     </button>
   )
@@ -47,12 +61,15 @@ function ProfileShortcut() {
 function App() {
   return (
     <BrowserRouter>
-      <div className="max-w-md mx-auto relative w-full" style={{ height: '100dvh' }}>
+      <div className="app-shell">
         <ProfileShortcut />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/language" element={<LanguagePicker />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/tutorial" element={<Tutorial />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/consent" element={<Consent />} />
@@ -68,9 +85,9 @@ function App() {
           <Route path="/result" element={<Result />} />
           <Route path="/final-eval" element={<FinalEvaluation />} />
           <Route path="/gold-loan-app" element={<GoldLoanApplication />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard-home" element={<DashboardHome />} />
-          <Route path="/dashboard/session/:id" element={<DashboardDetail />} />
+          <Route path="/dashboard-home/session/:id" element={<DashboardDetail />} />
+          <Route path="/chatbot" element={<Navigate to="/dashboard-home" replace />} />
           <Route path="/agent" element={<FieldAgent />} />
           <Route path="/confirmation" element={<Confirmation />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -118,7 +118,7 @@ export function Consent() {
       </div>
 
       {/* Actions */}
-      <div className="px-5 pb-6 pt-4 border-t border-stone-200 space-y-3">
+      <div className="px-5 pb-6 pt-4 sticky-action space-y-3">
         <button
           id="consent-accept"
           onClick={accept}

@@ -207,7 +207,7 @@ export function CertificateScan() {
   const billMatch = getBillMatchStatus(data, scannedHallmarkHuid)
 
   return (
-    <div className="page overflow-y-auto no-scrollbar animate-slide-up bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
+    <div className="page app-page-bg overflow-y-auto no-scrollbar animate-slide-up">
       {/* Tutorial overlay */}
       {showTutorial && (
         <TutorialOverlay
@@ -230,10 +230,10 @@ export function CertificateScan() {
       </div>
 
       <div className="px-5 pb-6 pt-4 space-y-4">
-        <div className="card p-4 border-stone-200 bg-white">
+        <div className="surface-panel rounded-3xl p-4">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gold-50 border border-gold-200 flex items-center justify-center flex-shrink-0">
-              <FileText className="w-5 h-5 text-gold-700" strokeWidth={1.9} />
+            <div className="w-11 h-11 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-5 h-5 text-brand-600" strokeWidth={1.9} />
             </div>
             <div className="min-w-0">
               <h1 className="font-display font-bold text-base leading-tight text-stone-900">
@@ -249,7 +249,7 @@ export function CertificateScan() {
 
         {!capturedUrl && (
           <>
-            <div className="card overflow-hidden">
+            <div className="scan-panel rounded-3xl overflow-hidden p-2">
               <Camera
                 key={cameraKey}
                 type="certificate"
@@ -271,7 +271,7 @@ export function CertificateScan() {
         )}
 
         {capturedUrl && (
-          <div className="card p-3">
+          <div className="surface-panel rounded-3xl p-3">
             <img src={capturedUrl} alt="Captured bill or certificate" className="w-full rounded-xl border border-stone-200 object-contain max-h-80 bg-stone-50" />
             <button onClick={retake} className="btn-secondary w-full mt-3 text-sm">
               <RotateCcw className="w-4 h-4" />
@@ -281,7 +281,7 @@ export function CertificateScan() {
         )}
 
         {status === 'scanning' && (
-          <div className="card p-4 flex items-center gap-3">
+          <div className="surface-panel rounded-3xl p-4 flex items-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-brand-600" />
             <div>
               <p className="text-sm font-semibold text-stone-800">Reading document</p>
@@ -297,7 +297,7 @@ export function CertificateScan() {
         )}
 
         {data && (
-          <div className="card p-4">
+          <div className="surface-panel rounded-3xl p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="font-display font-semibold text-sm text-stone-900">Extracted Details</p>
               <span className={clsx(
@@ -343,14 +343,14 @@ export function CertificateScan() {
           </div>
         )}
 
-        <div className="rounded-xl bg-stone-50 border border-stone-200 px-4 py-3 flex items-start gap-2">
+        <div className="rounded-2xl bg-white/70 border border-stone-200/80 px-4 py-3 flex items-start gap-2">
           <ShieldCheck className="w-4 h-4 text-stone-400 flex-shrink-0 mt-0.5" />
           <p className="text-[10px] text-stone-500 leading-relaxed">
             A matching bill for this same jewellery is treated as ground-truth evidence for printed purity and net weight before physical verification.
           </p>
         </div>
 
-        <div className="sticky bottom-0 w-full px-5 pb-6 pt-4 bg-white/90 backdrop-blur-sm border-t border-stone-200 space-y-3">
+        <div className="w-full px-5 pb-6 pt-4 sticky-action space-y-3">
           <button onClick={useExtracted} disabled={!hasUsefulData} className={clsx('btn-primary w-full', !hasUsefulData && 'opacity-50 cursor-not-allowed')}>
             <BadgeCheck className="w-5 h-5" />
             Use Scanned Details
