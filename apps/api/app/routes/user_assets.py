@@ -25,6 +25,16 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
+def _detect_asset_source(upload: dict) -> str:
+    public_url = upload.get("public_url") or ""
+    storage_path = upload.get("storage_path") or ""
+    if "res.cloudinary.com" in public_url or storage_path.startswith("poona-wala/"):
+        return "cloudinary"
+    if "supabase" in public_url or storage_path.startswith(("users/", "sessions/")):
+        return "supabase"
+    return "cloudinary" if public_url else "supabase"
+
+
 class AssetResponse(BaseModel):
     id: int
     session_id: Optional[str]
@@ -151,7 +161,7 @@ async def upload_asset(
         session_id=session_id,
         asset_kind=asset_kind,
         frame_type=frame_type,
-        source="supabase" if "supabase" in (upload.get("public_url") or "") else "cloudinary",
+        source=_detect_asset_source(upload),
         cloudinary_public_id=upload.get("storage_path"),
         public_url=upload.get("public_url"),
         content_sha256=meta.sha256,
@@ -196,7 +206,9 @@ async def _read_asset_bytes(asset: UserAsset) -> bytes:
         except Exception as exc:
             logger.warning("public asset fetch failed asset=%s: %s", asset.id, exc)
 
-    if asset.source == "supabase" and asset.cloudinary_public_id:
+    storage_path = asset.cloudinary_public_id or ""
+    looks_like_supabase_path = storage_path.startswith(("users/", "sessions/"))
+    if asset.cloudinary_public_id and (asset.source == "supabase" or looks_like_supabase_path):
         supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
         service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
         bucket = os.getenv("SUPABASE_STORAGE_BUCKET", "jewelry-captures").strip() or "jewelry-captures"
@@ -205,6 +217,15 @@ async def _read_asset_bytes(asset: UserAsset) -> bytes:
             headers = {"Authorization": f"Bearer {service_key}", "apikey": service_key}
             async with httpx.AsyncClient(timeout=20) as client:
                 response = await client.get(url, headers=headers)
+            if response.status_code == 200 and response.content:
+                return response.content
+
+    if asset.source == "cloudinary" and storage_path:
+        cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+        if cloud_name:
+            url = f"https://res.cloudinary.com/{cloud_name}/image/upload/{storage_path}"
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.get(url)
             if response.status_code == 200 and response.content:
                 return response.content
 
@@ -352,8 +373,8 @@ async def delete_asset(
     if asset.user_id != user.id:
         raise HTTPException(status_code=403, detail="not_your_asset")
 
-    # Delete from Cloudinary first
-    if asset.cloudinary_public_id:
+    # Delete from Cloudinary first. Supabase paths are kept out of Cloudinary deletion.
+    if asset.cloudinary_public_id and not asset.cloudinary_public_id.startswith(("users/", "sessions/")):
         deleted = await delete_image(asset.cloudinary_public_id)
         if not deleted:
             logger.warning(
