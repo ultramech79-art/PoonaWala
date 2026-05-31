@@ -18,7 +18,7 @@
   }
 
   body {
-    @apply bg-[#FFF9F9] text-stone-900 font-sans;
+    @apply bg-[#FBFBFA] text-stone-900 font-sans;
     font-feature-settings: 'kern' 1, 'liga' 1;
     -webkit-font-smoothing: antialiased;
     width: 100%;
@@ -50,7 +50,7 @@
 
   /* ── PAGE SHELLS ── */
   .page {
-    @apply flex flex-col bg-[#FFF9F9];
+    @apply flex flex-col bg-[#FBFBFA];
     padding-top: max(0px, var(--safe-top));
     padding-bottom: max(0px, var(--safe-bottom));
     flex: 1;

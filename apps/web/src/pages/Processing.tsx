@@ -427,76 +427,79 @@ export function Processing() {
   }, [state.lang, facts.length])
 
   return (
-    <div className="page items-center justify-center animate-fade-in relative bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30">
-      {/* Premium gradient overlays */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-brand-600/5 blur-3xl" />
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-gradient-to-br from-brand-400/15 via-amber-400/10 to-transparent blur-3xl" />
-        <div className="absolute top-20 left-0 w-64 h-64 rounded-full bg-gradient-to-r from-blue-300/5 to-transparent blur-3xl" />
-        <div className="absolute top-1/3 right-0 w-80 h-80 rounded-full bg-gradient-to-l from-amber-300/5 to-transparent blur-3xl" />
-      </div>
+    <div className="page flex flex-col items-center justify-center bg-[#FBFBFA] animate-fade-in relative min-h-screen">
+      
+      <div className="flex flex-col items-center px-6 sm:px-8 text-center w-full max-w-lg relative z-10 space-y-8">
+        
+        {/* Typographic Header & Facts */}
+        <div className="space-y-4">
+          <h1 className="font-display font-bold text-[28px] sm:text-3xl text-[#111111] tracking-tight leading-tight">
+            {done ? t('processing_complete') : t('processing_analysing')}
+          </h1>
+          
+          <div className="min-h-[4rem] flex items-start justify-center">
+            <p 
+              key={activeFact} 
+              className="text-[15px] sm:text-base text-[#787774] leading-relaxed animate-fade-in text-balance font-medium"
+            >
+              {done ? t('processing_note') : facts[activeFact]}
+            </p>
+          </div>
+        </div>
 
-      <div className="flex flex-col items-center px-8 text-center w-full relative z-10">
-        {/* Large Premium Loading GIF */}
-        <div className="relative w-48 h-48 sm:w-56 sm:h-56 mb-6">
+        {/* The Coin / Loading Animation (No background container) */}
+        <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center my-4">
           {done ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-[2rem] shadow-xl backdrop-blur-md">
-              <CheckCircle className="w-20 h-20 text-emerald-600 animate-scale-in" />
-            </div>
+            <CheckCircle className="w-16 h-16 text-[#346538] animate-scale-in" />
           ) : (
-            <div className="absolute inset-0 bg-white/40 backdrop-blur-sm rounded-[2rem] shadow-xl border border-white/60 p-4 overflow-hidden flex items-center justify-center">
-              <img 
-                src="/assets/aec8c628-117a-11ee-8c6e-a7ad82812cac.gif" 
-                alt="Analysing..." 
-                className="w-full h-full object-cover mix-blend-multiply drop-shadow-sm scale-110"
-              />
-            </div>
+            <img 
+              src="/assets/aec8c628-117a-11ee-8c6e-a7ad82812cac.gif" 
+              alt="Analysing..." 
+              className="w-full h-full object-contain mix-blend-multiply opacity-90"
+              style={{ filter: 'contrast(1.1) saturate(1.1)' }}
+            />
           )}
         </div>
 
-        <h1 className="font-display font-bold text-2xl sm:text-3xl text-stone-900 mb-6 drop-shadow-sm">
-          {done ? t('processing_complete') : t('processing_analysing')}
-        </h1>
-        
-        {/* Facts Card */}
-        <div className="w-full max-w-sm mb-10 min-h-[5rem] flex items-center justify-center p-4 rounded-2xl bg-white/60 border border-white/80 shadow-sm backdrop-blur-md">
-          <p 
-            key={activeFact} 
-            className="text-sm font-medium text-stone-600 leading-relaxed animate-fade-in text-balance"
-          >
-            {done ? t('processing_note') : facts[activeFact]}
-          </p>
+        {/* Minimalist Checklist */}
+        <div className="w-full max-w-sm mt-4">
+          <div className="flex flex-col space-y-4 text-left">
+            {STEPS.map(({ label }, i) => {
+              const isPast = i < activeStep
+              const isCurrent = i === activeStep
+              
+              return (
+                <div
+                  key={label}
+                  className={`flex items-center gap-4 transition-all duration-500 ease-out ${
+                    i <= activeStep ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+                  }`}
+                >
+                  <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                    {isPast ? (
+                      <CheckCircle className="w-4.5 h-4.5 text-[#346538]" strokeWidth={2.5} />
+                    ) : isCurrent ? (
+                      <div className="w-2 h-2 rounded-full bg-[#111111] animate-pulse" />
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-[#EAEAEA]" />
+                    )}
+                  </div>
+                  <p className={`text-[14px] font-medium transition-colors duration-300 ${
+                    isPast ? 'text-[#111111]' : 
+                    isCurrent ? 'text-[#111111]' : 
+                    'text-[#787774]'
+                  }`}>
+                    {label}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Step checklist */}
-        <div className="w-full max-w-xs space-y-3 p-5 rounded-2xl bg-white/40 border border-white/50 backdrop-blur-sm">
-          {STEPS.map(({ label }, i) => (
-            <div
-              key={label}
-              className={`flex items-center gap-3 transition-all duration-300 ${i <= activeStep ? 'opacity-100' : 'opacity-30'}`}
-            >
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-                i < activeStep ? 'bg-emerald-600' :
-                i === activeStep ? 'bg-brand-600 animate-pulse' :
-                'bg-stone-200'
-              }`}>
-                {i < activeStep
-                  ? <CheckCircle className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                  : i === activeStep
-                    ? <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                    : null
-                }
-              </div>
-              <p className={`text-sm transition-colors duration-300 ${i <= activeStep ? 'text-stone-900' : 'text-stone-400'}`}>
-                {label}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Trust line */}
-        <div className="mt-10 flex items-center gap-2 text-xs text-stone-400">
-          <Lock className="w-3.5 h-3.5" />
+        {/* Trust Indicator */}
+        <div className="pt-8 flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#787774]">
+          <Lock className="w-3 h-3" />
           <span>{t('consent_secure')}</span>
         </div>
       </div>
