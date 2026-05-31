@@ -42,7 +42,7 @@ export function Consent() {
     } finally {
       setLoading(false)
       setConsent()
-      navigate(state.authToken ? '/setup' : '/otp')
+      navigate(state.authToken ? '/dashboard-home' : '/otp')
     }
   }
 
