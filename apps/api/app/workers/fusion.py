@@ -265,8 +265,8 @@ def _build_result(
     volume_high = float(weight_context.get("volume_high_cm3") or 0.0)
     if volume_mid > 0:
         est_weight = volume_mid * density_point.mid
-        vision_lo = (volume_low or volume_mid * 0.75) * density_band.low
-        vision_hi = (volume_high or volume_mid * 1.35) * density_band.high
+        vision_lo = (volume_low if volume_low > 0 else volume_mid * 0.75) * density_band.low
+        vision_hi = (volume_high if volume_high > 0 else volume_mid * 1.35) * density_band.high
     else:
         vision_lo = float(weight_context.get("estimated_weight_low_g") or est_weight * 0.78)
         vision_hi = float(weight_context.get("estimated_weight_high_g") or est_weight * 1.30)
