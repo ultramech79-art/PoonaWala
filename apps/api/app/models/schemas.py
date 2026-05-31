@@ -92,6 +92,10 @@ class AssessRequest(BaseModel):
     reference_object: str = Field("rs10_coin", min_length=1)
     lang: str = Field("en", min_length=2, max_length=10)
     device_metadata: Optional[dict] = None
+    bill_data: Optional[dict] = Field(
+        default=None,
+        description="Output from /certificate-ocr for this session's bill or certificate, if available.",
+    )
 
 
 # ─── Signal worker result ──────────────────────────────────────────────────────
