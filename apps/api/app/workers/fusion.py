@@ -105,7 +105,12 @@ def extract_features(signals: dict[str, Any]) -> dict[str, float]:
     graph_anomaly_score = float(s12.get("graph_anomaly_score", 0.0))
 
     return {
-        "huid_verified":           1.0 if s1.get("purity_mark") is not None else 0.0,
+        # huid_verified must require an actual detected HUID CODE — NOT merely a
+        # purity/karat mark. s1.purity_mark is a colour-based karat guess that is
+        # almost always non-null, so keying off it flagged huid_verified=true even
+        # when no HUID exists. A genuine BIS verification happens in the frontend
+        # HUID verifier; this backend flag now only reflects a read HUID code.
+        "huid_verified":           1.0 if s1.get("huid_code") else 0.0,
         "ocr_confidence":          float(signals.get("s1_conf", 0.5)),
         "hallmark_quality_score":  float(s2.get("hallmark_quality_score", 0.5)),
         "coin_detected":           1.0 if s5.get("coin_detected") else 0.0,

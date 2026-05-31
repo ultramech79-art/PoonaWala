@@ -36,7 +36,8 @@ async def client():
 
 def test_extract_features_returns_all_columns():
     signals = {
-        "s1": {"purity_mark": "22K916", "stamp_appearance": "laser_engraved"},
+        # A genuine HUID code present → huid_verified must be 1.0.
+        "s1": {"purity_mark": "22K916", "huid_code": "AB1234", "stamp_appearance": "laser_engraved"},
         "s1_conf": 0.9,
         "s2": {"hallmark_quality_score": 0.92},
         "s5": {"coin_detected": True, "jewelry_area_px2": 42000},
@@ -55,6 +56,22 @@ def test_extract_features_returns_all_columns():
     assert features["huid_verified"] == 1.0
     assert features["coin_detected"] == 1.0
     assert features["weight_method_hybrid"] == 1.0
+
+
+def test_huid_verified_requires_huid_code_not_just_purity_mark():
+    """Regression: a detected purity/karat MARK alone must NOT flag huid_verified.
+    Only an actual detected HUID code counts (real verification is the BIS step)."""
+    # purity mark present but NO huid_code → not verified
+    features_mark_only = extract_features({"s1": {"purity_mark": "22K916", "huid_code": None}})
+    assert features_mark_only["huid_verified"] == 0.0
+
+    # huid_code present → verified
+    features_with_code = extract_features({"s1": {"purity_mark": "22K916", "huid_code": "AB1234"}})
+    assert features_with_code["huid_verified"] == 1.0
+
+    # nothing → not verified
+    features_empty = extract_features({"s1": {}})
+    assert features_empty["huid_verified"] == 0.0
 
 
 def test_fuse_heuristic_returns_valid_bands():

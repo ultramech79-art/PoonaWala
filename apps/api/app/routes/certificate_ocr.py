@@ -119,9 +119,32 @@ def _normalize_result(raw: dict) -> CertificateOCRResponse:
     notes = raw.get("notes") if isinstance(raw.get("notes"), list) else []
 
     # HUID: must be exactly 6 alphanumeric characters and not purely numeric (HSN codes are numeric).
-    raw_huid = str(raw.get("huid")).strip().upper() if raw.get("huid") else None
+    raw_huid_input = raw.get("huid")
+    # Clean separators/spaces the model may include ("AB 1234" / "AB-1234") before validating.
+    raw_huid = re.sub(r"[^A-Za-z0-9]", "", str(raw_huid_input)).upper() if raw_huid_input else None
     huid_explicit = bool(raw_huid and _HUID_RE.match(raw_huid) and not raw_huid.isdigit())
     huid_val = raw_huid if huid_explicit else None
+
+    logger.info(
+        "certificate_ocr normalized: huid_raw=%r -> huid=%s (explicit=%s) | karat=%s weight_g=%s | "
+        "item=%r bill_no=%r jeweller=%r date=%r | authenticity=%s confidence=%.2f",
+        raw_huid_input,
+        huid_val,
+        huid_explicit,
+        karat,
+        weight,
+        raw.get("item_description"),
+        raw.get("bill_number"),
+        raw.get("jeweller_name"),
+        raw.get("purchase_date"),
+        bool(raw.get("authenticity_found")),
+        max(0.0, min(1.0, confidence)),
+    )
+    if raw_huid and not huid_explicit:
+        logger.info(
+            "certificate_ocr HUID rejected (not a 6-char BIS HUID — likely HSN/tariff code): %r",
+            raw_huid,
+        )
 
     return CertificateOCRResponse(
         authenticity_found=bool(raw.get("authenticity_found")),

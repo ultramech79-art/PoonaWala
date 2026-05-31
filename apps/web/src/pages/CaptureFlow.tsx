@@ -287,12 +287,24 @@ export function CaptureFlow() {
       }
 
       if (currentStepConfig.type === 'macro') {
-        const detectedHuid = typeof result.detected?.huid_code === 'string'
-          ? result.detected.huid_code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
+        // The backend normalizes karat_numeric / huid_code for macro frames
+        // (gemini.py::_normalize_macro_detected) and also returns boolean
+        // huid_detected / karat_detected flags. We still defensively re-parse.
+        const detected = result.detected ?? {}
+        const detectedHuid = typeof detected.huid_code === 'string'
+          ? detected.huid_code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
           : ''
-        const detectedKarat = typeof result.detected?.karat_numeric === 'number'
-          ? result.detected.karat_numeric
+        const detectedKarat = typeof detected.karat_numeric === 'number'
+          ? detected.karat_numeric
           : null
+
+        console.group('%c[CaptureFlow] MACRO hallmark detection', 'color:#b8860b;font-weight:bold')
+        console.log('provider/model:', (detected as Record<string, unknown>).provider ?? '(see backend logs)')
+        console.log('raw detected dict:', detected)
+        console.log('huid_code (raw):', detected.huid_code, '| huid_code_raw:', (detected as Record<string, unknown>).huid_code_raw, '| backend huid_detected:', (detected as Record<string, unknown>).huid_detected)
+        console.log('→ parsed detectedHuid:', detectedHuid || '(none)', '| valid 6-char:', detectedHuid.length === 6)
+        console.log('karat_marking:', (detected as Record<string, unknown>).karat_marking, '| karat_numeric:', detected.karat_numeric, '| backend karat_detected:', (detected as Record<string, unknown>).karat_detected)
+        console.log('→ parsed detectedKarat:', detectedKarat ?? '(none)')
 
         if (detectedHuid.length === 6) {
           setHuid(detectedHuid)
@@ -303,6 +315,9 @@ export function CaptureFlow() {
             status: 'PHOTO_DETECTED',
             verified: false,
           })
+          console.log('%c✓ pageEvidence.huid set: source=photo, code=%s (photoHuidEvidence WILL be true)', 'color:green', detectedHuid)
+        } else {
+          console.log('%c✗ No 6-char HUID read from photo → photoHuidEvidence stays false', 'color:#888')
         }
         if (detectedKarat) {
           setScannedKarat(detectedKarat)
@@ -312,7 +327,11 @@ export function CaptureFlow() {
             photoKarat: detectedKarat,
             photoKaratDetected: true,
           })
+          console.log('%c✓ pageEvidence.huid set: photoKaratDetected=true, photoKarat=%sK (photoKaratEvidence WILL be true)', 'color:green', detectedKarat)
+        } else {
+          console.log('%c✗ No karat read from photo → photoKaratEvidence stays false', 'color:#888')
         }
+        console.groupEnd()
       }
 
       setEvals(prev => ({
@@ -825,10 +844,16 @@ export function CaptureFlow() {
                             type="text"
                             value={manualHuid}
                             onChange={e => {
-                              const val = e.target.value.toUpperCase();
+                              const val = e.target.value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
                               setManualHuid(val);
                               setHuid(val || null);
                               setHuidVerifyResult(null);
+                              // Record the typed HUID as an INDEPENDENT (manual) item HUID
+                              // so the bill cross-check can match against it even before
+                              // (or without) BIS verification.
+                              if (val.length === 6) {
+                                setPageEvidence('huid', { code: val, source: 'manual', status: 'MANUAL_ENTRY', verified: false })
+                              }
                             }}
                             placeholder="e.g., A3F2K1"
                             className="input-field font-mono flex-1"

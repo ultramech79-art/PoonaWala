@@ -67,6 +67,27 @@ export function CertificateScan() {
       const optimized = await resizeDataUrl(dataUrl, 1400, 0.82)
       const result = await certificateOcrAPI(optimized, 60000)
       const extracted = toCertificateData(result)
+
+      const billHuidNorm = normalizeBillHuid(extracted.huid)
+      const itemHuidNorm = normalizeBillHuid(state.huidCode)
+      console.group('%c[CertificateScan] BILL / CERTIFICATE OCR', 'color:#0a7;font-weight:bold')
+      console.log('raw OCR result:', result)
+      console.log('extracted → huid:', extracted.huid, '| karat:', extracted.karat, '| weightG:', extracted.weightG, '| confidence:', extracted.confidence)
+      console.log('item description:', extracted.itemDescription, '| jeweller:', extracted.jewellerName, '| bill#:', extracted.billNumber, '| date:', extracted.purchaseDate)
+      console.log('bill HUID (normalized):', billHuidNorm || '(none)')
+      console.log('hallmark/typed HUID captured earlier (normalized):', itemHuidNorm || '(none — capture or type HUID first)')
+      if (billHuidNorm && itemHuidNorm) {
+        console.log(
+          billHuidNorm === itemHuidNorm
+            ? '%c✓ HUID MATCH — bill HUID == item HUID → billHuidMatch WILL be true'
+            : '%c✗ HUID MISMATCH — bill HUID != item HUID → billHuidMismatch WILL be true (fraud signal)',
+          billHuidNorm === itemHuidNorm ? 'color:green;font-weight:bold' : 'color:red;font-weight:bold',
+        )
+      } else {
+        console.log('%c… No HUID cross-check possible (one or both HUIDs missing) → fall back to description/weight/purity', 'color:#888')
+      }
+      console.groupEnd()
+
       setData(extracted)
       setPageEvidence('certificate', {
         skipped: false,
@@ -125,10 +146,26 @@ export function CertificateScan() {
 
   function applyAndContinue(sourceData: CertificateData | null) {
     if (sourceData) {
+      const existingHuid = state.huidCode
+      console.group('%c[CertificateScan] APPLYING bill as certificateData', 'color:#0a7;font-weight:bold')
+      console.log('certificateData.huid:', sourceData.huid, '| existing item huidCode:', existingHuid)
+      console.log('will set item HUID from bill?', Boolean(sourceData.huid && !existingHuid), '(only when no item HUID already captured)')
+      console.log('karat:', sourceData.karat, '| weightG:', sourceData.weightG, '| itemDescription:', sourceData.itemDescription)
+      console.log('→ Confidence scorer will compute billHuidMatch using certificateData.huid vs (huidCode || huidVerification.huid)')
+      console.groupEnd()
       setCertificateData(sourceData)
       if (sourceData.karat) setScannedKarat(sourceData.karat)
       if (sourceData.weightG) setWeight(sourceData.weightG)
-      if (sourceData.huid) setHuid(sourceData.huid)
+      // Do not let the bill overwrite a HUID already captured from the item.
+      // The scorer needs both values so it can detect match vs mismatch.
+      // When the item had NO HUID of its own, we still copy the bill HUID into
+      // huidCode for downstream use — but we tag its source as 'bill' so the
+      // confidence scorer does NOT treat it as an independent item HUID and
+      // produce a meaningless self-match (bill compared against itself).
+      if (sourceData.huid && !existingHuid) {
+        setHuid(sourceData.huid)
+        setPageEvidence('huid', { code: sourceData.huid, source: 'bill', status: 'BILL_OCR', verified: false })
+      }
       setPageEvidence('certificate', {
         skipped: false,
         applied: true,
@@ -329,6 +366,10 @@ export function CertificateScan() {
   )
 }
 
+function normalizeBillHuid(value?: string | null) {
+  return (value ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase()
+}
+
 function getBillMatchStatus(data: CertificateData | null, scannedHallmarkHuid: string | null) {
   if (!data) {
     return {
@@ -338,8 +379,10 @@ function getBillMatchStatus(data: CertificateData | null, scannedHallmarkHuid: s
     }
   }
 
-  if (data.huid && scannedHallmarkHuid) {
-    if (data.huid === scannedHallmarkHuid) {
+  const billHuid = normalizeBillHuid(data.huid)
+  const itemHuid = normalizeBillHuid(scannedHallmarkHuid)
+  if (billHuid && itemHuid) {
+    if (billHuid === itemHuid) {
       return {
         tone: 'good' as const,
         label: 'Same jewellery evidence',

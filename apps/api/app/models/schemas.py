@@ -34,7 +34,7 @@ class LoanOffer(BaseModel):
     band_low_inr: int
     band_high_inr: int
     ltv_applied_pct: int
-    tier: Literal["under_2_5L", "above_2_5L"]
+    tier: Literal["under_2_5L", "2_5L_to_5L", "above_5L"]
 
 class Confidence(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
