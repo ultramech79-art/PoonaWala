@@ -579,14 +579,9 @@ export function WeightEntry() {
                 </div>
               )}
 
-              {result.visualizations.segmentation_mask && !result.visualizations.contour_overlay && (
-                <Visualization title="Jewellery mask" src={result.visualizations.segmentation_mask} />
-              )}
-
-              {result.visualizations.contour_overlay && result.visualizations.segmentation_mask && result.visualizations.depth_map && (
+              {result.visualizations.contour_overlay && result.visualizations.depth_map && (
                 <div className="grid grid-cols-2 gap-3">
                   <Visualization title="Contour and scale" src={result.visualizations.contour_overlay} />
-                  <Visualization title="Segmentation mask" src={result.visualizations.segmentation_mask} />
                   <Visualization title="Depth map" src={result.visualizations.depth_map} />
                   {result.visualizations.scale_visualization && (
                     <Visualization title="Scale detection" src={result.visualizations.scale_visualization} />
