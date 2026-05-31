@@ -221,12 +221,32 @@ let _state: SessionState = {
   loanAppData: null,
 }
 
+// Try to restore session from sessionStorage
+try {
+  const storedSession = sessionStorage.getItem('goldeye_session_state')
+  if (storedSession) {
+    const parsed = JSON.parse(storedSession)
+    // Merge but keep auth state from localStorage as source of truth
+    _state = {
+      ..._state,
+      ...parsed,
+      authToken: storedToken,
+      userProfile: JSON.parse(storedProfile || 'null'),
+    }
+  }
+} catch (e) {
+  console.warn('Failed to restore session state', e)
+}
+
 type Listener = () => void
 const listeners = new Set<Listener>()
 
 function getState() { return _state }
 function setState(patch: Partial<SessionState>) {
   _state = { ..._state, ...patch }
+  try {
+    sessionStorage.setItem('goldeye_session_state', JSON.stringify(_state))
+  } catch (e) {}
   listeners.forEach(l => l())
 }
 
