@@ -30,3 +30,8 @@ goldeye.db
 test_venv/
 *.log
 
+
+.agents/
+skills-lock.json
+apps/api/app/tutorial_videos/
+apps/ring_audio/
