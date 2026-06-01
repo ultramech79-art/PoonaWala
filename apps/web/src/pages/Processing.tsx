@@ -305,6 +305,7 @@ function buildConfidenceReasoning(
   if (evidence.billHuidMismatch) cautions.push('bill HUID did not match the item HUID')
   if (evidence.sameItemMismatch) cautions.push('different-item signal was detected')
   if (evidence.hardMetalTrigger) cautions.push('visual metal warning was detected')
+  if (evidence.audioPlated) cautions.push('the tap test hinted at possible plating (not conclusive) — manual agent verification is recommended')
   if (!evidence.photoHuidEvidence && !evidence.photoKaratEvidence && !evidence.huidVerified) {
     cautions.push('hallmark identity could not be strongly verified')
   }
