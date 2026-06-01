@@ -479,7 +479,7 @@ export function WeightEntry() {
             <ChevronRight className="w-3.5 h-3.5 rotate-180" />
           </button>
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Step 8 of 8</span>
+            <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Weight Estimate</span>
             <span className="text-base font-bold text-stone-950 tracking-tight">Jewellery Weight</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -567,7 +567,7 @@ export function WeightEntry() {
           <ChevronRight className="w-3.5 h-3.5 rotate-180" />
         </button>
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Step 8 of 8</span>
+          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Weight Estimate</span>
           <span className="text-base font-bold text-stone-950 tracking-tight">AI Weight</span>
         </div>
         <div className="flex items-center gap-1.5">
