@@ -213,6 +213,7 @@ export interface AssessmentResult {
   reasoning_text: { lang: string; text: string }
   xai: {
     gradcam_url: string | null
+    gradcam_urls?: Partial<Record<CaptureType, string>>
     shap_top_features: SHAPFeature[]
     counterfactual: string | null
   }

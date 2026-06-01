@@ -162,6 +162,19 @@ export function assessAPI(req: AssessRequest): Promise<AssessmentResult> {
   return post('/api/assess', payload)
 }
 
+export interface GradcamMapsRequest {
+  session_id: string
+  frames: Partial<Record<'45deg' | 'top' | 'side' | 'macro', string>>
+}
+
+export interface GradcamMapsResponse {
+  gradcam_urls: Partial<Record<'45deg' | 'top' | 'side' | 'macro', string>>
+}
+
+export function generateGradcamMapsAPI(req: GradcamMapsRequest): Promise<GradcamMapsResponse> {
+  return post('/api/xai/gradcam', req, 30000)
+}
+
 export interface FrameEvalResult {
   approved: boolean
   quality_score: number

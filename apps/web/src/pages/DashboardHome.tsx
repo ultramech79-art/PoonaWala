@@ -6,8 +6,8 @@ import {
   ChevronRight, ChevronDown, TrendingUp, TrendingDown,
   Sparkles, Shield, FileCheck, Clock, Zap, Percent,
   Scale, IndianRupee, Award, BadgeCheck, LayoutDashboard,
-  UserRound, Landmark, Phone, MessageCircle, MapPin,
-  Bell, BookOpen, Headphones, CalendarDays, CheckCircle2,
+  UserRound, Landmark, Phone, BotMessageSquare, MapPin,
+  Bell, BookOpen, Headphones,
   CircleHelp,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -153,8 +153,10 @@ const QUICK_ACTIONS = [
   { id: 'evaluations', Icon: LayoutDashboard, title: 'My Evaluations', subtitle: 'View past results' },
   { id: 'guide', Icon: BookOpen, title: 'Loan Guide', subtitle: 'Gold loan terms' },
   { id: 'branch', Icon: MapPin, title: 'Branch Locator', subtitle: 'Nearest branch' },
-  { id: 'support', Icon: Headphones, title: 'Support', subtitle: 'Call or WhatsApp' },
+  { id: 'support', Icon: Headphones, title: 'Support', subtitle: 'Call or chatbot' },
 ]
+
+const POONAWALLA_BRANCH_LOCATOR_URL = 'https://poonawallafincorp.com/gold-loan-branch-locator'
 
 const HERO_AD_SLIDES = [
   {
@@ -203,15 +205,6 @@ const HERO_AD_SLIDES = [
     ],
   },
 ]
-
-const RECENT_EVALUATION = {
-  title: 'Gold Ring',
-  meta: '22K · 5.12 g',
-  date: '2 days ago',
-  eligibleLoan: '₹1,82,000',
-  status: 'Completed',
-  image: '/assets/hero/gold-rings-texture.jpg',
-}
 
 const FAQ_ITEMS = [
   {
@@ -270,27 +263,6 @@ const ESSENTIAL_TILE_SUMMARY: Record<string, string> = {
   interest: 'From 11% p.a.',
   tenure: '3 - 36 months',
   security: 'Insured vault',
-}
-
-function NearestBranchPill() {
-  return (
-    <div id="branch-location" className="mx-5 mt-4">
-      <button
-        type="button"
-        className="branch-pill active:scale-[0.98] transition-transform"
-        aria-label="Nearest Poonawalla Fincorp branch"
-      >
-        <span className="branch-pill-icon" aria-hidden>
-          <MapPin className="h-4 w-4" />
-        </span>
-        <span className="min-w-0 text-left">
-          <span className="block text-[9px] font-bold uppercase tracking-[0.08em] text-stone-400">Nearest Branch</span>
-          <span className="block truncate text-xs font-display font-black text-stone-950">Pune - FC Road</span>
-        </span>
-        <ChevronRight className="ml-auto h-4 w-4 text-stone-400" aria-hidden />
-      </button>
-    </div>
-  )
 }
 
 function LoanEssentialsPanel() {
@@ -517,61 +489,6 @@ function PoonawallaHeroCarousel({ onStart }: { onStart: () => void }) {
   )
 }
 
-function RecentEvaluationCard({ onOpen }: { onOpen: () => void }) {
-  return (
-    <section className="mx-5 mt-5" aria-labelledby="recent-evaluation-heading">
-      <div className="dashboard-bottom-card p-3.5">
-        <SectionHeader
-          id="recent-evaluation-heading"
-          title="Recent Evaluation"
-          actionLabel="View All"
-          onAction={onOpen}
-        />
-
-        <button
-          type="button"
-          onClick={onOpen}
-          className="recent-evaluation-row mt-3 w-full active:scale-[0.985] transition-transform"
-          aria-label="Open recent gold ring evaluation"
-        >
-          <img
-            src={RECENT_EVALUATION.image}
-            alt=""
-            className="recent-evaluation-image"
-            draggable={false}
-          />
-
-          <div className="min-w-0 flex-1 text-left">
-            <h3 className="truncate font-display text-sm font-black leading-tight text-stone-950">
-              {RECENT_EVALUATION.title}
-            </h3>
-            <p className="mt-1 text-xs font-semibold text-stone-500">{RECENT_EVALUATION.meta}</p>
-            <p className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-stone-400">
-              <CalendarDays className="h-3.5 w-3.5" aria-hidden />
-              {RECENT_EVALUATION.date}
-            </p>
-          </div>
-
-          <div className="recent-evaluation-divider" aria-hidden />
-
-          <div className="min-w-[6.4rem] text-left">
-            <p className="text-[10px] font-bold text-stone-400">Eligible Loan</p>
-            <p className="mt-1 font-display text-lg font-black leading-none text-stone-950">
-              {RECENT_EVALUATION.eligibleLoan}
-            </p>
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">
-              <CheckCircle2 className="h-3 w-3" aria-hidden />
-              {RECENT_EVALUATION.status}
-            </span>
-          </div>
-
-          <ChevronRight className="h-5 w-5 flex-shrink-0 text-stone-500" aria-hidden />
-        </button>
-      </div>
-    </section>
-  )
-}
-
 function FaqPreviewCard() {
   const [expanded, setExpanded] = useState(false)
   const [openQuestion, setOpenQuestion] = useState<string | null>(null)
@@ -736,11 +653,11 @@ export function DashboardHome() {
       return
     }
     if (id === 'support') {
-      document.getElementById('contact-strip')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      navigate('/chatbot')
       return
     }
     if (id === 'branch') {
-      document.getElementById('branch-location')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      window.location.href = POONAWALLA_BRANCH_LOCATOR_URL
       return
     }
     navigate('/dashboard-home')
@@ -792,9 +709,6 @@ export function DashboardHome() {
 
       {/* ── Scrollable body ─────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto no-scrollbar pb-6" id="main-content" tabIndex={-1}>
-
-        <NearestBranchPill />
-
         {/* ── Hero evaluate card ─────────────────────────────────── */}
         <PoonawallaHeroCarousel onStart={() => navigate('/setup')} />
 
@@ -805,7 +719,6 @@ export function DashboardHome() {
 
         <QuickActions onAction={handleQuickAction} />
 
-        <RecentEvaluationCard onOpen={() => navigate('/my-evaluations')} />
         <LoanEssentialsPanel />
         <FaqPreviewCard />
 
@@ -823,18 +736,20 @@ export function DashboardHome() {
               <p className="text-[10px] text-stone-500 leading-none">1800-103-6444</p>
             </div>
           </a>
-          <a href="https://wa.me/918888888888" target="_blank" rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => navigate('/chatbot')}
             className="flex items-center gap-2.5 px-3.5 py-3 bg-white border border-stone-200 rounded-2xl shadow-card active:scale-95 transition-transform"
-            aria-label="WhatsApp Poonawalla Fincorp"
+            aria-label="Open GoldEye chatbot"
           >
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0" aria-hidden>
-              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+            <div className="w-8 h-8 rounded-xl bg-gold-50 flex items-center justify-center flex-shrink-0" aria-hidden>
+              <BotMessageSquare className="w-3.5 h-3.5 text-gold-800" />
             </div>
-            <div>
-              <p className="text-xs font-bold text-stone-900 leading-none mb-0.5">WhatsApp</p>
-              <p className="text-[10px] text-stone-500 leading-none">Chat with us</p>
+            <div className="text-left">
+              <p className="text-xs font-bold text-stone-900 leading-none mb-0.5">Chatbot</p>
+              <p className="text-[10px] text-stone-500 leading-none">Ask GoldEye</p>
             </div>
-          </a>
+          </button>
         </div>
 
         {/* ── Trust footer ───────────────────────────────────────── */}

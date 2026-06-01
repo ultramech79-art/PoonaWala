@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useSessionStore } from '../store/session'
+import type { CaptureType, CapturedAsset } from '../store/session'
+import { generateGradcamMapsAPI } from '../lib/api'
+import { resizeDataUrl } from '../lib/utils'
 import { useMetalPrices } from '../hooks/useGoldPrice'
 import { computeGoldMarketValue, computeLoanOffer } from '../lib/goldCalc'
 import { BottomSheet } from '../components/ui/BottomSheet'
@@ -11,7 +14,7 @@ import {
   Share2, RefreshCcw, ChevronLeft, ChevronRight,
   Zap, UserCheck, Camera, AlertTriangle, ArrowRight,
   Sparkles, Calculator, ScanLine,
-  IndianRupee,
+  IndianRupee, BadgeCheck, Video,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -59,27 +62,164 @@ function ConfidenceRing({ score }: { score: number }) {
   )
 }
 
-// ── SHAP bar ───────────────────────────────────────────────────
-function ContributionBar({ feature, contribution }: { feature: string; contribution: number }) {
-  const { t } = useTranslation()
-  const pct = Math.min(Math.abs(contribution) * 200, 50)
-  const pos = contribution > 0
-  const labels: Record<string, string> = {
-    huid_verified: t('signal_huid'), plated_solid_score: t('signal_plated_solid'),
-    weight_consistency: t('signal_weight'), hallmark_quality: t('signal_hallmark'),
-    plated_probability: t('signal_plated_prob'), vlm_confidence: t('signal_vlm'),
-  }
-  if (feature === 'audio_solid_prob' || feature === 'video_signal') return null
+const normalizeSignalScore = (value?: number | null) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.max(0, Math.min(1, value > 1 ? value / 100 : value))
+}
+
+type SignalTone = 'strong' | 'medium' | 'weak' | 'missing'
+type AssessmentSignal = {
+  label: string
+  score: number | null
+  source: string
+  detail: string
+  icon: typeof Sparkles
+}
+
+function toneForScore(score: number | null): SignalTone {
+  if (score === null) return 'missing'
+  if (score >= 0.75) return 'strong'
+  if (score >= 0.55) return 'medium'
+  return 'weak'
+}
+
+function SignalConfidenceRow({ signal }: { signal: AssessmentSignal }) {
+  const tone = toneForScore(signal.score)
+  const Icon = signal.icon
+  const fillColor =
+    tone === 'strong' ? 'bg-emerald-600' :
+    tone === 'medium' ? 'bg-gold-500' :
+    tone === 'weak' ? 'bg-brand-600' :
+    'bg-stone-300'
+  const textColor =
+    tone === 'strong' ? 'text-emerald-700' :
+    tone === 'medium' ? 'text-gold-800' :
+    tone === 'weak' ? 'text-brand-700' :
+    'text-stone-400'
+
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-stone-100 last:border-0">
-      <p className="text-[14px] text-stone-600 w-32 flex-shrink-0">{labels[feature] || feature}</p>
-      <div className="flex-1 h-1.5 rounded-full bg-stone-100 relative overflow-hidden">
-        <span className="absolute left-1/2 top-0 h-full w-px bg-stone-200" />
-        <div className={clsx('absolute top-0 h-full rounded-full', pos ? 'bg-success right-1/2' : 'bg-brand-500 left-1/2')} style={{ width: `${pct}%` }} />
+    <div className="py-4 border-b border-stone-100 last:border-0">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-stone-700">
+          <Icon className="h-5 w-5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-display text-[15px] font-black text-stone-950">{signal.label}</p>
+              <p className="mt-0.5 text-[12px] font-semibold text-stone-500">{signal.source}</p>
+            </div>
+            <span className={clsx('font-display text-[18px] font-black tabular-nums', textColor)}>
+              {signal.score === null ? '—' : `${Math.round(signal.score * 100)}%`}
+            </span>
+          </div>
+          <div className="mt-3 h-1.5 rounded-full bg-stone-100 overflow-hidden">
+            <span
+              className={clsx('block h-full rounded-full transition-all duration-700 ease-out', fillColor)}
+              style={{ width: `${Math.max(6, (signal.score ?? 0) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-2 text-[12px] leading-snug text-stone-500">{signal.detail}</p>
+        </div>
       </div>
-      <span className={clsx('text-[13px] font-mono w-10 text-right font-semibold tnum', pos ? 'text-success' : 'text-brand-600')}>
-        {pos ? '+' : ''}{(contribution * 100).toFixed(0)}%
-      </span>
+    </div>
+  )
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function loanGaugeCeiling(high: number) {
+  const target = Math.max(100000, high * 1.1)
+  const step =
+    target >= 10000000 ? 1000000 :
+    target >= 2500000 ? 500000 :
+    target >= 1000000 ? 250000 :
+    target >= 250000 ? 50000 :
+    10000
+  return Math.ceil(target / step) * step
+}
+
+function shortInr(value: number) {
+  if (value >= 10000000) return `₹${(value / 10000000).toFixed(value % 10000000 === 0 ? 0 : 1)}Cr`
+  if (value >= 100000) return `₹${(value / 100000).toFixed(value % 100000 === 0 ? 0 : 1)}L`
+  return `₹${Math.round(value / 1000)}K`
+}
+
+function arcPoint(pct: number) {
+  const radius = 88
+  const angle = Math.PI * (1 - pct / 100)
+  return {
+    x: 120 + radius * Math.cos(angle),
+    y: 98 - radius * Math.sin(angle),
+  }
+}
+
+function LoanBandGauge({
+  low,
+  high,
+  max,
+  reduceMotion = false,
+}: {
+  low: number
+  high: number
+  max: number
+  reduceMotion?: boolean
+}) {
+  const actualLow = Math.max(0, Math.min(low, high))
+  const actualHigh = Math.max(actualLow, high)
+  const lowPct = clampPercent((actualLow / max) * 100)
+  const highPct = clampPercent((actualHigh / max) * 100)
+  const [range, setRange] = useState(() => ({
+    start: reduceMotion ? lowPct : 0,
+    end: reduceMotion ? highPct : 0,
+    settled: reduceMotion,
+  }))
+
+  useEffect(() => {
+    if (reduceMotion) {
+      setRange({ start: lowPct, end: highPct, settled: true })
+      return
+    }
+
+    setRange({ start: 0, end: 0, settled: false })
+    const sweep = window.setTimeout(() => setRange({ start: 0, end: highPct, settled: false }), 120)
+    const settle = window.setTimeout(() => setRange({ start: lowPct, end: highPct, settled: true }), 1180)
+    return () => {
+      window.clearTimeout(sweep)
+      window.clearTimeout(settle)
+    }
+  }, [lowPct, highPct, reduceMotion])
+
+  const width = Math.max(2, range.end - range.start)
+  const marker = arcPoint(range.end)
+  const startMarker = arcPoint(range.start)
+
+  return (
+    <div className={clsx('prequal-loan-gauge', range.settled && 'is-settled')} aria-label={`Eligible loan band ${shortInr(actualLow)} to ${shortInr(actualHigh)}`}>
+      <svg className="prequal-loan-gauge-svg" viewBox="0 0 240 124" role="img">
+        <defs>
+          <linearGradient id="loanBandGradient" x1="32" y1="98" x2="208" y2="98" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#b96b2c" />
+            <stop offset="50%" stopColor="#d9a441" />
+            <stop offset="100%" stopColor="#f3cf75" />
+          </linearGradient>
+        </defs>
+        <path className="prequal-loan-gauge-track" d="M32 98 A88 88 0 0 1 208 98" pathLength="100" />
+        <path
+          className="prequal-loan-gauge-band"
+          d="M32 98 A88 88 0 0 1 208 98"
+          pathLength="100"
+          style={{ strokeDasharray: `${width} 100`, strokeDashoffset: -range.start }}
+        />
+        <circle className="prequal-loan-gauge-start" cx={startMarker.x} cy={startMarker.y} r="4.5" />
+        <circle className="prequal-loan-gauge-marker" cx={marker.x} cy={marker.y} r="6.5" />
+      </svg>
+      <div className="prequal-loan-gauge-center">
+        <span>Eligible band</span>
+        <b>{shortInr(actualLow)} - {shortInr(actualHigh)}</b>
+      </div>
     </div>
   )
 }
@@ -96,8 +236,11 @@ export function Result() {
     REJECT:    { label: t('routing_reject_label'),    icon: AlertTriangle, action: t('routing_reject_action'),    desc: t('routing_reject_desc'),    tone: '#574D40' },
   }
 
-  const { state, reset } = useSessionStore()
+  const { state, reset, setResult } = useSessionStore()
   const [sheet, setSheet] = useState<null | 'why' | 'xai' | 'calc' | 'photos'>(null)
+  const [generatedFocusUrls, setGeneratedFocusUrls] = useState<Partial<Record<CaptureType, string>>>({})
+  const [focusLoading, setFocusLoading] = useState(false)
+  const focusAttemptKey = useRef('')
   const { data: metalData } = useMetalPrices()
 
   const [pricePulse, setPricePulse] = useState(false)
@@ -111,7 +254,70 @@ export function Result() {
     }
   }, [metalData?.fetchedAt])
 
+  const captureOrder: CaptureType[] = ['45deg', 'top', 'side', 'macro', 'selfie', 'certificate']
+  const photoCaptures = state.captures
+    ? Object.entries(state.captures)
+        .filter(([type, c]) => c?.dataUrl && type !== 'video' && type !== 'audio')
+        .sort(([a], [b]) => {
+          const ai = captureOrder.indexOf(a as CaptureType)
+          const bi = captureOrder.indexOf(b as CaptureType)
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+        }) as [CaptureType, CapturedAsset][]
+    : []
+  const photoCaptureKey = photoCaptures.map(([type, capture]) => `${type}:${capture.timestamp}`).join('|')
+
   const result = state.result
+  useEffect(() => {
+    if (sheet !== 'photos' || !result || photoCaptures.length === 0 || focusLoading) return
+
+    const existing = { ...(result.xai.gradcam_urls ?? {}), ...generatedFocusUrls }
+    const missing = photoCaptures.filter(([type, capture]) =>
+      ['45deg', 'top', 'side', 'macro'].includes(type) &&
+      !existing[type] &&
+      capture.dataUrl?.startsWith('data:image/')
+    )
+    if (missing.length === 0) return
+
+    const attemptKey = `${result.session_id}:${missing.map(([type, capture]) => `${type}:${capture.timestamp}`).join('|')}`
+    if (focusAttemptKey.current === attemptKey) return
+    focusAttemptKey.current = attemptKey
+
+    let cancelled = false
+    setFocusLoading(true)
+    ;(async () => {
+      const frames = Object.fromEntries(await Promise.all(missing.map(async ([type, capture]) => [
+        type,
+        await resizeDataUrl(capture.dataUrl, 1280, 0.82).catch(() => capture.dataUrl),
+      ]))) as Partial<Record<'45deg' | 'top' | 'side' | 'macro', string>>
+
+      const response = await generateGradcamMapsAPI({
+        session_id: result.session_id,
+        frames,
+      })
+      if (cancelled) return
+
+      setGeneratedFocusUrls(prev => ({ ...prev, ...response.gradcam_urls }))
+      if (Object.keys(response.gradcam_urls).length > 0) {
+        setResult({
+          ...result,
+          xai: {
+            ...result.xai,
+            gradcam_urls: {
+              ...(result.xai.gradcam_urls ?? {}),
+              ...response.gradcam_urls,
+            },
+          },
+        })
+      }
+    })().catch(err => {
+      console.warn('[Grad-CAM] Could not generate focus maps:', err)
+    }).finally(() => {
+      if (!cancelled) setFocusLoading(false)
+    })
+
+    return () => { cancelled = true }
+  }, [sheet, result?.session_id, photoCaptureKey])
+
   if (!result) { navigate('/'); return null }
 
   const effectiveRouting =
@@ -127,7 +333,6 @@ export function Result() {
   const livePriceSrc = metalData?.source ?? 'cached'
   const hasLivePrice = livePrice24K > 8000
   const detectedKarat = result.purity.point_estimate_karat
-  const purityLabel = detectedKarat >= 23 ? '999' : detectedKarat >= 21 ? '916' : detectedKarat >= 17 ? '750' : detectedKarat >= 13 ? '585' : `${Math.round(detectedKarat / 24 * 1000)}`
   const livePriceForKarat =
     detectedKarat >= 23 ? livePrice24K :
     detectedKarat >= 21 ? (livePrice22K || livePrice24K * 22 / 24) :
@@ -142,20 +347,13 @@ export function Result() {
 
   const routing = ROUTING[effectiveRouting]
   const RoutingIcon = routing.icon
-  const photoCaptures = state.captures
-    ? Object.entries(state.captures).filter(([type, c]) => c?.dataUrl && type !== 'video' && type !== 'audio')
-    : []
+  const gradcamUrls = { ...(result.xai.gradcam_urls ?? {}), ...generatedFocusUrls }
+  const focusUrlFor = (type: CaptureType) => gradcamUrls[type] ?? null
+  const focusEntries = photoCaptures
+    .map(([type]) => ({ type, url: focusUrlFor(type) }))
+    .filter((entry): entry is { type: CaptureType; url: string } => Boolean(entry.url))
+  const primaryFocus = focusEntries[0] ?? null
   const confidencePct = Math.max(0, Math.min(100, Math.round(result.confidence.score * 100)))
-  const nextStepTitle =
-    effectiveRouting === 'INSTANT' ? 'Continue your gold loan application'
-    : effectiveRouting === 'AGENT' ? 'Schedule a doorstep verification'
-    : effectiveRouting === 'RECAPTURE' ? 'Retake sharper gold photos'
-    : 'Get help from a branch specialist'
-  const routeShortLabel =
-    effectiveRouting === 'INSTANT' ? 'Instant route'
-    : effectiveRouting === 'AGENT' ? 'Agent visit'
-    : effectiveRouting === 'RECAPTURE' ? 'Retake photos'
-    : 'Branch help'
   const primaryActionTarget =
     effectiveRouting === 'AGENT' || effectiveRouting === 'INSTANT'
       ? '/final-eval'
@@ -164,7 +362,6 @@ export function Result() {
       : '/dashboard-home'
   const loanLow = fmt(displayLoan.band_low_inr)
   const loanHigh = fmt(displayLoan.band_high_inr)
-  const loanRange = `${loanLow} - ${loanHigh}`
   const marketValueRange = `${fmt(displayValue.band_low)} - ${fmt(displayValue.band_high)}`
   const estimatedWeight = `${result.weight.estimated_g.toFixed(2)}g`
   const assessedItems = [
@@ -232,6 +429,77 @@ export function Result() {
   const aggregateLtvPct = hasMultipleItems
     ? Math.round((cumulativeLoanHigh / Math.max(cumulativeValueHigh, 1)) * 100)
     : displayLoan.ltv_applied_pct
+  const aggregateLoanGaugeMax = loanGaugeCeiling(hasMultipleItems ? cumulativeLoanHigh : displayLoan.band_high_inr)
+  const confidenceBreakdown = state.confidenceBreakdown
+  const confidenceEvidence = confidenceBreakdown?.evidence
+  const componentFor = (id: string) => confidenceBreakdown?.components.find(component => component.id === id)
+  const componentScore = (id: string) => normalizeSignalScore(componentFor(id)?.score)
+  const huidCode =
+    confidenceEvidence?.currentHuid ||
+    confidenceEvidence?.billHuid ||
+    state.huidVerification?.huid ||
+    state.huidCode ||
+    state.certificateData?.huid ||
+    ''
+  const hallmarkScore =
+    normalizeSignalScore(state.huidVerification?.confidence) ??
+    componentScore('huid') ??
+    componentScore('purity') ??
+    (result.purity.huid_verified ? normalizeSignalScore(result.confidence.score) : null)
+  const hallmarkSource =
+    state.huidVerification?.status === 'VERIFIED' ? 'BIS verified' :
+    confidenceEvidence?.huidVerified ? 'BIS verified' :
+    confidenceEvidence?.photoHuidEvidence ? 'HUID read from photo' :
+    confidenceEvidence?.photoKaratEvidence ? 'Karat mark read from macro photo' :
+    confidenceEvidence?.huidPresent ? 'HUID supplied, verification pending' :
+    huidCode ? 'HUID supplied, verification pending' :
+    result.purity.huid_verified ? 'Hallmark evidence detected' :
+    'No readable HUID returned'
+  const hallmarkDetail = [
+    state.huidVerification?.purity || `${detectedKarat}K purity`,
+    state.huidVerification?.article_type,
+    huidCode ? `HUID ${huidCode}` : null,
+  ].filter(Boolean).join(' · ') || 'Derived from the hallmark/HUID evidence captured in this session.'
+  const videoScore = normalizeSignalScore(state.liveAuthResult?.video_score ?? confidenceEvidence?.videoScore ?? null)
+  const videoSignals = state.liveAuthResult?.video_signals?.filter(Boolean).slice(0, 2) ?? []
+  const solidSource = state.liveAuthResult
+    ? (state.liveAuthResult.verdict || 'Video authenticity result')
+    : confidenceEvidence?.videoScore !== null && confidenceEvidence?.videoScore !== undefined
+      ? 'Video confidence from evidence'
+      : 'Video test not available'
+  const solidDetail = videoSignals.length > 0
+    ? videoSignals.join(' · ')
+    : state.liveAuthResult
+      ? 'Taken from the live video authenticity score for solid vs plated confidence.'
+      : 'No live video confidence was returned for this session.'
+  const visualComponent = componentFor('images')
+  const visualScore = normalizeSignalScore(visualComponent?.score) ?? normalizeSignalScore(result.confidence.score)
+  const visualDetail =
+    visualComponent?.detail ||
+    `${photoCaptures.length} captured image${photoCaptures.length === 1 ? '' : 's'}${primaryFocus ? ' with generated focus maps' : ''}`
+  const assessmentSignals: AssessmentSignal[] = [
+    {
+      label: 'BIS Hallmark',
+      score: hallmarkScore,
+      source: hallmarkSource,
+      detail: hallmarkDetail,
+      icon: BadgeCheck,
+    },
+    {
+      label: 'Solid / plated',
+      score: videoScore,
+      source: solidSource,
+      detail: solidDetail,
+      icon: Video,
+    },
+    {
+      label: 'Visual AI',
+      score: visualScore,
+      source: 'Captured photo confidence',
+      detail: visualDetail,
+      icon: ScanLine,
+    },
+  ]
 
   function handlePrimaryAction() {
     navigate(primaryActionTarget)
@@ -241,7 +509,7 @@ export function Result() {
   const si = reduce ? {} : { variants: itemVariants }
 
   return (
-    <div className="page no-scrollbar app-page-bg">
+    <div className="page no-scrollbar app-page-bg prequal-page-grid">
       {/* ── HEADER ─────────────────────────────────────────────── */}
       <header className="page-header sticky top-0 z-20">
         <button id="result-home" onClick={() => { reset(); navigate('/') }}
@@ -275,6 +543,12 @@ export function Result() {
                   <p className="prequal-amount-sub">
                     {hasMultipleItems ? `Aggregated across ${itemRows.length} jewellery items` : 'Eligible loan band after verification'}
                   </p>
+                  <LoanBandGauge
+                    low={hasMultipleItems ? cumulativeLoanLow : displayLoan.band_low_inr}
+                    high={hasMultipleItems ? cumulativeLoanHigh : displayLoan.band_high_inr}
+                    max={aggregateLoanGaugeMax}
+                    reduceMotion={Boolean(reduce)}
+                  />
                 </>
               ) : (
                 <>
@@ -289,38 +563,6 @@ export function Result() {
               <span>PF</span>
             </div>
           </div>
-
-          <div className="prequal-hero-stats">
-            <button type="button" className="prequal-hero-stat" onClick={() => setSheet('calc')}>
-              <span>LTV ratio</span>
-              <b>Up to {aggregateLtvPct}%</b>
-            </button>
-            <button type="button" className="prequal-hero-stat" onClick={() => setSheet('calc')}>
-              <span>Est. weight</span>
-              <b>{estimatedWeight}</b>
-            </button>
-            <button type="button" className="prequal-hero-stat" onClick={() => setSheet('why')}>
-              <span>Confidence</span>
-              <b>{confidencePct}%</b>
-            </button>
-          </div>
-        </motion.section>
-
-        <motion.section {...si} className="prequal-next-card">
-          <div className="flex items-start gap-3">
-            <span className="prequal-next-icon">
-              <RoutingIcon className="h-5 w-5" style={{ color: routing.tone }} aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-stone-600">Next best step</p>
-              <h2 className="mt-1 font-display text-[20px] font-black leading-tight text-stone-950">{nextStepTitle}</h2>
-              <p className="mt-1.5 text-[13px] leading-snug text-stone-600">{routing.desc}</p>
-            </div>
-          </div>
-          <button id="result-primary-action" onClick={handlePrimaryAction} className="prequal-primary-action">
-            {routing.action}
-            <ArrowRight className="h-5 w-5" aria-hidden />
-          </button>
         </motion.section>
 
         <motion.section {...si} className="surface-panel rounded-3xl p-4">
@@ -449,11 +691,11 @@ export function Result() {
               hint={`${confidencePct}% calibrated confidence`}
               iconBg="#F5E9D9" iconColor="#8B650C" onClick={() => setSheet('why')} />
             <DetailRow id="result-xai-toggle" icon={ScanLine} label={t('xai_heading')}
-              hint="SHAP signals · Grad-CAM heatmap"
+              hint="Confidence signals · Grad-CAM focus"
               iconBg="#F5E9D9" iconColor="#8B650C" onClick={() => setSheet('xai')} last={photoCaptures.length === 0} />
             {photoCaptures.length > 0 && (
               <DetailRow icon={Camera} label="Captured photos"
-                hint={`${photoCaptures.length} images · AI focus map`}
+                hint={focusLoading ? 'Generating focus maps...' : focusEntries.length > 0 ? `${photoCaptures.length} images · ${focusEntries.length} focus maps` : `${photoCaptures.length} raw images`}
                 iconBg="#F5E9D9" iconColor="#8B650C" onClick={() => setSheet('photos')} last />
             )}
           </div>
@@ -477,6 +719,20 @@ export function Result() {
         </motion.div>
       </motion.div>
 
+      <div
+        className="sticky bottom-0 z-20 px-5 py-3 bg-white/90 backdrop-blur-xl border-t border-stone-200/70"
+        style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+      >
+        <button
+          id="result-primary-action"
+          onClick={handlePrimaryAction}
+          className="w-full py-4 rounded-2xl bg-charcoal text-white font-display font-black text-base shadow-cta active:scale-[0.98] transition-transform flex items-center justify-center gap-2.5"
+        >
+          {routing.action}
+          <ArrowRight className="h-5 w-5" aria-hidden />
+        </button>
+      </div>
+
       {/* ════ BOTTOM SHEETS ══════════════════════════════════════════ */}
       {/* Why this estimate */}
       <BottomSheet open={sheet === 'why'} onClose={() => setSheet(null)} title="Why this estimate">
@@ -492,21 +748,21 @@ export function Result() {
 
       {/* XAI */}
       <BottomSheet open={sheet === 'xai'} onClose={() => setSheet(null)} title={t('xai_heading')}>
-        <p className="text-[13px] text-stone-500 mb-3">How each signal pushed the estimate up or down.</p>
-        {result.xai.shap_top_features.map(f => <ContributionBar key={f.feature} feature={f.feature} contribution={f.contribution} />)}
-        {result.xai.gradcam_url && (
+        <p className="text-[13px] text-stone-500 mb-3">Confidence values from the evidence captured in this session.</p>
+        <div className="rounded-3xl border border-stone-200 bg-white px-4 shadow-[0_14px_40px_rgba(87,77,64,0.08)]">
+          {assessmentSignals.map(signal => <SignalConfidenceRow key={signal.label} signal={signal} />)}
+        </div>
+        {primaryFocus && (
           <div className="mt-5 pt-4 border-t border-stone-100">
             <p className="text-[12px] font-semibold text-stone-400 uppercase tracking-wider mb-2">AI Focus Heatmap (Grad-CAM)</p>
             <div className="relative w-full rounded-2xl overflow-hidden bg-stone-900 aspect-video">
-              <img src={result.xai.gradcam_url} className="w-full h-full object-cover" alt="Grad-CAM heatmap" />
-              <div className="absolute inset-0 pointer-events-none" style={{
-                background: 'radial-gradient(circle at 40% 50%, rgba(239,68,68,0.5) 0%, rgba(245,158,11,0.28) 30%, rgba(59,130,246,0.1) 60%, transparent 100%)',
-                mixBlendMode: 'screen',
-              }} />
-              <div className="absolute inset-0 bg-black/10 mix-blend-multiply pointer-events-none" />
+              <img src={primaryFocus.url} className="w-full h-full object-cover" alt="Grad-CAM heatmap" />
+              <span className="absolute left-3 top-3 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white/90 backdrop-blur">
+                {primaryFocus.type} focus
+              </span>
             </div>
             <p className="text-[11px] text-stone-400 mt-2 leading-relaxed">
-              <span className="text-rose-500 font-semibold">Red zones</span> — hallmark stamp, purity marks, surface texture.
+              <span className="text-rose-500 font-semibold">Warm zones</span> show the visual evidence used for the assessment.
             </p>
           </div>
         )}
@@ -538,7 +794,6 @@ export function Result() {
               </div>
               <div className="space-y-0">
                 <CalcRow label="Gross weight" value={`${item.weightG.toFixed(2)} g`} />
-                <CalcRow label="Stone deduction" value={`- ${item.stoneDeductionG.toFixed(2)} g`} tone="text-error" />
                 <CalcRow label="Net gold weight" value={`${item.netWeightG.toFixed(2)} g`} tone="text-stone-900 font-semibold" />
                 <CalcRow label="Purity (AI)" value={`${item.purity}K (${(item.purity / 24 * 100).toFixed(1)}%)`} />
                 {hasLivePrice && item.ratePerG > 0 && (
@@ -557,17 +812,29 @@ export function Result() {
 
       {/* Photos */}
       <BottomSheet open={sheet === 'photos'} onClose={() => setSheet(null)} title="Captured photos">
+        {primaryFocus && (
+          <div className="relative mb-4 overflow-hidden rounded-[1.35rem] border border-stone-200 bg-stone-950 shadow-[0_16px_40px_rgba(41,32,24,0.16)]">
+            <img src={primaryFocus.url} alt="Primary Grad-CAM focus" className="h-56 w-full object-cover" />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/18 to-transparent p-4">
+              <span className="inline-flex rounded-full bg-white/16 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/90 backdrop-blur">
+                Computed focus
+              </span>
+              <p className="mt-2 font-display text-[18px] font-black leading-tight text-white">
+                Ornament focus mapped on the {primaryFocus.type} view
+              </p>
+            </div>
+          </div>
+        )}
         <p className="text-[13px] text-stone-500 mb-4 leading-relaxed">
-          Hover / tap to reveal Grad-CAM focus — <span className="text-rose-500 font-semibold">red zones</span> show hallmark clarity and authenticity regions.
+          {focusLoading
+            ? 'Generating focus maps for these captures. Each tile will switch from raw photo to Grad-CAM as soon as it is ready.'
+            : focusEntries.length > 0
+            ? 'Heat overlays are generated on matching captured views so the assessed ornament stays clear while the coin remains only a scale reference.'
+            : 'Showing the raw captures for this saved result. Run a fresh assessment to generate per-photo focus maps for these views.'}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {photoCaptures.map(([type, capture]) => (
-            <div key={type} className="rounded-2xl overflow-hidden bg-stone-100 aspect-square relative group">
-              <img src={capture!.dataUrl} alt={type} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                style={{ background: 'radial-gradient(circle at 50% 45%, rgba(239,68,68,0.38) 0%, rgba(245,158,11,0.2) 35%, transparent 70%)', mixBlendMode: 'screen' }} />
-              <span className="absolute bottom-2 left-2 text-[10px] font-medium text-white/90 capitalize px-2 py-0.5 rounded-full bg-black/30 backdrop-blur-sm">{type}</span>
-            </div>
+            <FocusPhotoCard key={type} type={type} capture={capture} focusUrl={focusUrlFor(type)} loading={focusLoading && !focusUrlFor(type)} />
           ))}
         </div>
       </BottomSheet>
@@ -576,6 +843,38 @@ export function Result() {
 }
 
 // ── Small helpers ──────────────────────────────────────────────
+function FocusPhotoCard({ type, capture, focusUrl, loading = false }: { type: CaptureType; capture: CapturedAsset; focusUrl: string | null; loading?: boolean }) {
+  return (
+    <div className="group relative aspect-square overflow-hidden rounded-2xl bg-stone-100 shadow-[0_10px_24px_rgba(41,32,24,0.08)]">
+      <img src={focusUrl || capture.dataUrl} alt={`${type} ${focusUrl ? 'Grad-CAM focus' : 'capture'}`} className="h-full w-full object-cover" />
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-stone-950/28 backdrop-blur-[1px]">
+          <span className="rounded-full bg-white/92 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-stone-800 shadow-lg">
+            Generating
+          </span>
+        </div>
+      )}
+      {focusUrl && (
+        <img
+          src={capture.dataUrl}
+          alt={`${type} original`}
+          className="absolute right-2 top-2 h-12 w-12 rounded-xl border border-white/70 object-cover shadow-lg"
+        />
+      )}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/62 via-black/12 to-transparent p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="rounded-full bg-white/18 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white backdrop-blur-sm">
+            {type}
+          </span>
+          <span className="rounded-full bg-black/28 px-2 py-1 text-[9px] font-bold text-white/85 backdrop-blur-sm">
+            {focusUrl ? 'Focus map' : loading ? 'Working' : 'Raw'}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CalcRow({ label, value, tone = 'text-stone-700' }: { label: string; value: string; tone?: string }) {
   return (
     <div className="flex justify-between items-center py-3 border-b border-stone-100 last:border-0 gap-4">
