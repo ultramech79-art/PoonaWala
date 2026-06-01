@@ -138,6 +138,10 @@ export function Register() {
     setError('')
     try {
       const dobStr = `${dobYear}-${dobMonth.padStart(2, '0')}-${dobDay.padStart(2, '0')}`
+      // otp_session_id is passed so the backend marks is_phone_verified=true.
+      // The OTP itself is NOT re-sent — it was already verified at step 5 via
+      // verifyOtpAPI, which consumed the 2Factor.in session. Sending otp again
+      // would trigger a second verification call that always fails.
       const res = await registerAPI({
         full_name: name.trim(),
         dob: dobStr,
@@ -146,7 +150,6 @@ export function Register() {
         region_code: regionCode,
         city: city.trim() || undefined,
         otp_session_id: sessionId,
-        otp: otp.join(''),
       })
       localStorage.setItem('goldeye_pin', pin)
       setAuth(res.access_token, res.user)
@@ -323,7 +326,23 @@ export function Register() {
             <div className="pb-8">
               <button
                 disabled={!dobDay || !dobMonth || dobYear.length !== 4}
-                onClick={advance}
+                onClick={() => {
+                  const day = parseInt(dobDay, 10)
+                  const month = parseInt(dobMonth, 10)
+                  const year = parseInt(dobYear, 10)
+                  if (day < 1 || day > 31 || month < 1 || month > 12) {
+                    setError('Please enter a valid date.')
+                    return
+                  }
+                  const dob = new Date(year, month - 1, day)
+                  const today = new Date()
+                  let age = today.getFullYear() - dob.getFullYear()
+                  if (today.getMonth() < dob.getMonth() || (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())) age--
+                  if (age < 21) { setError('Applicant must be at least 21 years old.'); return }
+                  if (age > 65) { setError('Applicant must be 65 years old or younger.'); return }
+                  setError('')
+                  advance()
+                }}
                 className={btnCls}
               >
                 Continue

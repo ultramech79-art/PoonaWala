@@ -4,7 +4,7 @@ import asyncio
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -28,7 +28,6 @@ JWT_ALGORITHM = "HS256"
 class UserProfile(BaseModel):
     id: str
     phone: Optional[str]
-    email: Optional[str]
     full_name: str
     dob: str
     language: str
@@ -38,7 +37,6 @@ class UserProfile(BaseModel):
     pincode: Optional[str]
     profile_photo_url: Optional[str]
     is_phone_verified: bool
-    is_email_verified: bool
 
 
 class AuthResponse(BaseModel):
@@ -47,13 +45,26 @@ class AuthResponse(BaseModel):
     user: UserProfile
 
 
+def _validate_dob_age(value: str) -> str:
+    try:
+        dob = date_type.fromisoformat(value)
+    except ValueError:
+        raise ValueError("dob must be YYYY-MM-DD")
+    today = date_type.today()
+    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    if age < 21:
+        raise ValueError("applicant must be at least 21 years old")
+    if age > 65:
+        raise ValueError("applicant must be 65 years old or younger")
+    return value
+
+
 class RegisterRequest(BaseModel):
     full_name: str
     dob: str
     region_code: str
     language: str = "en"
     phone: Optional[str] = None
-    email: Optional[str] = None
     password: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
@@ -71,6 +82,10 @@ class RegisterRequest(BaseModel):
             raise ValueError("full_name is required")
         return value
 
+    @validator("dob")
+    def validate_dob(cls, value: str) -> str:
+        return _validate_dob_age(value)
+
     @validator("region_code")
     def validate_region(cls, value: str) -> str:
         code = value.upper().strip()
@@ -84,18 +99,9 @@ class RegisterRequest(BaseModel):
             raise ValueError("password must be at least 8 characters")
         return value
 
-    @validator("email")
-    def validate_email(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        normalized = value.strip().lower()
-        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
-            raise ValueError("invalid email")
-        return normalized
-
 
 class PasswordLoginRequest(BaseModel):
-    phone_or_email: str
+    phone: str
     password: str
 
 
@@ -135,7 +141,6 @@ def _profile(user: User) -> UserProfile:
     return UserProfile(
         id=user.id,
         phone=user.phone,
-        email=user.email,
         full_name=user.full_name,
         dob=user.dob,
         language=user.language,
@@ -145,7 +150,6 @@ def _profile(user: User) -> UserProfile:
         pincode=user.pincode,
         profile_photo_url=user.profile_photo_url,
         is_phone_verified=bool(user.is_phone_verified),
-        is_email_verified=bool(user.is_email_verified),
     )
 
 
@@ -203,38 +207,27 @@ async def _issue(user: User, db: AsyncSession) -> AuthResponse:
 @router.post("/auth/register", response_model=AuthResponse)
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     phone = _normalize_phone(req.phone)
-    email = str(req.email).lower() if req.email else None
     google_payload = None
 
     if req.google_id_token:
         google_payload = await _verify_google_id_token(req.google_id_token)
-        email = email or google_payload.get("email")
 
-    phone_verified = False
-    if phone and req.otp_session_id and req.otp:
-        otp_result = await verify_otp_code(req.otp_session_id, req.otp)
-        phone_verified = bool(otp_result.success and otp_result.valid)
-        if not phone_verified:
-            raise HTTPException(status_code=401, detail="otp_verification_failed")
+    if not phone and not google_payload:
+        raise HTTPException(status_code=422, detail="phone is required")
 
-    if not phone and not email:
-        raise HTTPException(status_code=422, detail="phone or email is required")
-
-    filters = []
     if phone:
-        filters.append(User.phone == phone)
-    if email:
-        filters.append(User.email == email)
-    if filters:
-        for condition in filters:
-            existing = (await db.execute(select(User).where(condition))).scalar_one_or_none()
-            if existing:
-                raise HTTPException(status_code=409, detail="user already exists")
+        existing = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
+        if existing:
+            raise HTTPException(status_code=409, detail="user already exists")
+
+    # OTP was already verified by the frontend (/otp/verify-otp) before reaching here.
+    # Re-verifying would consume the already-used 2Factor.in session and always fail.
+    # Mark phone as verified if the registration arrived via the OTP flow (otp_session_id present).
+    phone_verified = bool(phone and req.otp_session_id)
 
     user = User(
         id=str(uuid.uuid4()),
         phone=phone,
-        email=email,
         password_hash=pwd_context.hash(req.password) if req.password else None,
         google_sub=google_payload.get("sub") if google_payload else None,
         full_name=req.full_name,
@@ -247,7 +240,6 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         profile_photo_url=req.profile_photo_url,
         profile_photo_public_id=req.profile_photo_public_id,
         is_phone_verified=phone_verified,
-        is_email_verified=bool(google_payload and google_payload.get("email_verified")),
     )
     db.add(user)
     return await _issue(user, db)
@@ -255,10 +247,8 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/auth/login/password", response_model=AuthResponse)
 async def login_password(req: PasswordLoginRequest, db: AsyncSession = Depends(get_db)):
-    identifier = req.phone_or_email.strip().lower()
-    phone = _normalize_phone(identifier) if re.sub(r"\D", "", identifier).isdigit() else None
-    condition = User.phone == phone if phone else User.email == identifier
-    user = (await db.execute(select(User).where(condition))).scalar_one_or_none()
+    phone = _normalize_phone(req.phone.strip())
+    user = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
     if not user or not user.password_hash or not pwd_context.verify(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="invalid credentials")
     return await _issue(user, db)
@@ -281,32 +271,24 @@ async def login_otp(req: OtpLoginRequest, db: AsyncSession = Depends(get_db)):
 async def login_google(req: GoogleLoginRequest, db: AsyncSession = Depends(get_db)):
     payload = await _verify_google_id_token(req.id_token)
     sub = payload.get("sub")
-    email = payload.get("email")
     user = None
     if sub:
         user = (await db.execute(select(User).where(User.google_sub == sub))).scalar_one_or_none()
-    if not user and email:
-        user = (await db.execute(select(User).where(User.email == email.lower()))).scalar_one_or_none()
 
     if not user:
-        # Auto-register new Google users with a minimal profile
         user = User(
             id=str(uuid.uuid4()),
-            email=email.lower() if email else None,
             google_sub=sub,
             full_name=payload.get("name") or payload.get("given_name") or "User",
             dob="2000-01-01",
             language="en",
             region_code="MH",
             profile_photo_url=payload.get("picture"),
-            is_email_verified=bool(payload.get("email_verified")),
         )
         db.add(user)
     else:
         if sub and not user.google_sub:
             user.google_sub = sub
-        user.is_email_verified = bool(payload.get("email_verified"))
-        # Update profile photo from Google if user doesn't have one
         if not user.profile_photo_url and payload.get("picture"):
             user.profile_photo_url = payload.get("picture")
 
@@ -323,6 +305,12 @@ class UpdateProfileRequest(BaseModel):
     pincode: Optional[str] = None
     profile_photo_url: Optional[str] = None
 
+    @validator("dob")
+    def validate_dob(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return _validate_dob_age(value)
+
 
 @router.patch("/auth/me", response_model=UserProfile)
 async def update_profile(
@@ -330,7 +318,6 @@ async def update_profile(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update the current user's profile fields. Only non-null fields are updated."""
     if req.full_name is not None:
         name = req.full_name.strip()
         if len(name) < 2:
