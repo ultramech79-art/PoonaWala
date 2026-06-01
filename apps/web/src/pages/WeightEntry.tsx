@@ -134,6 +134,12 @@ export function WeightEntry() {
   const [fileNames, setFileNames] = useState({ top: '', angle: '', side: '' })
   const [jewelryType, setJewelryType] = useState<JewelryType>('auto')
   const [karat, setKarat] = useState<GoldKarat>((state.scannedKarat as GoldKarat) || 22)
+  // Step 1 = manual weight entry, Step 2 = AI photo estimate.
+  const [mode, setMode] = useState<'manual' | 'ai'>('manual')
+  // The bill/certificate weight is ground truth — prefill the manual entry with it.
+  const billWeightG = state.certificateData?.weightG ?? null
+  const [manualWeight, setManualWeight] = useState(() => (billWeightG ? String(billWeightG) : ''))
+  const prefilledFromBill = billWeightG != null && manualWeight === String(billWeightG)
   const [dragActive, setDragActive] = useState<'top' | 'angle' | 'side' | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -144,8 +150,12 @@ export function WeightEntry() {
   const [savedLoading, setSavedLoading] = useState(false)
 
   useEffect(() => {
-    speak('Place the jewellery photos for weight estimation, or skip to continue.')
-  }, [])
+    if (mode === 'manual') {
+      speak('If you know the weight of your jewellery, enter it here. If not, let our AI estimate it from your photos.')
+    } else {
+      speak('Place the jewellery photos for weight estimation, or skip to continue.')
+    }
+  }, [mode])
 
   useEffect(() => {
     if (!state.authToken || state.authToken === 'guest') {
@@ -327,6 +337,27 @@ export function WeightEntry() {
     }
   }
 
+  function continueWithManual() {
+    const grams = parseFloat(manualWeight)
+    if (!isFinite(grams) || grams <= 0 || grams > 5000) {
+      setError('Enter a valid weight in grams (e.g. 12.5).')
+      return
+    }
+    setError('')
+    const fromBill = billWeightG != null && grams === billWeightG
+    setWeight(grams)
+    setPageEvidence('weight', {
+      skipped: false,
+      source: fromBill ? 'bill' : 'manual',
+      estimatedG: grams,
+      confidence: 1,
+      method: fromBill ? 'bill_extracted' : 'manual_entry',
+      karat,
+      jewelryType,
+    })
+    navigate('/add-item')
+  }
+
   function continueFlow() {
     setWeight(result?.weight.estimated_g ?? null)
     setPageEvidence('weight', {
@@ -356,47 +387,49 @@ export function WeightEntry() {
     hint,
     src,
     fileName,
+    aspect = 'aspect-square',
   }: {
     slot: WeightSlot
     title: string
     hint: string
     src: string | null
     fileName: string
+    aspect?: string
   }) {
     const isTop = slot === 'top'
     const saved = savedForSlot(slot)
     return (
-      <div
-        className="flex min-h-40 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-200 bg-white px-4 py-5 text-center"
-      >
-        {src ? (
-          <div
-            className="relative max-h-52 w-full"
-            onClick={(event) => {
-              if (!isTop) return
-              const rect = event.currentTarget.getBoundingClientRect()
-              setJewelryPoint({
-                x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
-                y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
-              })
-              setResult(null)
-            }}
-          >
-            <img src={src} alt={`${title} preview`} className="max-h-52 w-full rounded-xl object-contain" />
-            {isTop && jewelryPoint && (
-              <div
-                className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-brand-600 shadow-lg ring-2 ring-brand-600/30"
-                style={{ left: `${jewelryPoint.x * 100}%`, top: `${jewelryPoint.y * 100}%` }}
-              />
-            )}
-          </div>
-        ) : (
-          <>
-            <ImageUp className="mb-3 h-8 w-8 text-stone-300" />
-            <p className="text-sm font-bold text-stone-400">Not Captured</p>
-            <p className="mt-1 max-w-xs text-xs leading-relaxed text-stone-400">This view was skipped during capture.</p>
-          </>
-        )}
+      <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-white p-3 text-center">
+        <div
+          className={`relative w-full overflow-hidden rounded-xl ${aspect} ${src ? 'bg-stone-100' : 'flex flex-col items-center justify-center bg-stone-50/60'} ${isTop && src ? 'cursor-crosshair' : ''}`}
+          onClick={(event) => {
+            if (!isTop || !src) return
+            const rect = event.currentTarget.getBoundingClientRect()
+            setJewelryPoint({
+              x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+              y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+            })
+            setResult(null)
+          }}
+        >
+          {src ? (
+            <>
+              <img src={src} alt={`${title} preview`} className="absolute inset-0 h-full w-full object-cover" />
+              {isTop && jewelryPoint && (
+                <div
+                  className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-brand-600 shadow-lg ring-2 ring-brand-600/30"
+                  style={{ left: `${jewelryPoint.x * 100}%`, top: `${jewelryPoint.y * 100}%` }}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <ImageUp className="mb-2 h-7 w-7 text-stone-300" />
+              <p className="text-sm font-bold text-stone-400">Not Captured</p>
+              <p className="mt-1 max-w-xs px-2 text-xs leading-relaxed text-stone-400">This view was skipped during capture.</p>
+            </>
+          )}
+        </div>
         {fileName && src && (
           <div className="mt-3 flex max-w-full items-center gap-2 text-xs text-stone-500">
             <FileImage className="h-4 w-4 flex-shrink-0" />
@@ -434,14 +467,107 @@ export function WeightEntry() {
     )
   }
 
+  if (mode === 'manual') {
+    const manualValid = (() => {
+      const grams = parseFloat(manualWeight)
+      return isFinite(grams) && grams > 0 && grams <= 5000
+    })()
+    return (
+      <div className="page animate-slide-up">
+        <div className="px-5 py-2.5 flex items-center justify-between border-b border-stone-200/50 bg-white/60 backdrop-blur-sm">
+          <button id="weight-back" onClick={() => navigate('/certificate-scan')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md">
+            <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+          </button>
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Step 8 of 8</span>
+            <span className="text-base font-bold text-stone-950 tracking-tight">Jewellery Weight</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => speak('If you know the weight of your jewellery, enter it here. If not, let our AI estimate it from your photos.')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+              <Volume2 className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => state.authToken && state.authToken !== 'guest' ? navigate('/dashboard-home') : navigate('/login')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-700 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+              <User className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-6">
+          <div className="py-5">
+            <div className="mb-5">
+              <h1 className="font-display text-xl font-bold text-stone-950">Do you know the weight?</h1>
+              <p className="text-xs leading-relaxed text-stone-500 mt-1">Entering the exact weight gives the most accurate valuation. If you don't know it, let our AI estimate it from your photos.</p>
+            </div>
+
+            <div className="rounded-2xl border border-stone-200 bg-white p-5">
+              <label htmlFor="manual-weight" className="label mb-2 block">Weight</label>
+              <div className="relative">
+                <Scale className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
+                <input
+                  id="manual-weight"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.1"
+                  value={manualWeight}
+                  onChange={(event) => { setManualWeight(event.target.value); setError('') }}
+                  placeholder="e.g. 12.5"
+                  className="input-field py-4 pl-12 pr-12 text-lg font-semibold"
+                />
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400">g</span>
+              </div>
+              {prefilledFromBill && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-medium text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                  Pre-filled from your bill — the most reliable weight. Edit it only if it's wrong.
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { setError(''); setMode('ai') }}
+              className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-left transition-colors hover:border-gold-300 hover:bg-gold-50/40 active:scale-[0.99]"
+            >
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gold-100 text-gold-700">
+                <Sparkles className="h-5 w-5" />
+              </span>
+              <span className="flex-1">
+                <span className="block text-sm font-bold text-stone-900">Don't know the weight?</span>
+                <span className="block text-xs text-stone-500">Estimate it with AI from your top, 45° and side photos.</span>
+              </span>
+              <ArrowRight className="h-4 w-4 flex-shrink-0 text-stone-400" />
+            </button>
+
+            {error && (
+              <div className="mt-4 flex gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t border-stone-200 px-5 pb-6 pt-4">
+          <button onClick={continueWithManual} disabled={!manualValid} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 text-white font-semibold transition-colors active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed">
+            Continue <ArrowRight className="h-4 w-4" />
+          </button>
+          <button onClick={skipWeightEstimate} disabled={loading} className="w-full py-2 text-sm font-medium text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-30">
+            Skip weight estimate
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page animate-slide-up">
       <div className="px-5 py-2.5 flex items-center justify-between border-b border-stone-200/50 bg-white/60 backdrop-blur-sm">
-        <button id="weight-back" onClick={() => navigate('/certificate-scan')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md">
+        <button id="weight-back" onClick={() => { setError(''); setMode('manual') }} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md">
           <ChevronRight className="w-3.5 h-3.5 rotate-180" />
         </button>
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Weight Estimate</span>
+          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Step 8 of 8</span>
           <span className="text-base font-bold text-stone-950 tracking-tight">AI Weight</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -469,7 +595,8 @@ export function WeightEntry() {
             </div>
           )}
 
-          <div className="space-y-3">
+          {/* Photo grid: 2 on top (top + 45°), 1 below (side) */}
+          <div className="grid grid-cols-2 gap-3">
             <UploadSlot
               slot="top"
               title="Top view"
@@ -477,20 +604,21 @@ export function WeightEntry() {
               src={topImageDataUrl}
               fileName={fileNames.top}
             />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <UploadSlot
-                slot="angle"
-                title="45-degree view"
-                hint="Tilted photo to validate profile and reflective edges."
-                src={angleImageDataUrl}
-                fileName={fileNames.angle}
-              />
+            <UploadSlot
+              slot="angle"
+              title="45-degree view"
+              hint="Tilted photo to validate profile and reflective edges."
+              src={angleImageDataUrl}
+              fileName={fileNames.angle}
+            />
+            <div className="col-span-2">
               <UploadSlot
                 slot="side"
                 title="Side view"
                 hint="Profile photo for actual thickness. Coin must stay in frame."
                 src={sideImageDataUrl}
                 fileName={fileNames.side}
+                aspect="aspect-[16/9]"
               />
             </div>
           </div>
