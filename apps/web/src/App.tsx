@@ -57,6 +57,7 @@ function ProfileShortcut() {
     '/before-capture',
     '/dashboard-home',
     '/my-evaluations',
+    '/final-eval',
     '/gold-loan-app',
   ])
   if (!state.authToken || hiddenRoutes.has(location.pathname)) return null
