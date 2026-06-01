@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
-import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon, PlayCircle } from 'lucide-react'
+import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon, PlayCircle, User, X } from 'lucide-react'
 import { speak, prefetchSpeech } from '../lib/tts'
 import { clsx } from 'clsx'
 import { assetImageDataUrlAPI, evaluateFrameAPI, listMyAssetsAPI, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
@@ -178,17 +178,19 @@ export function CaptureFlow() {
   const [cameraKey, setCameraKey] = useState(0)
   const [showDemo, setShowDemo] = useState(false)
   const [showTutorial, setShowTutorial] = useState(true)  // auto-show on first step
-  const [showManualHuid, setShowManualHuid] = useState(false)
   const [manualHuid, setManualHuid] = useState(state.huidCode || '')
   const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat || null)
   const [activeTab, setActiveTab] = useState<'scan' | 'manual'>('scan')
   const [showHallmarkGuide, setShowHallmarkGuide] = useState(false)
   const [huidVerifying, setHuidVerifying] = useState(false)
   const [huidVerifyResult, setHuidVerifyResult] = useState<HuidVerificationResult | null>(state.huidVerification ?? null)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
   const spokenStep = useRef(-1)
   const [previousAssets, setPreviousAssets] = useState<UserAsset[]>([])
   const [previousAssetSrcs, setPreviousAssetSrcs] = useState<Record<number, string>>({})
-  const [loadingPrevious, setLoadingPrevious] = useState(false)
+  // Loading state kept for async asset fetch (even if value not visually used)
+  const [, setLoadingPrevious] = useState(false)
   const step = STEPS[stepIdx]
   const selectedJewelryType = normalizeJewelryType((state.pageEvidence.capture as { jewelryType?: unknown; jewelleryType?: unknown } | undefined)?.jewelryType ?? (state.pageEvidence.capture as { jewelleryType?: unknown } | undefined)?.jewelleryType)
 
@@ -531,7 +533,6 @@ export function CaptureFlow() {
 
   const hasManualHuidOverride = step.type === 'macro' && !!manualHuid && !sameItemMismatch
   const hasSelectedPurity = step.type === 'macro' && !!selectedKarat && !sameItemMismatch
-  const photoKaratVisible = step.type === 'macro' && !!selectedKarat && evalState === 'approved'
   // Macro step: proceed if photo approved, OR purity selected/manual HUID entered (photo optional), OR BIS verified
   const macroCanProceed = step.type === 'macro' && !sameItemMismatch && (
     evalState === 'approved' ||
@@ -547,32 +548,84 @@ export function CaptureFlow() {
   )
 
   return (
-    <div className="page app-page-bg animate-fade-in overflow-y-auto relative">
-      <div className="absolute inset-x-8 top-24 h-px bg-gradient-to-r from-transparent via-brand-300/40 to-transparent pointer-events-none z-0" />
+    <div className="page animate-fade-in overflow-y-auto relative" style={{
+      background: 'linear-gradient(135deg, #fdfcfa 0%, #f8f5f0 50%, #f2ede5 100%)',
+      backgroundAttachment: 'fixed'
+    } as any}>
+      {/* Animated gradient overlay */}
+      <div className="fixed inset-0 pointer-events-none z-0 opacity-30">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-amber-200/20 via-transparent to-transparent rounded-full blur-3xl" style={{ animation: 'float 20s ease-in-out infinite' }} />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-stone-200/20 via-transparent to-transparent rounded-full blur-3xl" style={{ animation: 'float 25s ease-in-out infinite reverse' }} />
+      </div>
+      <div className="absolute inset-x-8 top-24 h-px bg-gradient-to-r from-transparent via-stone-300/20 to-transparent pointer-events-none z-0" />
       <div className="relative z-10">
         {/* Header */}
-        <div className="page-header">
+        <div className="px-5 py-2.5 flex items-center justify-between border-b border-stone-200/50 bg-white/60 backdrop-blur-sm">
           <button
             id="capture-back"
             onClick={() => stepIdx > 0 ? setStepIdx(i => i - 1) : navigate('/setup')}
-            className="btn-icon"
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md hover:shadow-lg"
           >
-            <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
+            <ChevronRight className="w-3.5 h-3.5 rotate-180" />
           </button>
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">
+          <div className="flex flex-col items-center flex-1">
+            <span className="text-[11px] text-stone-500 uppercase tracking-wider font-semibold">
               Step {stepIdx + 1} of {STEPS.length}
             </span>
-            <span className="text-sm font-semibold text-stone-900 mt-0.5">{STEP_LABELS[stepIdx]}</span>
+            <span className="text-2xl font-black text-stone-950 leading-tight">{STEP_LABELS[stepIdx]}</span>
           </div>
-          <button
-            id="capture-voice"
-            onClick={() => speak(step.voiceGuide)}
-            className="btn-icon"
-            title="Replay instructions"
-          >
-            <Volume2 className="w-4 h-4 text-stone-500" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => speak(step.voiceGuide)}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95"
+              title="Replay instructions"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => state.authToken && state.authToken !== 'guest' ? setShowProfileMenu(!showProfileMenu) : setShowAuthModal(true)}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-700 text-white shadow-sm hover:shadow-md transition-all active:scale-95"
+                title={state.authToken && state.authToken !== 'guest' ? "Profile menu" : "Sign in"}
+              >
+                <User className="w-3.5 h-3.5" />
+              </button>
+              {showProfileMenu && state.authToken && state.authToken !== 'guest' && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-stone-200 z-50 overflow-hidden">
+                  <button
+                    onClick={() => { navigate('/dashboard-home'); setShowProfileMenu(false) }}
+                    className="w-full text-left px-4 py-3 hover:bg-stone-50 text-sm font-medium text-stone-900 border-b border-stone-100"
+                  >
+                    My Evaluations
+                  </button>
+                  <button
+                    onClick={() => { navigate('/dashboard-home'); setShowProfileMenu(false) }}
+                    className="w-full text-left px-4 py-3 hover:bg-stone-50 text-sm font-medium text-stone-900 border-b border-stone-100"
+                  >
+                    Applications in Progress
+                  </button>
+                  <button
+                    onClick={() => { navigate('/dashboard-home'); setShowProfileMenu(false) }}
+                    className="w-full text-left px-4 py-3 hover:bg-stone-50 text-sm font-medium text-stone-900 border-b border-stone-100"
+                  >
+                    Loans
+                  </button>
+                  <button
+                    onClick={() => { navigate('/profile'); setShowProfileMenu(false) }}
+                    className="w-full text-left px-4 py-3 hover:bg-stone-50 text-sm font-medium text-stone-900 border-b border-stone-100"
+                  >
+                    Settings
+                  </button>
+                  <button
+                    onClick={() => { navigate('/login'); setShowProfileMenu(false) }}
+                    className="w-full text-left px-4 py-3 hover:bg-red-50 text-sm font-bold text-red-600"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Demo / Previous Upload Buttons */}
@@ -670,12 +723,12 @@ export function CaptureFlow() {
                 <div className="surface-panel rounded-2xl p-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold text-stone-600">Hallmark Confidence</span>
-                    <span className={clsx('text-sm font-black', hallmarkConfidence >= 80 ? 'text-emerald-600' : hallmarkConfidence >= 55 ? 'text-amber-600' : 'text-red-500')}>
+                    <span className={clsx('text-sm font-black', hallmarkConfidence >= 80 ? 'text-emerald-600' : hallmarkConfidence >= 55 ? 'text-red-600' : 'text-red-500')}>
                       {hallmarkConfidence}%
                     </span>
                   </div>
                   <div className="w-full bg-stone-100 rounded-full h-2">
-                    <div className={clsx('h-2 rounded-full transition-all duration-500', hallmarkConfidence >= 80 ? 'bg-emerald-500' : hallmarkConfidence >= 55 ? 'bg-amber-500' : 'bg-red-400')}
+                    <div className={clsx('h-2 rounded-full transition-all duration-500', hallmarkConfidence >= 80 ? 'bg-emerald-500' : hallmarkConfidence >= 55 ? 'bg-red-500' : 'bg-red-400')}
                       style={{ width: `${hallmarkConfidence}%` }} />
                   </div>
                   <p className="text-[10px] text-stone-400 mt-1">
@@ -791,7 +844,7 @@ export function CaptureFlow() {
                               'rounded-xl border p-3 space-y-1.5',
                               huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
                                 huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
-                                  'bg-amber-50 border-amber-200'
+                                  'bg-red-50 border-red-200'
                             )}>
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-[10px] font-bold text-stone-600">BIS CARE</span>
@@ -799,7 +852,7 @@ export function CaptureFlow() {
                                   'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
                                   huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
                                     huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
-                                      'bg-amber-100 text-amber-700'
+                                      'bg-red-100 text-red-700'
                                 )}>
                                   {huidVerifyResult.status.replace('_', ' ')}
                                 </span>
@@ -867,7 +920,7 @@ export function CaptureFlow() {
                           'rounded-2xl border p-3 space-y-2',
                           huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
                             huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
-                              'bg-amber-50 border-amber-200'
+                              'bg-red-50 border-red-200'
                         )}>
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-stone-700">BIS CARE Result</span>
@@ -875,7 +928,7 @@ export function CaptureFlow() {
                               'text-[10px] font-bold px-2 py-0.5 rounded-full',
                               huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
                                 huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
-                                  'bg-amber-100 text-amber-700'
+                                  'bg-red-100 text-red-700'
                             )}>
                               {huidVerifyResult.status.replace('_', ' ')}
                             </span>
@@ -961,28 +1014,28 @@ export function CaptureFlow() {
           )}
 
           {evalState === 'approved' && currentEval?.result && (
-            <div className="mt-3 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200">
+            <div className="mt-3 px-4 py-3 rounded-2xl bg-emerald-50/90 border border-emerald-200/60">
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-emerald-700">
+                  <p className="text-sm font-medium text-emerald-900">
                     {currentEval.result.feedback.split(/\*\*(.*?)\*\*/g).map((part, i) =>
                       i % 2 === 1 ? <strong key={i} className="font-bold">{part}</strong> : <span key={i}>{part}</span>
                     )}
                   </p>
                   {currentEval.result.quality_score > 0 && (
                     <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 progress-bar">
+                      <div className="flex-1 progress-bar bg-emerald-100">
                         <div
-                          className="progress-fill"
+                          className="progress-fill bg-emerald-500"
                           style={{ width: `${Math.round(currentEval.result.quality_score * 100)}%` }}
                         />
                       </div>
-                      <span className="text-[10px] text-stone-400">{Math.round(currentEval.result.quality_score * 100)}%</span>
+                      <span className="text-[10px] text-emerald-600">{Math.round(currentEval.result.quality_score * 100)}%</span>
                     </div>
                   )}
                 </div>
-                <button onClick={() => speak(currentEval.result!.feedback)} className="opacity-50 hover:opacity-80 flex-shrink-0">
+                <button onClick={() => speak(currentEval.result!.feedback)} className="opacity-70 hover:opacity-100 flex-shrink-0 transition-opacity">
                   <Volume2 className="w-4 h-4 text-emerald-600" />
                 </button>
               </div>
@@ -990,15 +1043,15 @@ export function CaptureFlow() {
           )}
 
           {evalState === 'rejected' && currentEval?.result && (
-            <div className="mt-3 px-4 py-3 rounded-2xl bg-red-50 border border-red-200">
+            <div className="mt-3 px-4 py-3 rounded-2xl bg-red-50/90 border border-red-200/60">
               <div className="flex items-start gap-3">
                 <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-red-700">{currentEval.result.feedback}</p>
+                  <p className="text-sm font-medium text-red-900">{currentEval.result.feedback}</p>
                   {visibleIssues.length > 0 && (
                     <ul className="mt-1.5 space-y-0.5">
                       {visibleIssues.map((issue, i) => (
-                        <li key={i} className="text-xs text-red-600/70">• {issue}</li>
+                        <li key={i} className="text-xs text-red-700/70">• {issue}</li>
                       ))}
                     </ul>
                   )}
@@ -1038,7 +1091,7 @@ export function CaptureFlow() {
         {/* Bottom actions */}
         <div className="px-5 pb-6 pt-3 space-y-2 sticky-action">
           {evalState === 'rejected' && !hasManualHuidOverride && !hasSelectedPurity && !huidVerifyResult ? (
-            <button onClick={handleRetake} className="w-full btn-primary">
+            <button onClick={handleRetake} className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded-2xl py-3 font-semibold transition-colors flex items-center justify-center gap-2">
               <RotateCcw className="w-5 h-5" />
               Retake Photo
             </button>
@@ -1048,7 +1101,7 @@ export function CaptureFlow() {
                 id={`capture-next-${step.type}`}
                 onClick={next}
                 disabled={!canProceed || evalState === 'evaluating'}
-                className={clsx('w-full', (canProceed && evalState !== 'evaluating') ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed')}
+                className={clsx('w-full rounded-2xl py-3 font-semibold transition-colors flex items-center justify-center gap-2', (canProceed && evalState !== 'evaluating') ? 'bg-black hover:bg-stone-900 text-white' : 'bg-stone-200 text-stone-400 cursor-not-allowed')}
               >
                 {evalState === 'evaluating' ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Analysing…</>
@@ -1056,7 +1109,7 @@ export function CaptureFlow() {
                 {evalState !== 'evaluating' && <ChevronRight className="w-5 h-5" />}
               </button>
               {evalState === 'rejected' && hasManualHuidOverride && (
-                <button onClick={handleRetake} className="btn-secondary w-full text-sm mt-2">
+                <button onClick={handleRetake} className="w-full text-sm mt-2 bg-amber-700 hover:bg-amber-800 text-white rounded-2xl py-2.5 font-semibold transition-colors">
                   <RotateCcw className="w-4 h-4 mr-2 inline" /> Retake Photo Instead
                 </button>
               )}
@@ -1124,6 +1177,44 @@ export function CaptureFlow() {
                   View Only
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Auth Modal */}
+        {showAuthModal && (
+          <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+            <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl">
+              {/* Close button */}
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Welcome message */}
+              <h2 className="text-2xl font-bold text-stone-950 mb-8 text-center">Welcome</h2>
+
+              {/* Login/Signup buttons */}
+              <div className="space-y-3">
+                <button
+                  onClick={() => { navigate('/login'); setShowAuthModal(false) }}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-red-600 to-red-700 text-white font-bold text-base shadow-lg hover:shadow-xl transition-all active:scale-95"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => { navigate('/register'); setShowAuthModal(false) }}
+                  className="w-full py-4 rounded-2xl bg-white border-2 border-stone-950 text-stone-950 font-bold text-base hover:bg-stone-50 transition-all active:scale-95"
+                >
+                  Sign Up
+                </button>
+              </div>
+
+              <p className="text-xs text-stone-500 text-center mt-6">
+                Sign in or create an account to get started
+              </p>
             </div>
           </div>
         )}

@@ -197,7 +197,7 @@ export function Welcome() {
         <div className="relative group">
           <button
             id="welcome-cta"
-            onClick={() => navigate(state.authToken ? '/consent' : '/register')}
+            onClick={() => navigate(state.authToken ? '/dashboard-home' : '/register')}
             className="btn-primary w-full text-base py-4 relative font-semibold flex items-center justify-center gap-2"
           >
             {t('welcome_cta')}

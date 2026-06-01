@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { ChevronRight, History, Image as ImageIcon, LogOut, RefreshCw, Trash2, UserRound, X, AlertTriangle } from 'lucide-react'
 import { assetImageDataUrlAPI, deleteUserAssetAPI, listLoanPredictionsAPI, listMyAssetsAPI, type UserAsset } from '../lib/api'
 import { useSessionStore } from '../store/session'
@@ -27,7 +27,6 @@ function AssetLabel({ asset }: { asset: UserAsset }) {
 
 export function Profile() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { state, clearAuth } = useSessionStore()
   const [assets, setAssets] = useState<UserAsset[]>([])
   const [predictions, setPredictions] = useState<any[]>([])
@@ -58,7 +57,7 @@ export function Profile() {
 
   useEffect(() => {
     if (!state.authToken) {
-      navigate('/auth')
+      navigate('/')
       return
     }
     if (state.authToken === 'guest') {
@@ -133,7 +132,7 @@ export function Profile() {
         </button>
         <span className="text-sm font-semibold text-stone-700">Profile</span>
         <button
-          onClick={() => { clearAuth(); navigate('/auth') }}
+          onClick={() => { clearAuth(); navigate('/') }}
           className="btn-icon"
           aria-label="Logout"
         >
@@ -152,7 +151,7 @@ export function Profile() {
               You are currently using the app as a guest. To save your loan predictions, captures, and view your profile history, please create an account.
             </p>
             <button
-              onClick={() => { clearAuth(); navigate('/auth') }}
+              onClick={() => { clearAuth(); navigate('/') }}
               className="btn-primary w-full"
             >
               Sign In / Register

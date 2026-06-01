@@ -1,15 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Home } from './pages/Home'
 import { LanguagePicker } from './pages/LanguagePicker'
-import { Auth } from './pages/Auth'
 import { Register } from './pages/Register'
 import { Login } from './pages/Login'
 import { Tutorial } from './pages/Tutorial'
 import { Profile } from './pages/Profile'
 import { Welcome } from './pages/Welcome'
-import { Consent } from './pages/Consent'
 import { OTP } from './pages/OTP'
 import { Setup } from './pages/Setup'
+import { BeforeCapture } from './pages/BeforeCapture'
 import { CaptureFlow } from './pages/CaptureFlow'
 import { LiveCapture } from './pages/LiveCapture'
 import { CertificateScan } from './pages/CertificateScan'
@@ -35,13 +34,12 @@ function ProfileShortcut() {
   const { state } = useSessionStore()
   const hiddenRoutes = new Set([
     '/',
-    '/auth',
     '/register',
     '/login',
     '/profile',
     '/welcome',
-    '/consent',
     '/setup',
+    '/before-capture',
     '/dashboard-home',
     '/gold-loan-app',
   ])
@@ -67,15 +65,14 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/language" element={<LanguagePicker />} />
-          <Route path="/auth" element={<Auth />} />
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
           <Route path="/tutorial" element={<Tutorial />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/welcome" element={<Welcome />} />
-          <Route path="/consent" element={<Consent />} />
           <Route path="/otp" element={<OTP />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/before-capture" element={<BeforeCapture />} />
           <Route path="/capture" element={<CaptureFlow />} />
           <Route path="/live-capture" element={<LiveCapture />} />
           <Route path="/certificate-scan" element={<CertificateScan />} />

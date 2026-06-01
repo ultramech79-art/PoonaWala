@@ -388,7 +388,15 @@ export function LiveCapture() {
     if (!track) return
     const next = Math.max(zoomMin, Math.min(zoomMax, value))
     setZoom(next)
-    try { await track.applyConstraints({ advanced: [{ zoom: next } as any] }) } catch {}
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: next } as any] })
+      // Wait longer for zoom hardware to stabilize (200-300ms)
+      await new Promise(r => setTimeout(r, 300))
+      const settings = track.getSettings?.() as any
+      console.log('[Zoom Applied]', { requested: next, actual: settings?.zoom })
+    } catch (e) {
+      console.warn('[Zoom Failed]', e)
+    }
   }, [zoomMin, zoomMax])
 
   const switchCamera = useCallback(async (facingMode: 'user' | { ideal: 'environment' }, preferredZoom?: number, includeAudio = false) => {
@@ -444,7 +452,21 @@ export function LiveCapture() {
   const startCamera = useCallback(async () => {
     setStatus('loading')
     try {
-      const deviceId = await preferredCameraDeviceId({ ideal: 'environment' })
+      let deviceId = await preferredCameraDeviceId({ ideal: 'environment' })
+
+      // If no preferred device found, use the first available camera
+      if (!deviceId) {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const videoInputs = devices.filter(d => d.kind === 'videoinput')
+          if (videoInputs.length > 0) {
+            deviceId = videoInputs[0].deviceId
+          }
+        } catch (e) {
+          console.warn('Could not enumerate devices:', e)
+        }
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
@@ -553,13 +575,14 @@ export function LiveCapture() {
         // Switch back to rear camera for one combined video + sound recording.
         clearInterval(ivRef.current!)
         setAuthAudioReady(false)
+        // Reset zoom to 1x for auth check video
         try {
-          await switchCamera({ ideal: 'environment' }, Math.min(Math.max(zoom, 1), zoomMax), true)
+          await switchCamera({ ideal: 'environment' }, 1, true)
         } catch {
           try {
-            await switchCamera({ ideal: 'environment' }, Math.min(Math.max(zoom, 1), zoomMax), false)
+            await switchCamera({ ideal: 'environment' }, 1, false)
           } catch {
-            await configureCameraTrack(Math.min(Math.max(zoom, 1), zoomMax))
+            await applyZoom(1)
           }
         }
         authFramesRef.current = []
@@ -594,7 +617,10 @@ export function LiveCapture() {
       }
       if (ANGLES[nextIdx] === 'macro') {
         const macroZoom = Math.min(Math.max(2, zoomMin), zoomMax)
-        if (zoomSupported) await applyZoom(macroZoom)
+        if (zoomSupported) {
+          await applyZoom(macroZoom)
+          await new Promise(r => setTimeout(r, 500))
+        }
       }
     } else if (result.guidance) {
       approvalStreakRef.current = { angle: null, count: 0 }
@@ -902,8 +928,11 @@ export function LiveCapture() {
     setShowPurityModal(false)
     setSelectedPurity('')
     setManualPurity('')
+
+    // Reset zoom and torch for selfie
     setTorchOn(false)
     setTorchSupported(false)
+    if (zoomSupported) await applyZoom(1)
 
     try {
       await switchCamera('user', 1)
@@ -916,7 +945,7 @@ export function LiveCapture() {
       clearInterval(ivRef.current!)
       ivRef.current = setInterval(doAnalyze, ANALYZE_INTERVAL_MS)
     }, 900)
-  }, [addCapture, doAnalyze, setScannedKarat, switchCamera])
+  }, [addCapture, doAnalyze, setScannedKarat, switchCamera, zoomSupported, applyZoom])
 
   const handleStart = () => { unlockTTS(); startCamera() }
 
@@ -1099,10 +1128,10 @@ export function LiveCapture() {
         </div>
 
         {zoomSupported && (
-          <div className="absolute top-24 left-4 right-4 z-10 bg-black/55 border border-white/10 rounded-2xl px-3 py-2 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-white/55 text-[10px] font-semibold">Zoom</span>
-              <span className="text-amber-300 text-[10px] font-bold">{zoom.toFixed(1)}x</span>
+          <div className="absolute top-24 left-4 right-4 z-10 bg-black border border-red-600/50 rounded-2xl px-5 py-4 backdrop-blur-md shadow-2xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-white/70 uppercase tracking-widest font-bold">Zoom</span>
+              <span className="text-lg text-red-500 font-black">{zoom.toFixed(1)}×</span>
             </div>
             <input
               type="range"
@@ -1111,7 +1140,7 @@ export function LiveCapture() {
               step="0.1"
               value={zoom}
               onChange={e => applyZoom(Number(e.target.value))}
-              className="w-full accent-amber-400"
+              className="w-full accent-red-600"
             />
           </div>
         )}
@@ -1197,6 +1226,18 @@ export function LiveCapture() {
       <video ref={bindVideoElement} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover" />
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
 
+      {/* Circular lens aperture frame */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="relative w-96 h-96">
+          {/* Outer black ring */}
+          <div className="absolute inset-0 rounded-full border-8 border-black shadow-2xl shadow-black/80" />
+          {/* Middle gray ring */}
+          <div className="absolute inset-1 rounded-full border-2 border-stone-700" />
+          {/* Inner circle mask */}
+          <div className="absolute inset-4 rounded-full border border-stone-600 bg-gradient-to-b from-black/20 to-transparent" />
+        </div>
+      </div>
+
       {/* Top bar */}
       <div className="absolute top-4 left-0 right-0 flex items-center justify-between px-4 z-10">
         <button onClick={() => navigate('/capture')} className="flex items-center gap-1 text-white/50 text-xs bg-black/40 px-2.5 py-1.5 rounded-full backdrop-blur-sm">
@@ -1222,12 +1263,12 @@ export function LiveCapture() {
       </div>
 
       {zoomSupported && (
-        <div className="absolute top-16 left-4 right-4 z-10 bg-black/55 border border-white/10 rounded-2xl px-3 py-2 backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-white/55 text-[10px] font-semibold">
+        <div className="absolute top-16 left-4 right-4 z-10 bg-black border border-red-600/50 rounded-2xl px-5 py-4 backdrop-blur-md shadow-2xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-white/70 uppercase tracking-widest font-bold">
               {currentAngle === 'macro' ? 'Zoom for hallmark' : 'Zoom'}
             </span>
-            <span className="text-amber-300 text-[10px] font-bold">{zoom.toFixed(1)}x</span>
+            <span className="text-lg text-red-500 font-black">{zoom.toFixed(1)}×</span>
           </div>
           <input
             type="range"
@@ -1236,7 +1277,7 @@ export function LiveCapture() {
             step="0.1"
             value={zoom}
             onChange={e => applyZoom(Number(e.target.value))}
-            className="w-full accent-amber-400"
+            className="w-full accent-red-600"
           />
         </div>
       )}

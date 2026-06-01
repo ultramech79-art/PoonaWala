@@ -70,7 +70,7 @@ export function Home() {
   }
 
   const handleGetStarted = () => {
-    navigate('/language')
+    navigate('/register')
   }
 
   const handleGuest = () => {
