@@ -81,7 +81,6 @@ class User(Base):
 
     id = Column(String, primary_key=True, index=True)
     phone = Column(String, unique=True, index=True, nullable=True)
-    email = Column(String, unique=True, index=True, nullable=True)
     password_hash = Column(String, nullable=True)
     google_sub = Column(String, unique=True, index=True, nullable=True)
     full_name = Column(String, nullable=False)
@@ -94,7 +93,6 @@ class User(Base):
     profile_photo_url = Column(String, nullable=True)
     profile_photo_public_id = Column(String, nullable=True)
     is_phone_verified = Column(Boolean, default=False, nullable=False)
-    is_email_verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     last_login_at = Column(DateTime(timezone=True), nullable=True)

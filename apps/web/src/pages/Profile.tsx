@@ -167,7 +167,7 @@ export function Profile() {
               </div>
               <div className="min-w-0">
                 <p className="font-display font-black text-xl text-stone-950 truncate">{user?.full_name}</p>
-                <p className="text-sm text-stone-500 truncate">{user?.phone || user?.email}</p>
+                <p className="text-sm text-stone-500 truncate">{user?.phone}</p>
                 <p className="text-xs text-stone-400 mt-1">Region {user?.region_code} · {user?.language?.toUpperCase()}</p>
               </div>
             </div>

@@ -124,7 +124,6 @@ export interface SessionState {
 export interface UserProfile {
   id: string
   phone: string | null
-  email: string | null
   full_name: string
   dob: string
   language: string
@@ -134,7 +133,6 @@ export interface UserProfile {
   pincode: string | null
   profile_photo_url: string | null
   is_phone_verified: boolean
-  is_email_verified: boolean
 }
 
 export interface PurityBand {
