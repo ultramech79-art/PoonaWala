@@ -61,6 +61,7 @@ export interface ConfidenceEvidence {
   sameItemMismatch: boolean
   hardMetalTrigger: boolean
   strongCounterEvidence: boolean
+  audioPlated: boolean                               // tap/acoustic test suggests plating or imitation
 }
 
 export interface ConfidenceComputation {
@@ -220,6 +221,12 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
   const hardMetalTrigger = nonAudioTriggers.some(trigger =>
     ['plated_metal_suspected', 'non_gold_specular_signature'].includes(trigger),
   )
+  // Audio (tap) test plated detection. The acoustic test is otherwise excluded
+  // from the blend, but a "plated / imitation" verdict is a specific authenticity
+  // red flag that must dampen the final score and force manual verification.
+  const audioVerdictText = `${state.tapTestResult?.label ?? ''} ${state.tapTestResult?.reasoning ?? ''} ${String((state.pageEvidence.audio as { verdict?: string } | undefined)?.verdict ?? '')}`.toLowerCase()
+  const audioPlated = /plated|imitation/.test(audioVerdictText)
+
   const frames = videoFrameCount(state)
   const videoScore = state.liveAuthResult?.video_score ?? numberOrNull(videoEvidence.score)
   const strongCounterEvidence = Boolean(
@@ -266,6 +273,7 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
     sameItemMismatch,
     hardMetalTrigger,
     strongCounterEvidence,
+    audioPlated,
   }
 }
 
@@ -292,7 +300,9 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
   const huidScore =
     evidence.billHuidMismatch                       ? 0.05 :  // bill HUID contradicts entered HUID (fraud)
     evidence.photoHuidEvidence && evidence.huidVerified ? 1.00 :  // OCR-read HUID + BIS — strongest
-    evidence.photoHuidEvidence                      ? 0.93 :  // HUID OCR-read from photo (binds to item)
+    evidence.photoHuidEvidence && evidence.billHuidMatch ? 0.93 : // OCR-read HUID corroborated by the bill
+    evidence.photoHuidEvidence                      ? 0.85 :  // HUID OCR-read from photo, no BIS/bill — strong but not 90+
+
     evidence.huidVerified && evidence.hasMacro      ? 0.88 :  // typed + BIS-verified + hallmark photo (below photo-OCR)
     evidence.photoKaratEvidence                     ? 0.84 :  // karat (18K/22K) OCR-read from photo
     evidence.huidVerified                           ? 0.80 :  // typed + BIS-verified, no photo — good, below photo-OCR
@@ -380,8 +390,8 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
   const sameItemScore =
     evidence.sameItemMismatch ? 0.05 :
     evidence.stillCoverage >= 0.75 && evidence.videoFrameCoverage >= 0.6 ? 0.97 :
-    evidence.stillCoverage >= 0.75 ? 0.92 :
-    evidence.stillCoverage >= 0.5 ? 0.70 :
+    evidence.stillCoverage >= 0.75 ? 0.78 :   // stills only, no video cross-check
+    evidence.stillCoverage >= 0.5 ? 0.65 :
     0.55
 
   // Weights reflect each signal's decisiveness for a gold-loan assessment. HUID
@@ -450,7 +460,7 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     hardMismatch                                          ? 0 :
     evidence.photoHuidEvidence && evidence.billHuidMatch  ? 0.94 :  // bill HUID == photo-read HUID → >90
     evidence.photoHuidEvidence && evidence.huidVerified   ? 0.93 :  // photo-read HUID + BIS
-    evidence.photoHuidEvidence                            ? 0.90 :  // HUID OCR-read from photo — highest unverified
+    evidence.photoHuidEvidence                            ? 0.85 :  // HUID OCR-read, no BIS/bill — strong but reserve 90+ for verified/corroborated
     evidence.huidVerified && evidence.hasMacro            ? 0.86 :  // typed + BIS-verified + hallmark photo (below photo-OCR)
     evidence.photoKaratEvidence                           ? 0.80 :  // hallmark photo OCR-detected the karat → ~80% on its own
     evidence.billHuidMatch && evidence.hasMacro           ? 0.84 :  // bill HUID match + hallmark photo
@@ -461,11 +471,12 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     0                                                                // no strong identity → no floor
 
   // No identity / purity established at all (just photos) → cannot exceed moderate,
-  // even if a video/selfie were captured. Detecting a karat or HUID lifts this.
+  // even if a video/selfie were captured. Only EVIDENCE-BACKED karat lifts this:
+  // a HUID, an OCR-read karat from the hallmark photo, or a bill karat. A manually
+  // SELECTED karat is just a claim (not proof) and must NOT escape this cap.
   const noIdentity =
     !evidence.huidPresent &&
     !evidence.photoKaratEvidence &&
-    state.scannedKarat == null &&
     (state.certificateData?.karat ?? null) == null
 
   // NOTE: The visual plated / non-gold "metal_warning" multiplier was REMOVED on
@@ -482,8 +493,9 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     { id: 'identity_floor', kind: 'floor', active: identityFloor > 0, value: identityFloor, detail: 'strong HUID / hallmark / photo-karat identity sets a minimum — skipped captures cannot drag below it' },
     { id: 'same_item_mismatch', kind: 'multiplier', active: evidence.sameItemMismatch, value: 0.30, detail: 'different jewellery detected across stages' },
     { id: 'bill_huid_mismatch', kind: 'multiplier', active: evidence.billHuidMismatch, value: 0.45, detail: 'bill HUID contradicts the entered / scanned HUID' },
+    { id: 'audio_plated', kind: 'multiplier', active: evidence.audioPlated, value: 0.92, detail: 'tap/acoustic test hints at possible plating — NOT conclusive, so only a small ~8% caution reduction; routed to manual agent verification' },
     { id: 'no_hallmark_photo_ceiling', kind: 'ceiling', active: evidence.huidPresent && !evidence.hasMacro && !evidence.photoHuidEvidence && !evidence.huidVerified, value: noHallmarkPhotoCeiling, detail: 'unverified HUID with no hallmark photo — ceiling raised by corroboration; BIS verification removes this cap' },
-    { id: 'no_identity_ceiling', kind: 'ceiling', active: noIdentity, value: 0.55, detail: 'no HUID / karat established — photos alone stay moderate (~50%)' },
+    { id: 'no_identity_ceiling', kind: 'ceiling', active: noIdentity, value: 0.47, detail: 'no HUID / karat established — photos alone cannot exceed ~47%; routed to manual agent verification' },
   ]
 
   // Apply in order: identity FLOOR lifts → fraud MULTIPLIERS crush → CEILINGS cap.
@@ -607,8 +619,12 @@ function logConfidenceComputation(args: {
 export function routeFromConfidence(score: number, evidence: ConfidenceEvidence): Route {
   return [
     { route: 'REJECT' as Route, active: evidence.sameItemMismatch || evidence.billHuidMismatch },
-    { route: 'INSTANT' as Route, active: evidence.huidVerified && score > 0.75 && !evidence.hardMetalTrigger },
-    { route: 'AGENT' as Route, active: score > 0.47 },
+    // A possible-plating acoustic verdict is never an instant approval — it always
+    // prefers manual agent verification (we are not certain it is plated).
+    { route: 'INSTANT' as Route, active: evidence.huidVerified && score > 0.75 && !evidence.hardMetalTrigger && !evidence.audioPlated },
+    // Plated suspicion routes to a human agent even if the small caution reduction
+    // dips the score just below the normal AGENT cutoff.
+    { route: 'AGENT' as Route, active: score >= 0.47 || (evidence.audioPlated && score > 0.40) },
     { route: 'RECAPTURE' as Route, active: score > 0.40 },
     { route: 'REJECT' as Route, active: true },
   ].find(rule => rule.active)!.route
