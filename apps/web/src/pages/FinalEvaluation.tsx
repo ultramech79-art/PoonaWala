@@ -6,13 +6,13 @@ import {
 } from '../lib/regionEngine'
 import { computeLTV } from '../lib/ltvEngine'
 import { getCibilTierKey, getCibilTierInfo } from '../lib/roiEngine'
-import { validatePAN, getPANKYCStatus, deriveScoreFromPAN } from '../lib/panEngine'
+import { validatePAN, deriveScoreFromPAN } from '../lib/panEngine'
 import { apiBase } from '../lib/api'
 import loanParams from '../data/loan_params.json'
 import regionsData from '../data/regions.json'
 import {
   ChevronRight, MapPin,
-  ArrowRight, CheckCircle, AlertTriangle, Info, Shield, CreditCard, Loader,
+  ArrowRight, CheckCircle, AlertTriangle, Info, CreditCard, Loader,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -132,33 +132,24 @@ export function FinalEvaluation() {
     })
   }, [region, cityGoldValue, result])
 
-  const kycStatus = useMemo(
-    () => getPANKYCStatus(ltvResult?.maxLoanInr ?? 0),
-    [ltvResult],
-  )
-
   // ── Eligibility ──────────────────────────────────────────────────────────────
   const eligible = useMemo(() => {
     if (!region || !ltvResult) return false
     if (detectedKarat < loanParams.rbi_rules.min_purity_karat) return false
     if (result.weight.estimated_g > loanParams.rbi_rules.max_weight_per_applicant_kg * 1000) return false
-    if (kycStatus.panRequired && pan.length === 10 && !panValidation.valid) return false
     return true
-  }, [region, ltvResult, kycStatus, pan, panValidation, detectedKarat, result])
+  }, [region, ltvResult, detectedKarat, result])
 
   const rejectReason = useMemo(() => {
     if (detectedKarat < loanParams.rbi_rules.min_purity_karat)
       return `Gold purity ${detectedKarat}K is below RBI minimum ${loanParams.rbi_rules.min_purity_karat}K`
     if (result.weight.estimated_g > loanParams.rbi_rules.max_weight_per_applicant_kg * 1000)
       return `Weight exceeds ${loanParams.rbi_rules.max_weight_per_applicant_kg}kg per-applicant limit`
-    if (kycStatus.panRequired && pan.length === 10 && !panValidation.valid)
-      return 'Valid PAN required for loans above ₹50,000'
     return null
-  }, [detectedKarat, result, kycStatus, pan, panValidation])
+  }, [detectedKarat, result])
 
   const locationReady = Boolean(region)
-  const panReady      = !kycStatus.panRequired || panValidation.valid
-  const canProceed    = locationReady && panReady && eligible && !priceLoading && cityGoldValue > 0
+  const canProceed    = locationReady && eligible && !priceLoading && cityGoldValue > 0
   const cumulativeItems = useMemo(() => {
     if (!result) return []
     const currentId = result.session_id || state.sessionId || 'current'
@@ -227,7 +218,7 @@ export function FinalEvaluation() {
   }
 
   return (
-    <div className="page app-page-bg overflow-y-auto no-scrollbar animate-fade-in">
+    <div className="flex flex-col app-page-bg final-evaluation-page animate-fade-in relative z-[5]" style={{ height: '100dvh' }}>
       <div className="page-header">
         <button onClick={() => navigate('/result')} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
@@ -236,10 +227,10 @@ export function FinalEvaluation() {
         <div className="w-11" />
       </div>
 
-      <div className="px-5 pb-24 space-y-4 pt-4">
+      <main className="flex-1 overflow-y-auto no-scrollbar px-5 pb-14 space-y-4 pt-4 final-evaluation-content">
 
         {/* Gold summary */}
-        <div className="copper-panel rounded-3xl p-5">
+        <div className="final-assessment-card rounded-3xl p-5">
           <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-gold-200/85 mb-2">Gold Assessment</p>
           <div className="flex items-center justify-between">
             <div>
@@ -250,7 +241,7 @@ export function FinalEvaluation() {
                 <p className="text-xs text-white/62 mt-1">
                   City value ~{fmt(cityGoldValue)}
                   {priceSource === 'timesofindia' && (
-                    <span className="ml-1 text-emerald-600 font-medium">· live city rate</span>
+                    <span className="ml-1 text-emerald-300 font-medium">· live city rate</span>
                   )}
                   {priceSource === 'ibja_national' && (
                     <span className="ml-1 text-stone-400">· IBJA national</span>
@@ -273,9 +264,9 @@ export function FinalEvaluation() {
         </div>
 
         {/* Step 1: Location */}
-        <div className="surface-panel rounded-3xl p-4">
+        <div className="surface-panel final-step-panel rounded-3xl p-4">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-stone-950 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-bold text-white">1</span>
             </div>
             <p className="font-display font-semibold text-sm text-stone-900">Your Location</p>
@@ -318,7 +309,7 @@ export function FinalEvaluation() {
 
             {/* City gold price card */}
             {!priceLoading && cityPrices && region && (
-              <div className="rounded-xl bg-stone-50 border border-stone-200 px-3 py-2.5 space-y-2">
+              <div className="final-rate-card rounded-2xl px-3 py-3 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MapPin className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />
@@ -327,7 +318,7 @@ export function FinalEvaluation() {
                     </span>
                   </div>
                   <span className={clsx(
-                    'text-[10px] font-semibold px-2 py-0.5 rounded-full',
+                    'text-[10px] font-semibold px-2 py-1 rounded-full',
                     priceSource === 'timesofindia'
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-stone-100 text-stone-500',
@@ -345,11 +336,11 @@ export function FinalEvaluation() {
                     <div
                       key={label}
                       className={clsx(
-                        'rounded-lg px-2 py-1.5 border',
-                        highlight ? 'border-brand-300 bg-brand-50' : 'border-stone-100 bg-white',
+                        'final-rate-tile rounded-xl px-2 py-2 border',
+                        highlight && 'is-active',
                       )}
                     >
-                      <p className={clsx('text-[10px]', highlight ? 'text-brand-600 font-semibold' : 'text-stone-400')}>
+                      <p className={clsx('text-[10px]', highlight ? 'text-stone-900 font-semibold' : 'text-stone-400')}>
                         {label}/g {highlight && '✓'}
                       </p>
                       <p className="text-xs font-bold text-stone-800">₹{Math.round(price).toLocaleString('en-IN')}</p>
@@ -382,17 +373,14 @@ export function FinalEvaluation() {
         </div>
 
         {/* Step 2: PAN + auto credit profile */}
-        <div className="surface-panel rounded-3xl p-4">
+        <div className="surface-panel final-step-panel rounded-3xl p-4">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-stone-950 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-bold text-white">2</span>
             </div>
             <div className="flex-1 flex items-center justify-between">
               <p className="font-display font-semibold text-sm text-stone-900">PAN & Credit Profile</p>
-              {kycStatus.panRequired
-                ? <span className="text-[10px] text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full font-medium">Required</span>
-                : <span className="text-[10px] text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">Optional</span>
-              }
+              <span className="text-[10px] text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">Optional</span>
             </div>
           </div>
 
@@ -441,26 +429,16 @@ export function FinalEvaluation() {
             </div>
           )}
 
-          {kycStatus.panRequired && (
-            <p className="text-[10px] text-stone-500 mt-2 flex items-center gap-1">
-              <Shield className="w-3 h-3" /> Mandatory above {fmt(loanParams.rbi_rules.pan_mandatory_above_inr)} (PMLA 2002)
-            </p>
-          )}
-          {kycStatus.enhancedDDRequired && (
-            <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
-              <Info className="w-3 h-3" /> Enhanced due diligence required above {fmt(loanParams.rbi_rules.pmla_enhanced_dd_above_inr)}
-            </p>
-          )}
         </div>
 
         {/* Live Eligibility Card */}
         {locationReady && !priceLoading && ltvResult && cityGoldValue > 0 && (
-          <div className={clsx('rounded-3xl p-5 border', eligible ? 'bg-emerald-50/70 border-emerald-200' : 'bg-red-50/70 border-red-200')}>
+          <div className={clsx('final-eligibility-panel rounded-3xl p-5', !eligible && 'is-rejected')}>
             <div className="flex items-center justify-between mb-3">
               <p className="font-display font-semibold text-sm text-stone-900">Your Eligibility</p>
               {eligible
-                ? <span className="badge-green text-[10px]"><CheckCircle className="w-3 h-3" /> Eligible</span>
-                : <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Not Eligible</span>
+                ? <span className="final-status-pill"><CheckCircle className="w-3 h-3" /> Eligible</span>
+                : <span className="final-status-pill is-rejected">Not Eligible</span>
               }
             </div>
 
@@ -472,16 +450,16 @@ export function FinalEvaluation() {
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div className="bg-white rounded-xl p-3 border border-stone-200">
+                  <div className="final-value-card rounded-2xl p-3">
                     <p className="text-[10px] text-stone-400 mb-1">City Gold Value</p>
                     <p className="font-display font-black text-base text-stone-900">{fmt(cityGoldValue)}</p>
                     <p className="text-[10px] text-stone-400 mt-0.5">
                       ₹{Math.round(cityPriceForKarat).toLocaleString('en-IN')}/g · {detectedKarat}K
                     </p>
                   </div>
-                  <div className="bg-white rounded-xl p-3 border border-stone-200">
+                  <div className="final-value-card rounded-2xl p-3">
                     <p className="text-[10px] text-stone-400 mb-1">Loan Available Now</p>
-                    <p className="font-display font-black text-base text-brand-600 tabular-nums">{fmt(ltvResult.provisionalLowLoanInr)}</p>
+                    <p className="font-display font-black text-base text-stone-950 tabular-nums">{fmt(ltvResult.provisionalLowLoanInr)}</p>
                     <p className="text-[10px] text-stone-400 mt-0.5 tabular-nums">
                       up to {fmt(ltvResult.maxLoanInr)} on verification
                     </p>
@@ -489,10 +467,10 @@ export function FinalEvaluation() {
                 </div>
 
                 {/* Confidence → LTV — the one core formula */}
-                <div className="rounded-xl border border-stone-200 bg-white p-3.5">
-                  <div className="flex items-center justify-between mb-2.5">
+                <div className="final-ltv-card rounded-2xl p-3.5">
+                  <div className="flex items-start justify-between gap-3 mb-3">
                     <p className="label text-stone-500">Loan-to-Value</p>
-                    <span className="text-[10px] text-stone-400">
+                    <span className="text-[10px] text-stone-500 text-right leading-snug">
                       {ltvResult.ticketTierDescription} · RBI cap {ltvResult.tierCeilingPct}%
                     </span>
                   </div>
@@ -506,7 +484,7 @@ export function FinalEvaluation() {
                       <>
                         <div className="relative h-9 rounded-lg bg-stone-100 overflow-hidden">
                           <div
-                            className="absolute inset-y-0 left-0 bg-brand-600 flex items-center justify-end pr-2 transition-all duration-500"
+                            className="final-ltv-fill absolute inset-y-0 left-0 flex items-center justify-end pr-2 transition-all duration-500"
                             style={{ width: `${provWidth}%` }}
                           >
                             <span className="text-[11px] font-bold text-white tabular-nums">{ltvResult.provisionalLowLtvPct}%</span>
@@ -526,18 +504,18 @@ export function FinalEvaluation() {
                   })()}
 
                   {/* One core formula */}
-                  <div className="mt-3 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2.5">
+                  <div className="final-formula-card mt-3 rounded-xl px-3 py-2.5">
                     <p className="text-[10px] text-stone-400 mb-1">Provisional LTV = floor + (RBI cap − floor) × confidence</p>
                     <p className="font-mono text-[12px] text-stone-700 tabular-nums">
                       {loanParams.ltv_adjusters.ltv_floor_pct} + ({ltvResult.finalLtvPct} − {loanParams.ltv_adjusters.ltv_floor_pct}) × {ltvResult.confidenceFactor}
                       {' = '}
-                      <span className="font-bold text-brand-600">{ltvResult.provisionalLowLtvPct}%</span>
+                      <span className="font-bold text-stone-950">{ltvResult.provisionalLowLtvPct}%</span>
                     </p>
                   </div>
 
                   <p className="text-[11px] text-stone-500 mt-2 leading-snug">
                     Your assessment confidence of <b>{Math.round(result.confidence.score * 100)}%</b> unlocks{' '}
-                    <b className="text-brand-600">{ltvResult.provisionalLowLtvPct}%</b> now; a branch visit unlocks the full{' '}
+                    <b className="text-stone-950">{ltvResult.provisionalLowLtvPct}%</b> now; a branch visit unlocks the full{' '}
                     <b>{ltvResult.finalLtvPct}%</b>.
                   </p>
                 </div>
@@ -558,7 +536,7 @@ export function FinalEvaluation() {
         )}
 
         {locationReady && !priceLoading && cumulativeItems.length > 0 && cityGoldValue > 0 && (
-          <div className="surface-panel rounded-3xl p-4">
+          <div className="final-cumulative-panel rounded-3xl p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-stone-500">Cumulative LTV result</p>
@@ -574,7 +552,7 @@ export function FinalEvaluation() {
             </div>
             <div className="mt-4 space-y-2">
               {cumulativeItems.map(item => (
-                <div key={item.id} className={clsx('rounded-2xl border p-3', item.isCurrent ? 'border-brand-200 bg-brand-50/60' : 'border-stone-200 bg-white')}>
+                <div key={item.id} className={clsx('final-cumulative-item rounded-2xl border p-3', item.isCurrent && 'is-current')}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-stone-900">{item.label}</p>
@@ -583,13 +561,13 @@ export function FinalEvaluation() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-black text-brand-700 tabular-nums">{fmt(item.loanMaxInr)}</p>
+                      <p className="text-sm font-black text-stone-950 tabular-nums">{fmt(item.loanMaxInr)}</p>
                       <p className="text-[10px] font-semibold text-stone-400">loan cap</p>
                     </div>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
                     <div
-                      className="h-full rounded-full bg-brand-600"
+                      className="h-full rounded-full bg-stone-950"
                       style={{ width: `${Math.max(8, Math.min(100, (item.loanMaxInr / Math.max(cumulativeLoanMax, 1)) * 100))}%` }}
                     />
                   </div>
@@ -599,26 +577,26 @@ export function FinalEvaluation() {
           </div>
         )}
 
-        {!panReady && locationReady && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600">
-            <CreditCard className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <p>PAN is required for your loan amount. Enter a valid PAN above to continue.</p>
-          </div>
-        )}
-      </div>
+      </main>
 
-      {/* Sticky CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-5 pb-6 pt-4 sticky-action">
+      {/* Sticky bottom CTA, matching dashboard-home */}
+      <div
+        className="sticky bottom-0 z-20 px-5 py-3 bg-white/90 backdrop-blur-xl border-t border-stone-200/70"
+        style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+      >
         <button
           onClick={handleContinue}
           disabled={!canProceed}
-          className={clsx('btn-primary w-full', !canProceed && 'opacity-40 cursor-not-allowed')}
+          aria-label="Continue for Gold Loan"
+          className={clsx(
+            'w-full py-4 rounded-2xl bg-charcoal text-white font-display font-black text-base shadow-cta active:scale-[0.98] transition-transform flex items-center justify-center gap-2.5',
+            !canProceed && 'opacity-40 cursor-not-allowed shadow-none'
+          )}
         >
           {priceLoading ? <><Loader className="w-4 h-4 animate-spin" /> Loading city rate…</> : <>Continue for Gold Loan <ArrowRight className="w-5 h-5" /></>}
         </button>
         {!locationReady && <p className="text-center text-xs text-stone-400 mt-2">Select your city to load live gold rate</p>}
         {locationReady && !priceLoading && cityGoldValue === 0 && <p className="text-center text-xs text-amber-500 mt-2">Fetching gold rate…</p>}
-        {locationReady && !panReady && <p className="text-center text-xs text-stone-400 mt-2">Enter valid PAN to continue</p>}
       </div>
     </div>
   )
