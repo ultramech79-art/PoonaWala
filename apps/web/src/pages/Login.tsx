@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Delete, Check, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { checkPhoneAPI } from '../lib/api'
 import { useSessionStore } from '../store/session'
 
 export function Login() {
@@ -15,6 +16,7 @@ export function Login() {
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('')
   const [pinShake, setPinShake] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
@@ -24,8 +26,26 @@ export function Login() {
   }, [navigate])
 
   const advance = useCallback(() => {
-    setDir('fwd'); setAnimKey(k => k + 1); setStep(2); setError('')
+    setDir('fwd'); setAnimKey(k => k + 1); setStep(2); setError(''); setBusy(false)
   }, [])
+
+  const handleContinue = async () => {
+    if (phone.length !== 10) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await checkPhoneAPI(phone)
+      if (!res.registered) {
+        setError('This number is not registered. Please register first.')
+        return
+      }
+      advance()
+    } catch (e: any) {
+      setError(e.message || 'Could not verify phone number. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const retreat = useCallback(() => {
     setDir('back'); setAnimKey(k => k + 1); setStep(1); setPin(''); setError('')
@@ -41,18 +61,36 @@ export function Login() {
 
   const verifyPin = (enteredPin: string) => {
     const stored = localStorage.getItem('goldeye_pin')
-    if (stored && enteredPin === stored) {
-      // Restore the stored session into the in-memory store so the app
-      // no longer shows "Guest" after navigating to the dashboard.
-      const token = localStorage.getItem('goldeye_auth_token')
-      const profileJson = localStorage.getItem('goldeye_user_profile')
-      if (token && profileJson) {
-        try { setAuth(token, JSON.parse(profileJson)) } catch {}
-      }
-      finishLogin()
-    } else {
+    if (!stored) {
+      setError('No PIN found. Please register first.')
+      setPin('')
+      return
+    }
+    if (enteredPin !== stored) {
       setPinShake(true)
       setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
+      return
+    }
+    const token = localStorage.getItem('goldeye_auth_token')
+    const profileJson = localStorage.getItem('goldeye_user_profile')
+    if (!token || !profileJson) {
+      setError('Session expired. Please register again.')
+      setPin('')
+      return
+    }
+    try {
+      const profile = JSON.parse(profileJson)
+      const storedPhone = (profile.phone as string | null)?.replace(/^\+91/, '')
+      if (storedPhone && phone && storedPhone !== phone) {
+        setError('Phone number does not match your registered account.')
+        setPin('')
+        return
+      }
+      setAuth(token, profile)
+      finishLogin()
+    } catch {
+      setError('Could not restore session. Please register again.')
+      setPin('')
     }
   }
 
@@ -77,15 +115,6 @@ export function Login() {
 
   return (
     <div className="page" style={{ position: 'relative' }}>
-
-      {/* Dev skip button */}
-      <button
-        onClick={() => navigate('/dashboard-home')}
-        className="absolute top-3 right-4 text-[11px] font-medium text-stone-300 z-50"
-        style={{ zIndex: 50 }}
-      >
-        skip →
-      </button>
 
       {/* Progress bar */}
       <div className="h-[3px] bg-stone-100">
@@ -140,8 +169,8 @@ export function Login() {
                 </div>
               </div>
               <div className="pb-8">
-                <button disabled={phone.length !== 10} onClick={advance} className={btnCls}>
-                  Continue
+                <button disabled={phone.length !== 10 || busy} onClick={handleContinue} className={btnCls}>
+                  {busy ? 'Checking…' : 'Continue'}
                 </button>
               </div>
             </div>
