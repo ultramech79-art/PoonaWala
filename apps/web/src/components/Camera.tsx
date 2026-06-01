@@ -278,7 +278,16 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
       const v = videoRef.current!
       const c = canvasRef.current!
       c.width = v.videoWidth; c.height = v.videoHeight
-      c.getContext('2d')!.drawImage(v, 0, 0)
+      const ctx = c.getContext('2d')!
+
+      // Apply zoom transform to the captured image
+      ctx.save()
+      ctx.translate(c.width / 2, c.height / 2)
+      ctx.scale(zoom / zoomMin, zoom / zoomMin)
+      ctx.translate(-c.width / 2, -c.height / 2)
+      ctx.drawImage(v, 0, 0)
+      ctx.restore()
+
       const exif: Record<string, unknown> = {
         timestamp: Date.now(),
         width: v.videoWidth,
@@ -298,7 +307,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
     }
     // 300ms stabilisation — reduces motion blur from button press shake
     setTimeout(doCapture, 300)
-  }, [stopCamera, onCapture, currentFacing, zoom])
+  }, [stopCamera, onCapture, currentFacing, zoom, zoomMin])
 
   const startRecording = useCallback(() => {
     if (!mediaRef.current) return
@@ -486,28 +495,15 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
             </div>
           )}
 
-          {/* Quality indicator */}
-          {!isVideo && !isAudio && quality.score > 0 && (
-            <div className="absolute top-3 left-3">
-              <div className={clsx('text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm',
-                quality.ok ? 'bg-emerald-500/70 text-white' : 'bg-red-500/70 text-white')}>
-                {quality.ok ? 'Good' : quality.reasons[0]}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Zoom slider */}
+        {/* Zoom slider - minimalist */}
         {zoomSupported && !isVideo && !isAudio && (
-          <div className="mt-3 px-1 space-y-1">
-            <div className="flex items-center justify-between px-0.5">
-              <span className="text-[10px] font-semibold tracking-widest uppercase text-stone-400">Zoom</span>
-              <span className="text-[11px] font-bold tabular-nums text-brand-500">{zoom.toFixed(1)}×</span>
-            </div>
+          <div className="mt-3 px-2">
             <input
               type="range" min={zoomMin} max={zoomMax} step="0.1" value={zoom}
               onChange={e => applyZoom(Number(e.target.value))}
-              className="zoom-slider"
+              className="zoom-slider-minimal w-full"
               style={{ '--zoom-fill': `${((zoom - zoomMin) / (zoomMax - zoomMin)) * 100}%` } as React.CSSProperties}
             />
           </div>
@@ -536,8 +532,11 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
               )
             ) : (
               <button id={`capture-${type}`} onClick={capture}
-                className="w-20 h-20 rounded-full border-[6px] flex items-center justify-center transition-all bg-white/95 border-white/35 active:scale-90 shadow-[0_14px_36px_rgba(184,82,42,0.32)]">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-800" />
+                className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-90 relative"
+                style={{
+                  background: 'radial-gradient(circle at 30% 30%, #1a1a1a, #000000)',
+                  boxShadow: '0 0 0 2.5px rgba(140, 140, 140, 0.6), 0 0 0 3.5px rgba(100, 100, 100, 0.3), 0 8px 20px rgba(0, 0, 0, 0.4)'
+                }}>
               </button>
             )}
           </div>
@@ -592,7 +591,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
             <span className="badge-green"><CheckCircle className="w-3 h-3" /> Captured</span>
           </div>
           <div className="mt-3 flex flex-col gap-2">
-            <button id={`retake-${type}`} onClick={retake} className="w-full btn-secondary text-sm">Retake</button>
+            <button id={`retake-${type}`} onClick={retake} className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded-2xl py-2.5 font-semibold text-sm transition-colors">Retake</button>
             <button id={`demo-capture-done-${type}`} onClick={useDemoCapture}
               className="w-full py-2 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5">
               Use Demo Capture

@@ -1,10 +1,9 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Delete } from 'lucide-react'
+import { ArrowLeft, Delete, Check, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { sendOtpAPI, otpLoginAPI } from '../lib/api'
 import { useSessionStore } from '../store/session'
-import { shouldShowTutorial } from './Tutorial'
 
 export function Login() {
   const navigate = useNavigate()
@@ -20,6 +19,12 @@ export function Login() {
   const [pinShake, setPinShake] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  const finishLogin = useCallback(() => {
+    setDone(true)
+    setTimeout(() => navigate('/dashboard-home'), 1900)
+  }, [navigate])
 
   const advance = useCallback(() => {
     setDir('fwd'); setAnimKey(k => k + 1); setStep(2); setError('')
@@ -66,12 +71,12 @@ export function Login() {
       // For now, use otpLoginAPI with the session we already have
       const res = await otpLoginAPI(phone, sessionId, enteredPin)
       setAuth(res.access_token, res.user)
-      navigate(shouldShowTutorial() ? '/tutorial' : '/dashboard-home')
+      finishLogin()
     } catch {
       // If server rejects, still allow local PIN match for demo
       const stored = localStorage.getItem('goldeye_pin')
       if (stored && enteredPin === stored) {
-        navigate(shouldShowTutorial() ? '/tutorial' : '/dashboard-home')
+        finishLogin()
       } else {
         setPinShake(true)
         setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
@@ -84,12 +89,30 @@ export function Login() {
   const inputCls = 'w-full bg-white border border-[#E2DDD6] rounded-2xl px-5 py-[18px] text-[18px] font-semibold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors'
   const btnCls = 'w-full h-[60px] rounded-2xl bg-stone-950 text-white font-semibold text-[16px] tracking-[-0.01em] disabled:opacity-25 active:opacity-75 transition-opacity'
 
+  // ── Success animation (PIN verified → dashboard) ─────────────────────────────
+  if (done) {
+    return (
+      <div className="page flex flex-col items-center justify-center" style={{ background: '#FDFDFC' }}>
+        <div className="flex flex-col items-center text-center animate-fade-in">
+          <div className="w-24 h-24 rounded-full bg-stone-950 flex items-center justify-center animate-slide-up">
+            <Check className="w-11 h-11 text-white" strokeWidth={2.5} />
+          </div>
+          <h1 className="font-display font-bold text-[30px] text-stone-950 tracking-[-0.03em] mt-7">
+            Welcome back
+          </h1>
+          <p className="text-[15px] text-stone-500 mt-2">Signing you in…</p>
+          <Loader2 className="w-5 h-5 text-stone-400 animate-spin mt-6" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page" style={{ position: 'relative' }}>
 
       {/* Dev skip button */}
       <button
-        onClick={() => navigate('/tutorial')}
+        onClick={() => navigate('/dashboard-home')}
         className="absolute top-3 right-4 text-[11px] font-medium text-stone-300 z-50"
         style={{ zIndex: 50 }}
       >

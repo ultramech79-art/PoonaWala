@@ -58,7 +58,7 @@ export function Profile() {
 
   useEffect(() => {
     if (!state.authToken) {
-      navigate('/auth')
+      navigate('/')
       return
     }
     if (state.authToken === 'guest') {
@@ -133,7 +133,7 @@ export function Profile() {
         </button>
         <span className="text-sm font-semibold text-stone-700">Profile</span>
         <button
-          onClick={() => { clearAuth(); navigate('/auth') }}
+          onClick={() => { clearAuth(); navigate('/') }}
           className="btn-icon"
           aria-label="Logout"
         >
@@ -152,7 +152,7 @@ export function Profile() {
               You are currently using the app as a guest. To save your loan predictions, captures, and view your profile history, please create an account.
             </p>
             <button
-              onClick={() => { clearAuth(); navigate('/auth') }}
+              onClick={() => { clearAuth(); navigate('/') }}
               className="btn-primary w-full"
             >
               Sign In / Register

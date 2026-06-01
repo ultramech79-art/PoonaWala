@@ -171,8 +171,6 @@ export function FloatingAssistant() {
     '/',
     '/language',
     '/welcome',
-    '/auth',
-    '/consent',
     '/otp',
     '/setup',
     '/gold-loan-app',
@@ -305,7 +303,7 @@ export function FloatingAssistant() {
     recognition.start()
   }
 
-  const showAssistant = ['/language', '/auth', '/profile', '/welcome', '/consent', '/otp', '/setup'].includes(location.pathname)
+  const showAssistant = ['/language', '/profile', '/welcome', '/otp', '/setup'].includes(location.pathname)
   if (!showAssistant) return null
 
   if (quietRoutes.has(location.pathname)) return null

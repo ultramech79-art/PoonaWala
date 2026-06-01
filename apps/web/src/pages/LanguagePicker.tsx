@@ -18,7 +18,7 @@ export function LanguagePicker() {
   const continueWithLanguage = () => {
     setLang(selectedLang)
     i18n.changeLanguage(selectedLang)
-    navigate(state.authToken ? '/consent' : '/register')
+    navigate(state.authToken ? '/dashboard-home' : '/register')
   }
 
   return (
