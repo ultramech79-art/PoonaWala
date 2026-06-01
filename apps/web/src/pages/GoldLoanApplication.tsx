@@ -1,9 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { AssessmentResult, EvalData, UserProfile } from '../store/session'
 import { useSessionStore } from '../store/session'
-import { computeROI, getRepaymentTypes, getRepaymentLabel } from '../lib/roiEngine'
+import { computeROI, getCibilTierInfo, getRepaymentTypes, getRepaymentLabel } from '../lib/roiEngine'
 import { computeEMI, type RepaymentType } from '../lib/emiEngine'
+import { resolveRegion } from '../lib/regionEngine'
 import loanParams from '../data/loan_params.json'
+import regionsData from '../data/regions.json'
 import { apiBase, createUserSessionAPI, saveLoanPredictionAPI, uploadUserAssetAPI } from '../lib/api'
 import {
   ChevronRight, ChevronDown, ChevronUp, ArrowRight, TrendingUp,
@@ -27,13 +30,63 @@ interface PoonawallaDeal {
 const POONAWALLA_MAX = loanParams.tenure_options.poonawalla_max_months
 const NBFC_MONTHS = loanParams.tenure_options.nbfc_variant_months as number[]
 
+function buildEvalDataFromAssessment(result: AssessmentResult, profile: UserProfile | null): EvalData {
+  const states = (regionsData as any).states as Array<{ code: string; name: string }>
+  const stateName = states.find(s => s.code === profile?.region_code)?.name || 'Maharashtra'
+  const city = profile?.city?.trim() || 'Other'
+  const region = resolveRegion(stateName, city)
+  const cityGoldValueInr = Math.round((result.value_inr.band_low + result.value_inr.band_high) / 2)
+  const cityPricePerG = result.weight.estimated_g > 0
+    ? cityGoldValueInr / result.weight.estimated_g
+    : 0
+  const ltvFinalPct = Math.round((result.loan_offer.band_high_inr / Math.max(cityGoldValueInr, 1)) * 1000) / 10
+  const ltvLowPct = Math.round((result.loan_offer.band_low_inr / Math.max(cityGoldValueInr, 1)) * 1000) / 10
+  const cibilTierKey = 'NTC'
+  const cibilInfo = getCibilTierInfo(cibilTierKey)
+
+  return {
+    state: region.state,
+    city: region.city,
+    locationTier: region.tier,
+    tierLabel: region.tierLabel,
+    stampDutyInr: region.stampDutyInr,
+    serviceable: region.serviceable,
+    cityGoldValueInr,
+    cityPricePerG,
+    priceSource: 'assessment',
+    cibilScore: null,
+    cibilTierKey,
+    cibilTierLabel: cibilInfo.label,
+    pan: '',
+    ltvFinalPct,
+    ltvLowPct,
+    tierCeilingPct: ltvFinalPct,
+    confidenceScore: result.confidence.score,
+    confidenceFactor: result.confidence.score,
+    maxLoanInr: result.loan_offer.band_high_inr,
+    provisionalLoanLowInr: result.loan_offer.band_low_inr,
+    ticketTierLabel: result.loan_offer.tier,
+    ticketTierDescription: 'Assessment-based loan band',
+    processingFeePct: loanParams.charges.processing_fee_pct,
+    eligible: true,
+    rejectReason: null,
+  }
+}
+
 export function GoldLoanApplication() {
   const navigate = useNavigate()
   const { state, setLoanAppData } = useSessionStore()
-  const evalData = state.evalData
+  const evalData = useMemo(
+    () => state.evalData?.eligible
+      ? state.evalData
+      : state.result
+        ? buildEvalDataFromAssessment(state.result, state.userProfile)
+        : null,
+    [state.evalData, state.result, state.userProfile],
+  )
 
-  if (!evalData || !evalData.eligible) {
-    navigate('/final-eval')
+  if (!evalData) {
+    navigate('/result')
     return null
   }
   const activeEvalData = evalData
@@ -163,7 +216,7 @@ export function GoldLoanApplication() {
     <div className="page overflow-y-auto no-scrollbar animate-fade-in">
       {/* Header */}
       <div className="page-header">
-        <button onClick={() => navigate('/final-eval')} className="btn-icon">
+        <button onClick={() => navigate('/result')} className="btn-icon">
           <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
         </button>
         <span className="font-display font-semibold text-sm text-stone-700">Gold Loan Application</span>

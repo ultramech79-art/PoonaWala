@@ -17,7 +17,6 @@ import { CertificateScan } from './pages/CertificateScan'
 import { WeightEntry } from './pages/WeightEntry'
 import { Processing } from './pages/Processing'
 import { Result } from './pages/Result'
-import { FinalEvaluation } from './pages/FinalEvaluation'
 import { GoldLoanApplication } from './pages/GoldLoanApplication'
 import { DashboardHome } from './pages/DashboardHome'
 import { MyEvaluations } from './pages/MyEvaluations'
@@ -57,7 +56,6 @@ function ProfileShortcut() {
     '/before-capture',
     '/dashboard-home',
     '/my-evaluations',
-    '/final-eval',
     '/gold-loan-app',
   ])
   if (!state.authToken || hiddenRoutes.has(location.pathname)) return null
@@ -112,7 +110,6 @@ function App() {
           <Route path="/weight" element={<RequireRegistered><WeightEntry /></RequireRegistered>} />
           <Route path="/processing" element={<RequireRegistered><Processing /></RequireRegistered>} />
           <Route path="/result" element={<RequireRegistered><Result /></RequireRegistered>} />
-          <Route path="/final-eval" element={<RequireRegistered><FinalEvaluation /></RequireRegistered>} />
           <Route path="/gold-loan-app" element={<RequireRegistered><GoldLoanApplication /></RequireRegistered>} />
           <Route path="/dashboard-home" element={<DashboardHome />} />
           <Route path="/dashboard-home/session/:id" element={<DashboardDetail />} />

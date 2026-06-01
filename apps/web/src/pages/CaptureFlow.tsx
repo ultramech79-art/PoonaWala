@@ -386,7 +386,7 @@ export function CaptureFlow() {
           .catch(err => console.error('[CaptureFlow] Verified view upload failed:', err))
       }
     } catch (err) {
-      console.error('[CaptureFlow] Final evaluation attempt failed:', err)
+      console.error('[CaptureFlow] Evaluation attempt failed:', err)
       const fallback = t('speak_image_accepted')
       setEvals(prev => ({
         ...prev,

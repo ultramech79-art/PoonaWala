@@ -1708,10 +1708,6 @@
   box-shadow: 0 20px 54px rgba(82, 33, 18, 0.22);
 }
 
-.final-evaluation-page {
-  scroll-padding-bottom: 10rem;
-}
-
 .final-assessment-card {
   position: relative;
   overflow: hidden;
