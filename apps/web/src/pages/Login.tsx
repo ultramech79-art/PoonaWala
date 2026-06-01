@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Delete, Check, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { checkPhoneAPI } from '../lib/api'
+import { checkPhoneAPI, passwordLoginAPI } from '../lib/api'
 import { useSessionStore } from '../store/session'
 
 export function Login() {
@@ -59,38 +59,16 @@ export function Login() {
     if (next.length === 6) setTimeout(() => verifyPin(next), 260)
   }
 
-  const verifyPin = (enteredPin: string) => {
-    const stored = localStorage.getItem('goldeye_pin')
-    if (!stored) {
-      setError('No PIN found. Please register first.')
-      setPin('')
-      return
-    }
-    if (enteredPin !== stored) {
-      setPinShake(true)
-      setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
-      return
-    }
-    const token = localStorage.getItem('goldeye_auth_token')
-    const profileJson = localStorage.getItem('goldeye_user_profile')
-    if (!token || !profileJson) {
-      setError('Session expired. Please register again.')
-      setPin('')
-      return
-    }
+  const verifyPin = async (enteredPin: string) => {
+    setBusy(true)
+    setError('')
     try {
-      const profile = JSON.parse(profileJson)
-      const storedPhone = (profile.phone as string | null)?.replace(/^\+91/, '')
-      if (storedPhone && phone && storedPhone !== phone) {
-        setError('Phone number does not match your registered account.')
-        setPin('')
-        return
-      }
-      setAuth(token, profile)
+      const res = await passwordLoginAPI(phone, enteredPin)
+      setAuth(res.access_token, res.user)
       finishLogin()
     } catch {
-      setError('Could not restore session. Please register again.')
-      setPin('')
+      setPinShake(true)
+      setTimeout(() => { setPin(''); setPinShake(false); setBusy(false); setError('Incorrect PIN. Try again.') }, 480)
     }
   }
 
@@ -209,7 +187,7 @@ export function Login() {
               <div className="flex-1 flex flex-col justify-end px-5 pb-6">
                 <div className="grid grid-cols-3 gap-2.5">
                   {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k, idx) => (
-                    <button key={idx} onClick={() => k !== '' && handlePinPress(k)} disabled={k === ''}
+                    <button key={idx} onClick={() => !busy && k !== '' && handlePinPress(k)} disabled={k === '' || busy}
                       className={clsx(
                         'h-[66px] rounded-2xl font-semibold transition-all active:scale-95 select-none',
                         k === '' ? 'invisible' :

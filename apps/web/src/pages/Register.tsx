@@ -150,8 +150,8 @@ export function Register() {
         region_code: regionCode,
         city: city.trim() || undefined,
         otp_session_id: sessionId,
+        password: pin,
       })
-      localStorage.setItem('goldeye_pin', pin)
       setAuth(res.access_token, res.user)
       setDone(true)
     } catch (e: any) {
