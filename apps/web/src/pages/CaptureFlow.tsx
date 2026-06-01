@@ -475,17 +475,17 @@ export function CaptureFlow() {
       reader.readAsDataURL(blob)
     } catch (err) {
       console.error('[CaptureFlow] Failed to load demo:', err)
-      speak('Error loading demo image. Please try capturing instead.')
+      speak(t('speak_demo_error'))
     }
   }, [step.demoUrl, handleCapture])
 
   const handleUsePreviousUpload = useCallback(async (asset: UserAsset) => {
     if (asset.frame_type !== step.type || !isWeightView(step.type)) {
-      speak('This saved image belongs to a different view. Please use the matching view.')
+      speak(t('speak_wrong_view'))
       return
     }
     if (selectedJewelryType && assetJewelryType(asset) !== selectedJewelryType) {
-      speak('This saved image belongs to a different jewellery type.')
+      speak(t('speak_wrong_type'))
       return
     }
     if (!state.authToken || state.authToken === 'guest') return
@@ -506,11 +506,11 @@ export function CaptureFlow() {
           result: { approved: true, quality_score: 0.95, feedback: 'Using previously approved image.', issues: [], detected: {} },
         },
       }))
-      speak('Previous image loaded successfully.')
+      speak(t('speak_prev_loaded'))
     } catch (err) {
       console.error('[CaptureFlow] Failed to load previous upload:', err)
       setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle', dataUrl: undefined } }))
-      speak('Could not load previous image. Please capture a new one.')
+      speak(t('speak_prev_failed'))
     }
   }, [step.type, stepIdx, addCapture, t, selectedJewelryType, previousAssetSrcs, state.authToken])
 

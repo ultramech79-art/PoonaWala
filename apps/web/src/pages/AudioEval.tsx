@@ -17,6 +17,7 @@ import { ChevronRight, Mic, AlertCircle, User } from 'lucide-react'
 import { clsx } from 'clsx'
 import { apiBase } from '../lib/api'
 import { speak } from '../lib/tts'
+import { localizeAudioVerdict } from '../lib/feedbackMessages'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { useTranslation } from 'react-i18next'
 import { AudioDemoControl } from '../components/AudioDemoControl'
@@ -283,7 +284,7 @@ export function AudioEval() {
         mode,
         ornament,
       })
-      if (data.verdict) speak(data.verdict)
+      if (data.verdict) speak(localizeAudioVerdict(data.verdict, t))
     } catch (e: any) {
       if (!shouldApplyAnalysis()) return
       setError(e?.message ?? 'Analysis failed.')
@@ -529,7 +530,7 @@ export function AudioEval() {
                   <div className="w-full bg-stone-100 rounded-full h-2">
                     <div className={clsx('h-2 rounded-full transition-all', barColor(result.score))} style={{ width: `${result.score}%` }} />
                   </div>
-                  <p className="text-sm font-semibold text-stone-800">{result.verdict}</p>
+                  <p className="text-sm font-semibold text-stone-800">{localizeAudioVerdict(result.verdict, t)}</p>
                   {result.explanation && <p className="text-xs text-stone-500 leading-relaxed">{result.explanation}</p>}
                 </div>
                 {(result.low_confidence_flag || result.confidence === 'low') && (

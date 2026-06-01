@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, PlayCircle } from 'lucide-react'
 import { speak, stopSpeech } from '../lib/tts'
 
@@ -10,41 +11,22 @@ interface Props {
   onDismiss: () => void
 }
 
-const TUTORIAL_LABELS: Record<string, string> = {
-  top:         'Top-Down Shot',
-  '45deg':     '45° Angle Shot',
-  side:        'Side Profile Shot',
-  selfie:      'Selfie with Gold',
-  macro:       'Hallmark Close-Up',
-  video:       '15-Second Video Scan',
-  audio:       'Gold Ring Sound Test',
-  certificate: 'Bill & Certificate',
-}
-
-const TUTORIAL_HINTS: Record<string, string> = {
-  top:         'Hold your gold jewelry flat on a surface. Point the camera straight down from above.',
-  '45deg':     'Tilt the camera to a 45° angle so you can see both the top surface and the depth of the piece.',
-  side:        'Hold the camera at table-height, level with the edge of the gold, to show its thickness.',
-  selfie:      'Hold the gold piece beside your face. Both your face and the gold must be clearly visible.',
-  macro:       'Get very close to the BIS hallmark or purity stamp. The text should fill the frame.',
-  video:       'Place gold on a white surface. Slowly rotate the piece during 15 seconds — show all edges, clasps, and the hallmark area.',
-  audio:       'One drop from 15–20 cm onto glass (or tap with coin edge), then leave it. The 5-second recording captures the full ring decay — keep the room quiet.',
-  certificate: 'Scan the original purchase bill or authenticity certificate. Ensure the HUID and purity stamp are clearly visible.',
-}
-
 export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }: Props) {
+  const { t, i18n } = useTranslation()
   const videoRef   = useRef<HTMLVideoElement>(null)
   const [videoError, setVideoError] = useState(false)
 
   const isPortraitVideo = ['45deg', 'certificate', 'macro', 'selfie'].includes(stepType)
   const videoSrc = `/assets/tutorial/${stepType}.mp4`
 
-  // Speak hint once; auto-dismiss when TTS ends
+  const labelText = title || t(`tut_label_${stepType}`, { defaultValue: stepType })
+  const hintText = hint || t(`tut_hint_${stepType}`, { defaultValue: '' })
+
+  // Speak hint once in the active language; auto-dismiss when TTS ends
   useEffect(() => {
-    const hintText = hint || TUTORIAL_HINTS[stepType] || ''
-    speak(hintText, undefined, onDismiss)
+    speak(hintText, i18n.language, onDismiss)
     return () => stopSpeech()
-  }, [stepType, hint, onDismiss])
+  }, [stepType, hintText, i18n.language, onDismiss])
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-stone-900/40 backdrop-blur-xl">
@@ -55,8 +37,8 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div>
-            <p className="text-[10px] text-brand-600 uppercase tracking-widest font-bold mb-0.5">Tutorial</p>
-            <p className="text-xl font-bold text-stone-900 tracking-tight leading-tight">{(title || TUTORIAL_LABELS[stepType]) ?? stepType}</p>
+            <p className="text-[10px] text-brand-600 uppercase tracking-widest font-bold mb-0.5">{t('tutorial')}</p>
+            <p className="text-xl font-bold text-stone-900 tracking-tight leading-tight">{labelText}</p>
           </div>
           <button
             onClick={onDismiss}
@@ -85,7 +67,7 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
             <div className="flex flex-col items-center gap-3 py-6 px-4 text-center">
               <PlayCircle className="w-12 h-12 text-amber-400/60" />
               <p className="text-white/50 text-xs leading-relaxed">
-                Tutorial video coming soon.<br />Follow the hint below.
+                {t('tutorial_video_soon')}
               </p>
             </div>
           )}
@@ -94,7 +76,7 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
 
         {/* Hint text */}
         <div className="px-6 pt-5 pb-3">
-          <p className="text-sm font-medium text-stone-600 leading-relaxed">{hint || TUTORIAL_HINTS[stepType]}</p>
+          <p className="text-sm font-medium text-stone-600 leading-relaxed">{hintText}</p>
         </div>
 
         {/* Actions */}
@@ -103,7 +85,7 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
             onClick={onDismiss}
             className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[20px] bg-stone-900 text-white font-semibold text-sm active:scale-[0.97] transition-all shadow-xl shadow-stone-900/20 hover:bg-stone-800"
           >
-            {buttonText || 'Got it'}
+            {buttonText || t('got_it')}
           </button>
         </div>
       </div>
