@@ -16,6 +16,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.db.database import get_db
@@ -54,6 +55,41 @@ logger = logging.getLogger("goldeye.assess")
 router = APIRouter()
 
 
+class GradCamMapsRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    frames: dict[str, str] = Field(default_factory=dict)
+
+
+class GradCamMapsResponse(BaseModel):
+    gradcam_urls: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/xai/gradcam", response_model=GradCamMapsResponse)
+@limiter.limit("20/minute")
+async def gradcam_maps(request: Request, req: GradCamMapsRequest):
+    """Generate per-capture Grad-CAM overlays for saved result photos."""
+    allowed_types = {"45deg", "top", "side", "macro"}
+    items = [
+        (frame_type, frame_url)
+        for frame_type, frame_url in req.frames.items()
+        if frame_type in allowed_types and frame_url and not frame_url.startswith("local://")
+    ][:4]
+    if not items:
+        return GradCamMapsResponse()
+
+    urls = await asyncio.gather(*[
+        generate_gradcam_url(frame_url, req.session_id, frame_type=frame_type)
+        for frame_type, frame_url in items
+    ])
+    return GradCamMapsResponse(
+        gradcam_urls={
+            frame_type: url
+            for (frame_type, _), url in zip(items, urls)
+            if url
+        }
+    )
+
+
 # ─── Assess endpoint ──────────────────────────────────────────────────────────
 
 @router.post("/assess", response_model=AssessmentResult)
@@ -63,7 +99,28 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
     trace_id = getattr(request.state, "trace_id", str(uuid.uuid4()))
     logger.info(f"[{trace_id}] assess start session={req.session_id} frames={len(req.frames)}")
 
-    macro_url = req.frames[3] if len(req.frames) > 3 else (req.frames[0] if req.frames else "")
+    default_photo_types = ["top", "45deg", "side", "macro"]
+    raw_frame_types = []
+    if isinstance(req.device_metadata, dict):
+        raw_frame_types = [str(t) for t in (req.device_metadata.get("frame_types") or [])]
+    resolved_frame_types = []
+    for frame_type in raw_frame_types:
+        # Selfie is sent in a separate request field, not in req.frames.
+        if frame_type == "selfie":
+            continue
+        resolved_frame_types.append(frame_type)
+        if len(resolved_frame_types) >= len(req.frames):
+            break
+    while len(resolved_frame_types) < len(req.frames):
+        idx = len(resolved_frame_types)
+        resolved_frame_types.append(default_photo_types[idx] if idx < len(default_photo_types) else f"video_{idx - len(default_photo_types)}")
+
+    frame_urls_by_type = {
+        frame_type: frame_url
+        for frame_type, frame_url in zip(resolved_frame_types, req.frames)
+        if frame_type in {"top", "45deg", "side", "macro"}
+    }
+    macro_url = frame_urls_by_type.get("macro") or (req.frames[3] if len(req.frames) > 3 else (req.frames[0] if req.frames else ""))
 
     # ── Phase 5: S1→S2 and S5→S6 mini-pipelines; S3/S4/S7/S8/S9/S10/S11/S12 independent ──
     async def chain_huid_hallmark():
@@ -299,7 +356,27 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         reasoning += f"\n\nExpert Review: {expert_review['expert_commentary']}"
 
     counterfactual = generate_counterfactual(routing, huid_verified, confidence, lang=req.lang)
-    gradcam_url  = await generate_gradcam_url(macro_url, req.session_id)
+    gradcam_items = list(frame_urls_by_type.items())
+    gradcam_results = await asyncio.gather(*[
+        generate_gradcam_url(
+            frame_url,
+            req.session_id,
+            s1_payload=s1.payload if frame_type == "macro" else None,
+            frame_type=frame_type,
+        )
+        for frame_type, frame_url in gradcam_items
+    ]) if gradcam_items else []
+    gradcam_urls = {
+        frame_type: url
+        for (frame_type, _), url in zip(gradcam_items, gradcam_results)
+        if url
+    }
+    gradcam_url = (
+        gradcam_urls.get("macro")
+        or gradcam_urls.get("45deg")
+        or gradcam_urls.get("top")
+        or gradcam_urls.get("side")
+    )
 
     asset_hashes = [hashlib.sha256(url.encode()).hexdigest()[:16] for url in req.frames]
     elapsed_ms   = int((time.time() - t_start) * 1000)
@@ -340,6 +417,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         reasoning_text=ReasoningText(lang=req.lang, text=reasoning),
         xai=XAI(
             gradcam_url=gradcam_url,
+            gradcam_urls=gradcam_urls,
             shap_top_features=shap_features,
             counterfactual=counterfactual,
         ),

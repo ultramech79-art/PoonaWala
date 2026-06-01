@@ -55,6 +55,7 @@ class SHAPFeature(BaseModel):
 
 class XAI(BaseModel):
     gradcam_url: Optional[str] = None
+    gradcam_urls: dict[str, str] = Field(default_factory=dict)
     shap_top_features: list[SHAPFeature]
     counterfactual: Optional[str] = None
 

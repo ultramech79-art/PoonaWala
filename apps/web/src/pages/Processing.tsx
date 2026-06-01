@@ -236,8 +236,9 @@ function buildMockResult(sessionId: string, state: SessionState, isFailCase = fa
         : `${state.certificateData ? 'Bill/certificate details applied. ' : ''}${state.huidCode ? `BIS HUID ${state.huidCode} noted. ` : ''}${karatEstimate}K gold, ${weightG}g net weight. Market value computed at ₹${pricePerGram24K.toLocaleString('en-IN')}/g (24K IBJA). No fraud signals.${state.tapTestResult ? ` Tap test: ${state.tapTestResult.label} (${state.tapTestResult.score}%).` : ''}${state.liveAuthResult ? ` Video authenticity: ${state.liveAuthResult.verdict}.` : ''}`,
     },
     xai: {
-      // Primary: macro (hallmark), fallback: top (best overall view), then 45deg, side
-      gradcam_url: state.captures['macro']?.dataUrl || state.captures['top']?.dataUrl || state.captures['45deg']?.dataUrl || state.captures['side']?.dataUrl || null,
+      // Backend-only: avoid presenting a plain captured photo as a heatmap.
+      gradcam_url: null,
+      gradcam_urls: {},
       shap_top_features: buildShapFeatures(state, karatEstimate, isFail),
       counterfactual: isFail
         ? `If the hallmark were clearly readable, confidence would increase from 38% to ~${state.huidCode ? '72' : '62'}%.`

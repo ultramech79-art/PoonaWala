@@ -124,6 +124,45 @@ class TestGradCam:
         result = await generate_gradcam_url("", "test-session")
         assert result is None
 
+    async def test_gradcam_local_focus_tracks_visible_huid_region(self):
+        import cv2
+        import numpy as np
+        from app.xai.gradcam import _detect_local_focus_regions
+
+        img = np.full((360, 360, 3), 245, dtype=np.uint8)
+        cv2.rectangle(img, (28, 44), (218, 126), (64, 166, 220), -1)
+        cv2.putText(img, "HUID A1B2C3", (42, 94), cv2.FONT_HERSHEY_SIMPLEX, 0.74, (32, 30, 28), 2, cv2.LINE_AA)
+        cv2.circle(img, (270, 270), 46, (54, 150, 210), -1)
+
+        regions = _detect_local_focus_regions(img)
+
+        assert regions, "expected at least one local Grad-CAM focus region"
+        strongest = regions[0]
+        assert strongest.x < 190
+        assert strongest.y < 150
+
+    async def test_gradcam_full_view_prefers_demo_ring_over_coin(self):
+        import cv2
+        from pathlib import Path
+        from app.xai.gradcam import _detect_local_focus_regions
+
+        repo_root = Path(__file__).resolve().parents[3]
+        cases = [
+            ("45deg", repo_root / "apps/web/public/assets/demo/45deg.jpg", (620, 250, 850, 500)),
+            ("top", repo_root / "apps/web/public/assets/demo/top.jpg", (620, 250, 850, 530)),
+            ("side", repo_root / "apps/web/public/assets/demo/side.jpg", (330, 260, 780, 610)),
+        ]
+
+        for frame_type, path, expected_box in cases:
+            img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            assert img is not None, f"missing demo image: {path}"
+            regions = _detect_local_focus_regions(img, frame_type=frame_type)
+            assert regions, f"expected a focus region for {frame_type}"
+            strongest = regions[0]
+            x1, y1, x2, y2 = expected_box
+            assert x1 <= strongest.x <= x2, f"{frame_type} x focused away from ring: {strongest}"
+            assert y1 <= strongest.y <= y2, f"{frame_type} y focused away from ring: {strongest}"
+
 
 # ── MAPIE coverage check ───────────────────────────────────────────────────────
 
