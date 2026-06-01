@@ -10,7 +10,6 @@ import {
   sendOtpAPI,
   otpLoginAPI,
   uploadUserAssetAPI,
-  verifyOtpAPI,
   type UserAsset,
 } from '../lib/api'
 import { useSessionStore } from '../store/session'
@@ -183,10 +182,6 @@ export function Auth() {
       if (!fullName.trim()) throw new Error('Name is required')
       if (!dob) throw new Error('Date of birth is required')
       if (!regionCode) throw new Error('Region is required')
-      if (method === 'otp') {
-        const verified = await verifyOtpAPI(otpSessionId, otp)
-        if (!verified.success || !verified.valid) throw new Error(verified.message || 'OTP verification failed')
-      }
       const res = await registerAPI({
         full_name: fullName.trim(),
         dob,

@@ -256,7 +256,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/auth/login/password", response_model=AuthResponse)
 async def login_password(req: PasswordLoginRequest, db: AsyncSession = Depends(get_db)):
     identifier = req.phone_or_email.strip().lower()
-    phone = _normalize_phone(identifier) if re.sub(r"\D", "", identifier).isdigit() else None
+    phone = _normalize_phone(identifier) if "@" not in identifier else None
     condition = User.phone == phone if phone else User.email == identifier
     user = (await db.execute(select(User).where(condition))).scalar_one_or_none()
     if not user or not user.password_hash or not pwd_context.verify(req.password, user.password_hash):
