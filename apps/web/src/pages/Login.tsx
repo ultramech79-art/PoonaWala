@@ -41,18 +41,36 @@ export function Login() {
 
   const verifyPin = (enteredPin: string) => {
     const stored = localStorage.getItem('goldeye_pin')
-    if (stored && enteredPin === stored) {
-      // Restore the stored session into the in-memory store so the app
-      // no longer shows "Guest" after navigating to the dashboard.
-      const token = localStorage.getItem('goldeye_auth_token')
-      const profileJson = localStorage.getItem('goldeye_user_profile')
-      if (token && profileJson) {
-        try { setAuth(token, JSON.parse(profileJson)) } catch {}
-      }
-      finishLogin()
-    } else {
+    if (!stored) {
+      setError('No PIN found. Please register first.')
+      setPin('')
+      return
+    }
+    if (enteredPin !== stored) {
       setPinShake(true)
       setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
+      return
+    }
+    const token = localStorage.getItem('goldeye_auth_token')
+    const profileJson = localStorage.getItem('goldeye_user_profile')
+    if (!token || !profileJson) {
+      setError('Session expired. Please register again.')
+      setPin('')
+      return
+    }
+    try {
+      const profile = JSON.parse(profileJson)
+      const storedPhone = (profile.phone as string | null)?.replace(/^\+91/, '')
+      if (storedPhone && phone && storedPhone !== phone) {
+        setError('Phone number does not match your registered account.')
+        setPin('')
+        return
+      }
+      setAuth(token, profile)
+      finishLogin()
+    } catch {
+      setError('Could not restore session. Please register again.')
+      setPin('')
     }
   }
 
@@ -77,15 +95,6 @@ export function Login() {
 
   return (
     <div className="page" style={{ position: 'relative' }}>
-
-      {/* Dev skip button */}
-      <button
-        onClick={() => navigate('/dashboard-home')}
-        className="absolute top-3 right-4 text-[11px] font-medium text-stone-300 z-50"
-        style={{ zIndex: 50 }}
-      >
-        skip →
-      </button>
 
       {/* Progress bar */}
       <div className="h-[3px] bg-stone-100">
