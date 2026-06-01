@@ -9,6 +9,21 @@ import { speak, prefetchSpeech } from '../lib/tts'
 import { clsx } from 'clsx'
 import { assetImageDataUrlAPI, evaluateFrameAPI, listMyAssetsAPI, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
+import Lottie from 'lottie-react'
+import goldAnim from '../assets/gold-analysis.json'
+
+function GoldLottie({ size = 40 }: { size?: number }) {
+  const ref = useRef<import('lottie-react').LottieRefCurrentProps>(null)
+  return (
+    <Lottie
+      animationData={goldAnim}
+      loop autoplay
+      lottieRef={ref}
+      onDOMLoaded={() => ref.current?.setSpeed(2.5)}
+      style={{ width: size, height: size }}
+    />
+  )
+}
 
 interface Step {
   type: CaptureType
@@ -1005,7 +1020,9 @@ export function CaptureFlow() {
           {/* Feedback */}
           {evalState === 'evaluating' && (
             <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl bg-brand-50 border border-brand-200">
-              <Loader2 className="w-5 h-5 text-brand-600 animate-spin flex-shrink-0" />
+              <div className="w-10 h-10 flex-shrink-0">
+                <GoldLottie size={40} />
+              </div>
               <div>
                 <p className="text-sm font-medium text-brand-700">Analysing image…</p>
                 <p className="text-xs text-brand-600/70 mt-0.5">Checking image quality…</p>
