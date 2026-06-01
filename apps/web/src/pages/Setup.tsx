@@ -75,7 +75,7 @@ export function Setup() {
           >
             <ArrowLeft className="w-4 h-4" strokeWidth={2.2} />
           </button>
-          <div className="border-b border-stone-200/60 pb-5 mb-0">
+          <div>
             <h1 className="font-display font-black text-3xl leading-[1.15] tracking-[-0.04em] text-stone-950 mb-1">
               What are you assessing?
             </h1>
