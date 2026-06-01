@@ -110,6 +110,26 @@ export function Profile() {
   }
 
   const user = state.userProfile
+  const predictionSessionIds = new Set(predictions.map(item => item.session_id))
+  const localHistoryRows = state.assessedItems
+    .filter(item => !predictionSessionIds.has(item.sessionId))
+    .map(item => ({
+        id: item.sessionId,
+        session_id: item.sessionId,
+        created_at: item.createdAt,
+        provisional_loan_inr: item.evalData?.provisionalLoanLowInr ?? item.result.loan_offer.band_low_inr,
+        eligible_loan_inr: item.evalData?.maxLoanInr ?? item.result.loan_offer.band_high_inr,
+        ltv_pct: item.evalData?.ltvFinalPct ?? item.result.loan_offer.ltv_applied_pct,
+        city_gold_value_inr: item.evalData?.cityGoldValueInr ?? Math.round((item.result.value_inr.band_low + item.result.value_inr.band_high) / 2),
+      }))
+  const historyRows = [...predictions, ...localHistoryRows].sort((a, b) =>
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )
+  const cumulativeGoldValue = historyRows.reduce((sum, item) => sum + (Number(item.city_gold_value_inr) || 0), 0)
+  const cumulativeLoan = historyRows.reduce((sum, item) => {
+    const loan = Number(item.eligible_loan_inr ?? item.provisional_loan_inr) || 0
+    return sum + loan
+  }, 0)
 
   // Group assets by session
   const grouped = assets.reduce<Record<string, UserAsset[]>>((acc, asset) => {
@@ -182,24 +202,40 @@ export function Profile() {
               <History className="w-4 h-4 text-brand-700" />
               <p className="font-display font-bold text-sm text-stone-900">Loan history</p>
             </div>
-            {predictions.length === 0 ? (
+            {historyRows.length === 0 ? (
               <p className="text-sm text-stone-400">No completed loan predictions yet.</p>
             ) : (
               <div className="space-y-2">
-                {predictions.map(item => (
+                <div className="rounded-2xl border border-brand-200 bg-brand-50/70 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brand-700">Cumulative portfolio</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] font-semibold text-stone-500">Total loan cap</p>
+                      <p className="font-display text-lg font-black text-stone-950">Rs {cumulativeLoan.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold text-stone-500">Total gold value</p>
+                      <p className="font-display text-lg font-black text-stone-950">Rs {cumulativeGoldValue.toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-[11px] font-semibold text-stone-500">
+                    Across {historyRows.length} jewellery item{historyRows.length === 1 ? '' : 's'}
+                  </p>
+                </div>
+                {historyRows.map(item => (
                   <div key={item.id} className="rounded-xl border border-stone-200 bg-white p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
                         {new Date(item.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </span>
                       <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-                        ₹{item.provisional_loan_inr?.toLocaleString('en-IN') || '—'}
+                        Rs {item.provisional_loan_inr?.toLocaleString('en-IN') || '--'}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-sm font-medium text-stone-700">
                       <span>{item.ltv_pct}% LTV</span>
-                      <span className="text-stone-300">•</span>
-                      <span>₹{item.city_gold_value_inr?.toLocaleString('en-IN') || '—'} Value</span>
+                      <span className="text-stone-300">|</span>
+                      <span>Rs {item.city_gold_value_inr?.toLocaleString('en-IN') || '--'} Value</span>
                     </div>
                   </div>
                 ))}

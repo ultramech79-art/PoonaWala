@@ -116,9 +116,17 @@ export interface SessionState {
   liveAuthResult: LiveAuthResult | null
   tapTestResult: TapTestResult | null
   result: AssessmentResult | null
+  assessedItems: AssessedItem[]
   confidenceBreakdown: ConfidenceComputation | null
   evalData: EvalData | null
   loanAppData: LoanAppData | null
+}
+
+export interface AssessedItem {
+  sessionId: string
+  result: AssessmentResult
+  evalData: EvalData | null
+  createdAt: string
 }
 
 export interface UserProfile {
@@ -244,6 +252,7 @@ function serializeState(state: SessionState) {
     liveAuthResult: state.liveAuthResult,
     tapTestResult: state.tapTestResult,
     result: state.result,
+    assessedItems: state.assessedItems,
     confidenceBreakdown: state.confidenceBreakdown,
     evalData: state.evalData,
     loanAppData: state.loanAppData,
@@ -311,6 +320,7 @@ let _state: SessionState = {
   liveAuthResult: persistedState.liveAuthResult ?? null,
   tapTestResult: persistedState.tapTestResult ?? null,
   result: persistedState.result ?? null,
+  assessedItems: persistedState.assessedItems ?? [],
   confidenceBreakdown: persistedState.confidenceBreakdown ?? null,
   evalData: persistedState.evalData ?? null,
   loanAppData: persistedState.loanAppData ?? null,
@@ -324,6 +334,40 @@ function setState(patch: Partial<SessionState>) {
   _state = { ..._state, ...patch }
   persistState(_state)
   listeners.forEach(l => l())
+}
+
+function upsertAssessedItem(result: AssessmentResult, evalData: EvalData | null = null) {
+  const sessionId = result.session_id || _state.sessionId || `assessment_${Date.now()}`
+  const existing = _state.assessedItems.find(item => item.sessionId === sessionId)
+  const item: AssessedItem = {
+    sessionId,
+    result,
+    evalData: evalData ?? existing?.evalData ?? null,
+    createdAt: existing?.createdAt ?? result.timestamp_utc ?? new Date().toISOString(),
+  }
+  return [item, ..._state.assessedItems.filter(prev => prev.sessionId !== sessionId)]
+}
+
+function freshAssessmentPatch(sessionId: string | null = null): Partial<SessionState> {
+  return {
+    sessionId,
+    consentAt: null,
+    captures: {},
+    skippedCaptures: {},
+    pageEvidence: {},
+    weightG: null,
+    huidCode: null,
+    scannedKarat: null,
+    certificateData: null,
+    huidVerification: null,
+    liveAuthResult: null,
+    tapTestResult: null,
+    result: null,
+    assessedItems: [],
+    confidenceBreakdown: null,
+    evalData: null,
+    loanAppData: null,
+  }
 }
 
 export function useSessionStore() {
@@ -348,12 +392,25 @@ export function useSessionStore() {
         localStorage.setItem('goldeye_auth_token', authToken)
         localStorage.setItem('goldeye_user_profile', JSON.stringify(userProfile))
       }
-      setState({ authToken, userProfile, phone: userProfile.phone, name: userProfile.full_name, lang: userProfile.language })
+      setState({
+        ...freshAssessmentPatch(null),
+        authToken,
+        userProfile,
+        phone: userProfile.phone,
+        name: userProfile.full_name,
+        lang: userProfile.language,
+      })
     },
     clearAuth: () => {
       localStorage.removeItem('goldeye_auth_token')
       localStorage.removeItem('goldeye_user_profile')
-      setState({ authToken: null, userProfile: null })
+      setState({
+        ...freshAssessmentPatch(null),
+        authToken: null,
+        userProfile: null,
+        phone: null,
+        name: null,
+      })
     },
     setLang: (lang: string) => {
       localStorage.setItem('goldeye_lang', lang)
@@ -422,9 +479,13 @@ export function useSessionStore() {
     setCertificateData: (certificateData: CertificateData | null) => setState({ certificateData }),
     setLiveAuthResult: (liveAuthResult: LiveAuthResult | null) => setState({ liveAuthResult }),
     setTapTestResult: (tapTestResult: TapTestResult | null) => setState({ tapTestResult }),
-    setResult: (result: AssessmentResult) => setState({ result }),
+    setResult: (result: AssessmentResult) => setState({ result, assessedItems: upsertAssessedItem(result) }),
     setConfidenceBreakdown: (confidenceBreakdown: ConfidenceComputation | null) => setState({ confidenceBreakdown }),
-    setEvalData: (evalData: EvalData) => setState({ evalData }),
+    setEvalData: (evalData: EvalData) => {
+      const patch: Partial<SessionState> = { evalData }
+      if (_state.result) patch.assessedItems = upsertAssessedItem(_state.result, evalData)
+      setState(patch)
+    },
     setLoanAppData: (loanAppData: LoanAppData) => setState({ loanAppData }),
     setSessionId: (id: string) => setState({ sessionId: id }),
     initSession: () => {
@@ -433,23 +494,8 @@ export function useSessionStore() {
       return id
     },
     reset: () => setState({
-      sessionId: null,
-      consentAt: null,
+      ...freshAssessmentPatch(null),
       phone: null,
-      captures: {},
-      skippedCaptures: {},
-      pageEvidence: {},
-      weightG: null,
-      huidCode: null,
-      scannedKarat: null,
-      certificateData: null,
-      huidVerification: null,
-      liveAuthResult: null,
-      tapTestResult: null,
-      result: null,
-      confidenceBreakdown: null,
-      evalData: null,
-      loanAppData: null,
     }),
     resetAssessment: (sessionId: string | null = null) => setState({
       sessionId,

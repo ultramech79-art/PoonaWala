@@ -15,6 +15,19 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
+type ItemResultRow = {
+  id: string
+  label: string
+  purity: number
+  weightG: number
+  valueLow: number
+  valueHigh: number
+  loanLow: number
+  loanHigh: number
+  confidencePct: number
+  isCurrent: boolean
+}
+
 // ── Confidence ring (sheet only) ──────────────────────────────
 function ConfidenceRing({ score }: { score: number }) {
   const { t } = useTranslation()
@@ -149,6 +162,50 @@ export function Result() {
   const loanRange = `${loanLow} - ${loanHigh}`
   const marketValueRange = `${fmt(displayValue.band_low)} - ${fmt(displayValue.band_high)}`
   const estimatedWeight = `${result.weight.estimated_g.toFixed(2)}g`
+  const assessedItems = [
+    {
+      sessionId: result.session_id || state.sessionId || 'current',
+      result,
+      evalData: state.evalData,
+      createdAt: result.timestamp_utc || new Date().toISOString(),
+    },
+    ...(state.assessedItems ?? []).filter(item => item.sessionId !== (result.session_id || state.sessionId)),
+  ]
+  const itemRows: ItemResultRow[] = assessedItems.map((item, index) => {
+    const itemResult = item.result
+    const itemKarat = itemResult.purity.point_estimate_karat
+    const itemPriceForKarat =
+      itemKarat >= 23 ? livePrice24K :
+      itemKarat >= 21 ? (livePrice22K || livePrice24K * 22 / 24) :
+      itemKarat >= 17 ? (livePrice18K || livePrice24K * 18 / 24) :
+      itemKarat >= 13 ? (livePrice14K || livePrice24K * 14 / 24) :
+      livePrice24K * itemKarat / 24
+    const itemValue = hasLivePrice && itemPriceForKarat > 0
+      ? computeGoldMarketValue(itemPriceForKarat, itemResult.weight.estimated_g, itemKarat, itemResult.value_inr.stone_weight_excluded_g ?? 0.4)
+      : { band_low: itemResult.value_inr.band_low, band_high: itemResult.value_inr.band_high }
+    const itemLoan = item.evalData
+      ? {
+          band_low_inr: item.evalData.provisionalLoanLowInr,
+          band_high_inr: item.evalData.maxLoanInr,
+        }
+      : computeLoanOffer(itemValue)
+    return {
+      id: item.sessionId,
+      label: index === 0 ? 'Current jewellery' : `Jewellery ${index + 1}`,
+      purity: itemKarat,
+      weightG: itemResult.weight.estimated_g,
+      valueLow: itemValue.band_low,
+      valueHigh: itemValue.band_high,
+      loanLow: itemLoan.band_low_inr,
+      loanHigh: itemLoan.band_high_inr,
+      confidencePct: Math.max(0, Math.min(100, Math.round(itemResult.confidence.score * 100))),
+      isCurrent: index === 0,
+    }
+  })
+  const cumulativeValueLow = itemRows.reduce((sum, item) => sum + item.valueLow, 0)
+  const cumulativeValueHigh = itemRows.reduce((sum, item) => sum + item.valueHigh, 0)
+  const cumulativeLoanLow = itemRows.reduce((sum, item) => sum + item.loanLow, 0)
+  const cumulativeLoanHigh = itemRows.reduce((sum, item) => sum + item.loanHigh, 0)
 
   function handlePrimaryAction() {
     navigate(primaryActionTarget)
@@ -236,6 +293,49 @@ export function Result() {
             {routing.action}
             <ArrowRight className="h-5 w-5" aria-hidden />
           </button>
+        </motion.section>
+
+        <motion.section {...si} className="surface-panel rounded-3xl p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-stone-500">All jewellery results</p>
+              <h2 className="mt-1 font-display text-xl font-black text-stone-950">
+                {fmt(cumulativeLoanLow)} - {fmt(cumulativeLoanHigh)}
+              </h2>
+              <p className="mt-1 text-xs font-semibold text-stone-500">
+                Cumulative loan across {itemRows.length} item{itemRows.length === 1 ? '' : 's'}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-brand-50 px-3 py-2 text-right">
+              <p className="text-[10px] font-black uppercase tracking-wider text-brand-700">Gold value</p>
+              <p className="mt-0.5 text-xs font-black text-stone-900">{fmt(cumulativeValueLow)} - {fmt(cumulativeValueHigh)}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {itemRows.map(item => (
+              <div key={item.id} className={clsx('rounded-2xl border p-3', item.isCurrent ? 'border-brand-200 bg-brand-50/60' : 'border-stone-200 bg-white')}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-stone-900">{item.label}</p>
+                    <p className="mt-0.5 text-[11px] font-semibold text-stone-500">
+                      {item.purity}K - {item.weightG.toFixed(2)}g - {item.confidencePct}% confidence
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-brand-700 tabular-nums">{fmt(item.loanHigh)}</p>
+                    <p className="text-[10px] font-semibold text-stone-400">loan cap</p>
+                  </div>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
+                  <div
+                    className="h-full rounded-full bg-brand-600"
+                    style={{ width: `${Math.max(8, Math.min(100, (item.loanHigh / Math.max(cumulativeLoanHigh, 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </motion.section>
 
         {hasLivePrice && (

@@ -159,6 +159,40 @@ export function FinalEvaluation() {
   const locationReady = Boolean(region)
   const panReady      = !kycStatus.panRequired || panValidation.valid
   const canProceed    = locationReady && panReady && eligible && !priceLoading && cityGoldValue > 0
+  const cumulativeItems = useMemo(() => {
+    if (!result) return []
+    const currentId = result.session_id || state.sessionId || 'current'
+    return [
+      {
+        id: currentId,
+        label: 'Current jewellery',
+        purity: detectedKarat,
+        weightG: result.weight.estimated_g,
+        goldValueInr: cityGoldValue || Math.round((result.value_inr.band_low + result.value_inr.band_high) / 2),
+        loanNowInr: ltvResult?.provisionalLowLoanInr ?? result.loan_offer.band_low_inr,
+        loanMaxInr: ltvResult?.maxLoanInr ?? result.loan_offer.band_high_inr,
+        isCurrent: true,
+      },
+      ...(state.assessedItems ?? [])
+        .filter(item => item.sessionId !== currentId)
+        .map((item, index) => {
+          const itemResult = item.result
+          return {
+            id: item.sessionId,
+            label: `Jewellery ${index + 2}`,
+            purity: itemResult.purity.point_estimate_karat,
+            weightG: itemResult.weight.estimated_g,
+            goldValueInr: item.evalData?.cityGoldValueInr ?? Math.round((itemResult.value_inr.band_low + itemResult.value_inr.band_high) / 2),
+            loanNowInr: item.evalData?.provisionalLoanLowInr ?? itemResult.loan_offer.band_low_inr,
+            loanMaxInr: item.evalData?.maxLoanInr ?? itemResult.loan_offer.band_high_inr,
+            isCurrent: false,
+          }
+        }),
+    ]
+  }, [result, state.sessionId, state.assessedItems, detectedKarat, cityGoldValue, ltvResult])
+  const cumulativeGoldValue = cumulativeItems.reduce((sum, item) => sum + item.goldValueInr, 0)
+  const cumulativeLoanNow = cumulativeItems.reduce((sum, item) => sum + item.loanNowInr, 0)
+  const cumulativeLoanMax = cumulativeItems.reduce((sum, item) => sum + item.loanMaxInr, 0)
 
   function handleContinue() {
     if (!canProceed || !region || !ltvResult || !cityPrices || !result) return
@@ -520,6 +554,48 @@ export function FinalEvaluation() {
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {locationReady && !priceLoading && cumulativeItems.length > 0 && cityGoldValue > 0 && (
+          <div className="surface-panel rounded-3xl p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-stone-500">Cumulative LTV result</p>
+                <h2 className="mt-1 font-display text-xl font-black text-stone-950">{fmt(cumulativeLoanNow)}</h2>
+                <p className="mt-1 text-xs font-semibold text-stone-500">
+                  Up to {fmt(cumulativeLoanMax)} after verification
+                </p>
+              </div>
+              <div className="rounded-2xl bg-stone-50 px-3 py-2 text-right">
+                <p className="text-[10px] font-black uppercase tracking-wider text-stone-500">Total value</p>
+                <p className="mt-0.5 text-xs font-black text-stone-900">{fmt(cumulativeGoldValue)}</p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {cumulativeItems.map(item => (
+                <div key={item.id} className={clsx('rounded-2xl border p-3', item.isCurrent ? 'border-brand-200 bg-brand-50/60' : 'border-stone-200 bg-white')}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-stone-900">{item.label}</p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-stone-500">
+                        {item.purity}K - {item.weightG.toFixed(2)}g - value {fmt(item.goldValueInr)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-black text-brand-700 tabular-nums">{fmt(item.loanMaxInr)}</p>
+                      <p className="text-[10px] font-semibold text-stone-400">loan cap</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
+                    <div
+                      className="h-full rounded-full bg-brand-600"
+                      style={{ width: `${Math.max(8, Math.min(100, (item.loanMaxInr / Math.max(cumulativeLoanMax, 1)) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
