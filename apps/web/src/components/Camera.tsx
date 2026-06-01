@@ -585,13 +585,13 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
               <audio src={capturedUrl} controls className="w-48" />
             </div>
           ) : (
-            <img src={capturedUrl} className="w-full rounded-3xl object-cover" style={{ aspectRatio: '3/4' }} alt="Captured" />
+            <img src={capturedUrl} className="w-full rounded-3xl object-cover mx-auto" style={{ aspectRatio: '3/4', maxHeight: 'min(44vh, 340px)' }} alt="Captured" />
           )}
           <div className="absolute top-3 right-3">
             <span className="badge-green"><CheckCircle className="w-3 h-3" /> Captured</span>
           </div>
           <div className="mt-3 flex flex-col gap-2">
-            <button id={`retake-${type}`} onClick={retake} className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded-2xl py-2.5 font-semibold text-sm transition-colors">Retake</button>
+            <button id={`retake-${type}`} onClick={retake} className="w-full bg-[#FAFAF7] hover:bg-white text-stone-950 border border-stone-200 rounded-2xl py-3 font-semibold text-[15px] transition-colors active:scale-[0.99]">Retake</button>
             <button id={`demo-capture-done-${type}`} onClick={useDemoCapture}
               className="w-full py-2 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5">
               Use Demo Capture
