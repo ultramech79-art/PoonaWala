@@ -7,9 +7,6 @@ import { computeEvidenceConfidence, type ConfidenceComputation } from '../lib/co
 import { resizeDataUrl } from '../lib/utils'
 import { metalpriceapiToInrPerGram, computeGoldMarketValue, computeLoanOffer } from '../lib/goldCalc'
 import { CheckCircle, Lock } from 'lucide-react'
-import Lottie from 'lottie-react'
-import type { LottieRefCurrentProps } from 'lottie-react'
-import goldAnim from '../assets/gold-analysis.json'
 
 const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const CACHE_KEY = 'goldeye_metal_prices_v2'
@@ -563,7 +560,6 @@ export function Processing() {
   const [activeFact, setActiveFact] = useState(0)
   const [done, setDone] = useState(false)
   const started = useRef(false)
-  const lottieRef = useRef<LottieRefCurrentProps>(null)
 
   const facts = state.lang === 'hi' ? FACTS_HI : FACTS_EN
 
@@ -620,13 +616,11 @@ export function Processing() {
           {done ? (
             <CheckCircle className="w-16 h-16 text-[#346538] animate-scale-in" />
           ) : (
-            <Lottie
-              animationData={goldAnim}
-              loop
-              autoplay
-              lottieRef={lottieRef}
-              onDOMLoaded={() => lottieRef.current?.setSpeed(2)}
-              style={{ width: '100%', height: '100%' }}
+            <img
+              src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif"
+              alt="Analysing…"
+              className="w-full h-full object-contain"
+              style={{ imageRendering: 'auto' }}
             />
           )}
         </div>

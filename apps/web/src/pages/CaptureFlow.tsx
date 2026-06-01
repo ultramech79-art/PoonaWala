@@ -1019,14 +1019,9 @@ export function CaptureFlow() {
 
           {/* Feedback */}
           {evalState === 'evaluating' && (
-            <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl bg-brand-50 border border-brand-200">
-              <div className="w-10 h-10 flex-shrink-0">
-                <GoldLottie size={40} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-brand-700">Analysing image…</p>
-                <p className="text-xs text-brand-600/70 mt-0.5">Checking image quality…</p>
-              </div>
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <GoldLottie size={96} />
+              <p className="text-sm font-semibold text-brand-700 tracking-[-0.01em]">Analysing image…</p>
             </div>
           )}
 
