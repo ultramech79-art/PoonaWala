@@ -2,22 +2,17 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Delete, Check, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { sendOtpAPI, otpLoginAPI } from '../lib/api'
-import { useSessionStore } from '../store/session'
 
 export function Login() {
   const navigate = useNavigate()
-  const { setAuth } = useSessionStore()
 
   const [step, setStep] = useState<1 | 2>(1)
   const [animKey, setAnimKey] = useState(0)
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd')
 
   const [phone, setPhone] = useState('')
-  const [sessionId, setSessionId] = useState('')
   const [pin, setPin] = useState('')
   const [pinShake, setPinShake] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
@@ -34,21 +29,6 @@ export function Login() {
     setDir('back'); setAnimKey(k => k + 1); setStep(1); setPin(''); setError('')
   }, [])
 
-  const handleContinue = async () => {
-    if (phone.length !== 10) return
-    setBusy(true); setError('')
-    try {
-      const res = await sendOtpAPI(phone)
-      if (!res.success || !res.session_id) throw new Error(res.message || 'Failed to send OTP')
-      setSessionId(res.session_id)
-      advance()
-    } catch (e: any) {
-      setError(e.message || 'Could not send OTP')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const handlePinPress = (key: string) => {
     if (key === '⌫') { setPin(p => p.slice(0, -1)); return }
     const next = pin + key
@@ -57,39 +37,18 @@ export function Login() {
     if (next.length === 6) setTimeout(() => verifyPin(next), 260)
   }
 
-  const verifyPin = async (enteredPin: string) => {
+  const verifyPin = (enteredPin: string) => {
     const stored = localStorage.getItem('goldeye_pin')
-    if (stored && enteredPin !== stored) {
+    if (stored && enteredPin === stored) {
+      finishLogin()
+    } else {
       setPinShake(true)
       setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
-      return
-    }
-    // Use PIN as OTP for server auth (or verify via OTP flow)
-    setBusy(true); setError('')
-    try {
-      // Send OTP and use entered PIN — for prod, server validates PIN separately
-      // For now, use otpLoginAPI with the session we already have
-      const res = await otpLoginAPI(phone, sessionId, enteredPin)
-      setAuth(res.access_token, res.user)
-      finishLogin()
-    } catch {
-      // If server rejects, still allow local PIN match for demo
-      const stored = localStorage.getItem('goldeye_pin')
-      if (stored && enteredPin === stored) {
-        finishLogin()
-      } else {
-        setPinShake(true)
-        setTimeout(() => { setPin(''); setPinShake(false); setError('Incorrect PIN. Try again.') }, 480)
-      }
-    } finally {
-      setBusy(false)
     }
   }
 
-  const inputCls = 'w-full bg-white border border-[#E2DDD6] rounded-2xl px-5 py-[18px] text-[18px] font-semibold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors'
   const btnCls = 'w-full h-[60px] rounded-2xl bg-stone-950 text-white font-semibold text-[16px] tracking-[-0.01em] disabled:opacity-25 active:opacity-75 transition-opacity'
 
-  // ── Success animation (PIN verified → dashboard) ─────────────────────────────
   if (done) {
     return (
       <div className="page flex flex-col items-center justify-center" style={{ background: '#FDFDFC' }}>
@@ -135,7 +94,6 @@ export function Login() {
         </button>
       </div>
 
-      {/* Animated content */}
       <div key={animKey} className={clsx('flex-1 flex flex-col relative z-10', dir === 'fwd' ? 'register-step-fwd' : 'register-step-back')}>
 
         {/* Step 1: Phone */}
@@ -166,14 +124,15 @@ export function Login() {
                     inputMode="numeric"
                     value={phone}
                     onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    onKeyDown={e => e.key === 'Enter' && phone.length === 10 && advance()}
                     placeholder="9876543210"
                     className="flex-1 bg-white border border-[#E2DDD6] rounded-2xl px-5 text-[20px] font-bold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors tracking-[0.06em]"
                   />
                 </div>
               </div>
               <div className="pb-8">
-                <button disabled={phone.length !== 10 || busy} onClick={handleContinue} className={btnCls}>
-                  {busy ? 'Sending…' : 'Continue'}
+                <button disabled={phone.length !== 10} onClick={advance} className={btnCls}>
+                  Continue
                 </button>
               </div>
             </div>
@@ -197,7 +156,6 @@ export function Login() {
             )}
 
             <div className="flex-1 flex flex-col">
-              {/* PIN dots */}
               <div className={clsx('flex justify-center gap-5 py-6', pinShake && 'animate-pin-shake')}>
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} style={{
@@ -210,7 +168,6 @@ export function Login() {
                 ))}
               </div>
 
-              {/* Numpad */}
               <div className="flex-1 flex flex-col justify-end px-5 pb-6">
                 <div className="grid grid-cols-3 gap-2.5">
                   {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k, idx) => (
