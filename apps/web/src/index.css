@@ -395,10 +395,15 @@
 }
 
 .page:not(.page-dark) {
-  background:
+  background-color: #fffdf8 !important;
+  background-image:
     radial-gradient(circle at 18% -10%, rgba(222,122,70,0.16), transparent 18rem),
     radial-gradient(circle at 100% 18%, rgba(200,166,92,0.13), transparent 17rem),
+    linear-gradient(rgba(120,113,108,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120,113,108,0.05) 1px, transparent 1px),
     linear-gradient(180deg, #fffdf8 0%, #f8f1e7 56%, #efe2d0 100%) !important;
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px, 100% 100% !important;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, no-repeat !important;
 }
 
 .language-page {
