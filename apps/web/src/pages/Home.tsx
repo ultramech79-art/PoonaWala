@@ -87,14 +87,6 @@ export function Home() {
 
       {/* Ambient glow overlays — static, no animation */}
       <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(120,113,108,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(120,113,108,0.05) 1px, transparent 1px)',
-            backgroundSize: '28px 28px, 28px 28px',
-          }}
-        />
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-gradient-to-br from-brand-400/12 via-amber-400/8 to-transparent blur-3xl" />
         <div className="absolute top-1/3 right-0 w-80 h-80 rounded-full bg-gradient-to-l from-amber-300/5 to-transparent blur-3xl" />
       </div>
