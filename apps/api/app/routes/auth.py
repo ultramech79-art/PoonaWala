@@ -227,20 +227,18 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if not phone and not google_payload:
         raise HTTPException(status_code=422, detail="phone is required")
 
+    if not req.password:
+        raise HTTPException(status_code=422, detail="pin is required")
+
     if phone:
         existing = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=409, detail="user already exists")
 
-    # OTP was already verified by the frontend (/otp/verify-otp) before reaching here.
-    # Re-verifying would consume the already-used 2Factor.in session and always fail.
-    # Mark phone as verified if the registration arrived via the OTP flow (otp_session_id present).
-    phone_verified = bool(phone and req.otp_session_id)
-
     user = User(
         id=str(uuid.uuid4()),
         phone=phone,
-        password_hash=pwd_context.hash(req.password) if req.password else None,
+        password_hash=pwd_context.hash(req.password),
         google_sub=google_payload.get("sub") if google_payload else None,
         full_name=req.full_name,
         dob=req.dob,
@@ -251,7 +249,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         pincode=req.pincode,
         profile_photo_url=req.profile_photo_url,
         profile_photo_public_id=req.profile_photo_public_id,
-        is_phone_verified=phone_verified,
+        is_phone_verified=True,
     )
     db.add(user)
     return await _issue(user, db)
