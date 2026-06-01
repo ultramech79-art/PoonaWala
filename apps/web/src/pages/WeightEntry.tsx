@@ -10,9 +10,12 @@ import {
   Loader2,
   Scale,
   Sparkles,
+  Volume2,
+  User,
 } from 'lucide-react'
 import { assetImageDataUrlAPI, estimateWeightAPI, listMyAssetsAPI, urlToDataUrl, type GoldKarat, type JewelryType, type UserAsset, type WeightEstimateResult } from '../lib/api'
 import { useSessionStore } from '../store/session'
+import { speak } from '../lib/tts'
 
 const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
   { value: 'auto', label: 'Auto' },
@@ -139,6 +142,10 @@ export function WeightEntry() {
   const [savedAssets, setSavedAssets] = useState<UserAsset[]>([])
   const [savedAssetSrcs, setSavedAssetSrcs] = useState<Record<number, string>>({})
   const [savedLoading, setSavedLoading] = useState(false)
+
+  useEffect(() => {
+    speak('Place the jewellery photos for weight estimation, or skip to continue.')
+  }, [])
 
   useEffect(() => {
     if (!state.authToken || state.authToken === 'guest') {
@@ -329,7 +336,7 @@ export function WeightEntry() {
       confidence: result?.confidence.score ?? null,
       method: result?.weight.method ?? null,
     })
-    navigate('/processing')
+    navigate('/add-item')
   }
 
   function skipWeightEstimate() {
@@ -340,7 +347,7 @@ export function WeightEntry() {
       estimatedG: null,
       confidence: null,
     })
-    navigate('/processing')
+    navigate('/add-item')
   }
 
   function UploadSlot({
@@ -429,24 +436,29 @@ export function WeightEntry() {
 
   return (
     <div className="page animate-slide-up">
-      <div className="page-header">
-        <button id="weight-back" onClick={() => navigate('/certificate-scan')} className="btn-icon">
-          <ChevronRight className="h-5 w-5 rotate-180 text-stone-500" />
+      <div className="px-5 py-2.5 flex items-center justify-between border-b border-stone-200/50 bg-white/60 backdrop-blur-sm">
+        <button id="weight-back" onClick={() => navigate('/certificate-scan')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md">
+          <ChevronRight className="w-3.5 h-3.5 rotate-180" />
         </button>
-        <span className="text-sm font-semibold text-stone-700">AI Weight Estimate</span>
-        <div className="w-11" />
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Weight Estimate</span>
+          <span className="text-base font-bold text-stone-950 tracking-tight">AI Weight</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => speak('Place the jewellery photos for weight estimation, or skip to continue.')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+            <Volume2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => state.authToken && state.authToken !== 'guest' ? navigate('/dashboard-home') : navigate('/login')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-700 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+            <User className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 pb-6">
         <div className="py-5">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gold-200 bg-gold-50">
-              <Scale className="h-6 w-6 text-gold-700" />
-            </div>
-            <div>
-              <h1 className="font-display text-xl font-bold text-stone-950">Optional weight estimate</h1>
-              <p className="text-xs leading-relaxed text-stone-500">Use top, 45-degree, and side photos for a better estimate, or skip and continue with visual/certificate evidence.</p>
-            </div>
+          <div className="mb-4">
+            <h1 className="font-display text-xl font-bold text-stone-950">Optional weight estimate</h1>
+            <p className="text-xs leading-relaxed text-stone-500 mt-1">Use top, 45-degree, and side photos for a better estimate, or skip and continue.</p>
           </div>
 
           {/* Auto-populated notice */}
@@ -601,17 +613,15 @@ export function WeightEntry() {
       </div>
 
       <div className="space-y-3 border-t border-stone-200 px-5 pb-6 pt-4">
-        <button onClick={runEstimate} disabled={loading || !topImageDataUrl || !angleImageDataUrl || !sideImageDataUrl} className="btn-primary w-full disabled:opacity-50">
+        <button onClick={runEstimate} disabled={loading || !topImageDataUrl || !angleImageDataUrl || !sideImageDataUrl} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 text-white font-semibold transition-colors active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed">
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-          {loading ? 'Estimating weight' : 'Estimate weight'}
+          {loading ? 'Estimating…' : 'Estimate Weight'}
         </button>
-        <button onClick={continueFlow} disabled={!result} className="btn-secondary w-full text-sm disabled:opacity-50">
-          Continue with estimate
-          <ArrowRight className="h-5 w-5" />
+        <button onClick={continueFlow} disabled={!result} className="btn-secondary w-full text-sm disabled:opacity-40">
+          Continue with estimate <ArrowRight className="h-4 w-4" />
         </button>
-        <button onClick={skipWeightEstimate} disabled={loading} className="btn-secondary w-full text-sm disabled:opacity-50">
+        <button onClick={skipWeightEstimate} disabled={loading} className="w-full py-2 text-sm font-medium text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-30">
           Skip weight estimate
-          <ArrowRight className="h-5 w-5" />
         </button>
       </div>
     </div>

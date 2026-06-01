@@ -6,7 +6,7 @@ import { certificateOcrAPI, type CertificateOCRResult } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
 import {
   ArrowRight, BadgeCheck, Camera as CameraIcon, ChevronRight,
-  FileText, Loader2, RotateCcw, ShieldCheck, Upload,
+  FileText, Loader2, RotateCcw, Upload, Volume2, User,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { speak } from '../lib/tts'
@@ -219,33 +219,25 @@ export function CertificateScan() {
         />
       )}
 
-      <div className="page-header">
-        <button onClick={() => navigate('/audio-eval')} className="btn-icon">
-          <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
+      <div className="px-5 py-2.5 flex items-center justify-between border-b border-stone-200/50 bg-white/60 backdrop-blur-sm">
+        <button onClick={() => navigate('/audio-eval')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md">
+          <ChevronRight className="w-3.5 h-3.5 rotate-180" />
         </button>
-        <span className="font-display font-semibold text-sm text-stone-700">Bill & Certificate</span>
-        <button onClick={continueWithoutDocument} className="text-xs font-semibold text-stone-400 px-2">
-          Skip
-        </button>
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Step 8 / 8</span>
+          <span className="text-base font-bold text-stone-950 tracking-tight">Bill & Certificate</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => speak(t('voice_certificate'))} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+            <Volume2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => state.authToken && state.authToken !== 'guest' ? navigate('/dashboard-home') : navigate('/login')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-700 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+            <User className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="px-5 pb-6 pt-4 space-y-4">
-        <div className="surface-panel rounded-3xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-                <FileText className="w-5 h-5 text-brand-600" strokeWidth={1.9} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-display font-bold text-base leading-tight text-stone-900">
-           
-                Bill or authenticity certificate
-              </h1>
-              <p className="text-xs text-stone-500 leading-relaxed mt-1">
-                Scan the bill for the same jewellery. HUID is matched first; otherwise we rely on description, purity, and weight.
-              </p>
-            </div>
-          </div>
-        </div>
 
         {!capturedUrl && (
           <>
@@ -343,18 +335,24 @@ export function CertificateScan() {
           </div>
         )}
 
-        <div className="rounded-2xl bg-white/70 border border-stone-200/80 px-4 py-3 flex items-start gap-2">
-          <ShieldCheck className="w-4 h-4 text-stone-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[10px] text-stone-500 leading-relaxed">
-            A matching bill for this same jewellery is treated as ground-truth evidence for printed purity and net weight before physical verification.
-          </p>
+        {/* Info card — at bottom */}
+        <div className="scan-panel rounded-2xl px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <FileText className="w-4 h-4 text-brand-600" strokeWidth={1.9} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-stone-900 leading-tight">Bill or authenticity certificate</p>
+            <p className="text-xs text-stone-500 leading-relaxed mt-0.5">
+              HUID is matched first. Otherwise we use purity, weight, and item description.
+            </p>
+          </div>
         </div>
 
-        <div className="w-full px-5 pb-6 pt-4 sticky-action space-y-3">
-          <button onClick={useExtracted} disabled={!hasUsefulData} className={clsx('btn-primary w-full', !hasUsefulData && 'opacity-50 cursor-not-allowed')}>
+        <div className="space-y-3 pt-1">
+          <button onClick={useExtracted} disabled={!hasUsefulData} className={clsx('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 text-white font-semibold transition-colors active:scale-[0.98]', !hasUsefulData && 'opacity-40 cursor-not-allowed')}>
             <BadgeCheck className="w-5 h-5" />
             Use Scanned Details
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight className="w-4 h-4" />
           </button>
           <button onClick={continueWithoutDocument} className="btn-secondary w-full text-sm">
             <CameraIcon className="w-4 h-4" />

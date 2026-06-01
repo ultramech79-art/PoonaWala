@@ -25,6 +25,7 @@ import { Confirmation } from './pages/Confirmation'
 import { VideoEval } from './pages/VideoEval'
 import { AudioEval } from './pages/AudioEval'
 import { AudioRemote } from './pages/AudioRemote'
+import { AddItem } from './pages/AddItem'
 import { useSessionStore } from './store/session'
 import { FloatingAssistant } from './components/FloatingAssistant'
 import { UserRound } from 'lucide-react'
@@ -81,6 +82,7 @@ function App() {
           <Route path="/video-eval" element={<VideoEval />} />
           <Route path="/audio-eval" element={<AudioEval />} />
           <Route path="/audio-remote" element={<AudioRemote />} />
+          <Route path="/add-item" element={<AddItem />} />
           <Route path="/weight" element={<WeightEntry />} />
           <Route path="/processing" element={<Processing />} />
           <Route path="/result" element={<Result />} />
