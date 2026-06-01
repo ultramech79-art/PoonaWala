@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import Lottie from 'lottie-react'
+import goldAnim from '../assets/gold-analysis.json'
 import {
   AlertCircle,
   ArrowRight,
@@ -16,6 +18,19 @@ import {
 import { assetImageDataUrlAPI, estimateWeightAPI, listMyAssetsAPI, urlToDataUrl, type GoldKarat, type JewelryType, type UserAsset, type WeightEstimateResult } from '../lib/api'
 import { useSessionStore } from '../store/session'
 import { speak } from '../lib/tts'
+
+function GoldLottie({ size = 40 }: { size?: number }) {
+  const ref = useRef<import('lottie-react').LottieRefCurrentProps>(null)
+  return (
+    <Lottie
+      animationData={goldAnim}
+      loop autoplay
+      lottieRef={ref}
+      onDOMLoaded={() => ref.current?.setSpeed(3)}
+      style={{ width: size, height: size }}
+    />
+  )
+}
 
 const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
   { value: 'auto', label: 'Auto' },
@@ -34,6 +49,13 @@ const SLOT_FRAME_TYPE = {
   angle: '45deg',
   side: 'side',
 } as const
+
+const ANALYSING_MSGS = [
+  'Detecting the ₹10 coin reference…',
+  'Measuring the jewellery outline…',
+  'Weighing the gold…',
+  'Almost done…',
+]
 
 type WeightSlot = keyof typeof SLOT_FRAME_TYPE
 type WeightFrameType = (typeof SLOT_FRAME_TYPE)[WeightSlot]
@@ -107,11 +129,22 @@ function errorMessage(error: unknown) {
   }
 }
 
+// UI-only display formatter — turns internal identifiers (snake_case, prefixes,
+// key:value strings) into clean readable text. Does not change any logic/data.
+function pretty(value: string): string {
+  return String(value)
+    .replace(/vlm[_ ]?roi[_ ]?/gi, '')
+    .replace(/[_:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">{label}</p>
-      <p className="mt-0.5 text-sm font-bold text-stone-900">{value}</p>
+    <div className="rounded-2xl border border-stone-200/70 bg-white px-3.5 py-3 shadow-[0_1px_3px_rgba(120,113,108,0.06)]">
+      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-stone-400">{label}</p>
+      <p className="mt-1 text-sm font-bold leading-snug text-stone-900 break-words">{value}</p>
     </div>
   )
 }
@@ -140,6 +173,10 @@ export function WeightEntry() {
   const billWeightG = state.certificateData?.weightG ?? null
   const [manualWeight, setManualWeight] = useState(() => (billWeightG ? String(billWeightG) : ''))
   const prefilledFromBill = billWeightG != null && manualWeight === String(billWeightG)
+  // Photo carousel — show one view at a time, auto-rotating, so nothing overflows.
+  const [viewIdx, setViewIdx] = useState(0)
+  // Cycling status copy shown while the estimate runs.
+  const [analysingMsg, setAnalysingMsg] = useState(0)
   const [dragActive, setDragActive] = useState<'top' | 'angle' | 'side' | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -252,6 +289,20 @@ export function WeightEntry() {
     return () => { mounted = false }
   }, [state.captures, topImageDataUrl, angleImageDataUrl, sideImageDataUrl])
 
+  // Auto-advance the photo carousel while on the AI page.
+  useEffect(() => {
+    if (mode !== 'ai' || result) return
+    const id = setInterval(() => setViewIdx(i => (i + 1) % 3), 3500)
+    return () => clearInterval(id)
+  }, [mode, result])
+
+  // Cycle the analysing copy while the estimate is running.
+  useEffect(() => {
+    if (!loading) { setAnalysingMsg(0); return }
+    const id = setInterval(() => setAnalysingMsg(i => Math.min(i + 1, ANALYSING_MSGS.length - 1)), 1400)
+    return () => clearInterval(id)
+  }, [loading])
+
   const confidencePct = useMemo(() => Math.round((result?.confidence.score ?? 0) * 100), [result])
 
   function savedForSlot(slot: WeightSlot) {
@@ -355,6 +406,7 @@ export function WeightEntry() {
       karat,
       jewelryType,
     })
+    savePendingAssessmentItem()
     navigate('/add-item')
   }
 
@@ -567,10 +619,10 @@ export function WeightEntry() {
       {/* Analysing overlay — gold animation while the weight estimate runs */}
       {loading && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#fffdf8]/95 backdrop-blur-sm animate-fade-in">
-          <img src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif" alt="Analysing…" className="w-44 h-44 object-contain" />
+          <GoldLottie size={176} />
           <div className="text-center mt-2">
             <p className="font-bold text-stone-900 text-base tracking-tight">Analysing your jewellery</p>
-            <p className="text-stone-400 text-sm mt-1">Measuring dimensions against the coin reference</p>
+            <p className="text-stone-400 text-sm mt-1 transition-all duration-300">{ANALYSING_MSGS[analysingMsg]}</p>
           </div>
         </div>
       )}
@@ -608,35 +660,36 @@ export function WeightEntry() {
             </div>
           )}
 
-          {/* Photo grid: 2 on top (top + 45°), 1 below (side) */}
-          <div className="grid grid-cols-2 gap-3">
-            <UploadSlot
-              slot="top"
-              title="Top view"
-              hint="Flat overhead photo for diameter and outline. Coin must be fully visible."
-              src={topImageDataUrl}
-              fileName={fileNames.top}
-            />
-            <UploadSlot
-              slot="angle"
-              title="45-degree view"
-              hint="Tilted photo to validate profile and reflective edges."
-              src={angleImageDataUrl}
-              fileName={fileNames.angle}
-            />
-            <div className="col-span-2">
-              <UploadSlot
-                slot="side"
-                title="Side view"
-                hint="Profile photo for actual thickness. Coin must stay in frame."
-                src={sideImageDataUrl}
-                fileName={fileNames.side}
-                aspect="aspect-[16/9]"
-              />
-            </div>
-          </div>
+          {/* Photo carousel — one view at a time, auto-rotating, no overflow */}
+          {(() => {
+            const views = [
+              { slot: 'top' as WeightSlot, title: 'Top view', short: 'Top', hint: 'Flat overhead photo for diameter and outline. Coin must be fully visible.', src: topImageDataUrl, fileName: fileNames.top },
+              { slot: 'angle' as WeightSlot, title: '45-degree view', short: '45°', hint: 'Tilted photo to validate profile and reflective edges.', src: angleImageDataUrl, fileName: fileNames.angle },
+              { slot: 'side' as WeightSlot, title: 'Side view', short: 'Side', hint: 'Profile photo for actual thickness. Coin must stay in frame.', src: sideImageDataUrl, fileName: fileNames.side },
+            ]
+            const active = views[viewIdx]
+            return (
+              <div>
+                <div key={active.slot} className="animate-fade-in">
+                  <UploadSlot slot={active.slot} title={active.title} hint={active.hint} src={active.src} fileName={active.fileName} aspect="aspect-[4/3]" />
+                </div>
+                {/* Minimal premium indicator bar */}
+                <div className="mt-3 flex items-center gap-2.5">
+                  {views.map((v, i) => (
+                    <button key={v.slot} type="button" onClick={() => setViewIdx(i)} className="flex flex-1 flex-col items-center gap-1.5 active:scale-95 transition-transform">
+                      <span className={`h-1 w-full rounded-full transition-all duration-500 ${i === viewIdx ? 'bg-stone-900' : 'bg-stone-200'}`} />
+                      <span className={`flex items-center gap-1 text-[10px] font-bold tracking-wide transition-colors ${i === viewIdx ? 'text-stone-900' : 'text-stone-400'}`}>
+                        {v.short}
+                        <span className={`h-1.5 w-1.5 rounded-full ${v.src ? 'bg-emerald-500' : 'bg-stone-300'}`} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
-          {topImageDataUrl && (
+          {topImageDataUrl && viewIdx === 0 && (
             <p className="mt-2 text-xs font-medium text-stone-500">
               Optional: tap the jewellery in the top view if the automatic selector misses it. Avoid tapping the coin.
             </p>
@@ -667,7 +720,7 @@ export function WeightEntry() {
               <div>
                 <p className="text-sm font-bold text-stone-900">Reference object</p>
                 <p className="mt-1 text-xs leading-relaxed text-stone-500">
-                  Rs 10 Indian coin, detected by Hough Circle Transform, diameter fixed at 27 mm.
+                  The ₹10 Indian coin (27 mm) is used as the size reference for scaling.
                 </p>
               </div>
             </div>
@@ -681,53 +734,62 @@ export function WeightEntry() {
           )}
 
           {result && (
-            <div className="mt-5 space-y-4">
-              <div className="rounded-2xl border border-gold-200 bg-gold-50 p-4">
-                <div className="flex items-start justify-between gap-3">
+            <div className="mt-5 space-y-4 animate-fade-in">
+              {/* Hero — estimated weight */}
+              <div className="relative overflow-hidden rounded-3xl border border-gold-200 bg-gradient-to-br from-gold-50 via-[#fffdf7] to-gold-50 p-5 shadow-[0_12px_34px_-14px_rgba(140,107,49,0.45)]">
+                <span className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-gold-300 to-transparent" />
+                <div className="flex items-end justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gold-700">Estimated weight</p>
-                    <p className="mt-1 font-display text-3xl font-black text-stone-950">{result.weight.estimated_g}g</p>
-                    <p className="text-xs text-stone-600">Range {result.weight.low_g}g to {result.weight.high_g}g</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gold-700">Estimated weight</p>
+                    <p className="mt-1 font-display text-[2.75rem] font-black leading-none tracking-tight bg-gradient-to-br from-[#B45309] via-[#8C6B31] to-[#57401F] bg-clip-text text-transparent">{result.weight.estimated_g}g</p>
+                    <p className="mt-1.5 text-xs font-medium text-stone-500">Range {result.weight.low_g}g – {result.weight.high_g}g</p>
                   </div>
-                  <div className="rounded-full bg-white px-3 py-1 text-xs font-bold text-stone-700">
-                    {confidencePct}% confidence
+                  <div className="flex flex-col items-center rounded-2xl bg-white/80 px-3.5 py-2 shadow-sm backdrop-blur-sm">
+                    <span className="font-display text-lg font-black text-stone-900">{confidencePct}%</span>
+                    <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-stone-400">confidence</span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <Metric label="Detected type" value={result.jewelry_type} />
-                <Metric label="Volume" value={`${result.physics.volume_cm3} cm3`} />
-                <Metric label="Width" value={`${result.dimensions.width_mm} mm`} />
-                <Metric label="Height" value={`${result.dimensions.height_mm} mm`} />
-                <Metric label="Thickness" value={`${result.dimensions.estimated_depth_mm} mm`} />
-                <Metric label="Density" value={`${result.physics.density_g_cm3} g/cm3`} />
-                <Metric label="Mask method" value={result.geometry.segmentation_method} />
-                {result.geometry.profile_measurement && (
-                  <Metric label="Depth source" value={result.geometry.profile_measurement.method} />
-                )}
-                {result.geometry.profile_measurement && (
-                  <Metric label="Side/45 thickness" value={`${result.geometry.profile_measurement.side_thickness_mm} / ${result.geometry.profile_measurement.angle_45_thickness_mm} mm`} />
-                )}
-                {result.geometry.volume_model?.minor_radius_mm && (
-                  <Metric label="Torus radii" value={`${result.geometry.volume_model.major_radius_mm} / ${result.geometry.volume_model.minor_radius_mm} mm`} />
-                )}
-                {result.geometry.volume_model?.band_width_mm && (
-                  <Metric label="Band/profile" value={`${result.geometry.volume_model.band_width_mm} / ${result.geometry.volume_model.profile_input_mm ?? '-'} mm`} />
-                )}
-                {result.geometry.volume_model?.cross_section && (
-                  <Metric
-                    label="Thickness model"
-                    value={result.geometry.volume_model.cross_section.candidates.map((item) => `${item.source}:${item.weight}`).join(' ')}
-                  />
-                )}
+              {/* Measurements & analysis */}
+              <div>
+                <p className="mb-2 px-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">Measurements &amp; analysis</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <Metric label="Detected type" value={pretty(result.jewelry_type)} />
+                  <Metric label="Volume" value={`${result.physics.volume_cm3} cm³`} />
+                  <Metric label="Width" value={`${result.dimensions.width_mm} mm`} />
+                  <Metric label="Height" value={`${result.dimensions.height_mm} mm`} />
+                  <Metric label="Thickness" value={`${result.dimensions.estimated_depth_mm} mm`} />
+                  <Metric label="Density" value={`${result.physics.density_g_cm3} g/cm³`} />
+                  <Metric label="Mask method" value={pretty(result.geometry.segmentation_method)} />
+                  {result.geometry.profile_measurement && (
+                    <Metric label="Depth source" value={pretty(result.geometry.profile_measurement.method)} />
+                  )}
+                  {result.geometry.profile_measurement && (
+                    <Metric label="Side / 45° thickness" value={`${result.geometry.profile_measurement.side_thickness_mm} / ${result.geometry.profile_measurement.angle_45_thickness_mm} mm`} />
+                  )}
+                  {result.geometry.volume_model?.minor_radius_mm && (
+                    <Metric label="Torus radii" value={`${result.geometry.volume_model.major_radius_mm} / ${result.geometry.volume_model.minor_radius_mm} mm`} />
+                  )}
+                  {result.geometry.volume_model?.band_width_mm && (
+                    <Metric label="Band / profile" value={`${result.geometry.volume_model.band_width_mm} / ${result.geometry.volume_model.profile_input_mm ?? '-'} mm`} />
+                  )}
+                  {result.geometry.volume_model?.cross_section && (
+                    <Metric
+                      label="Thickness model"
+                      value={pretty(result.geometry.volume_model.cross_section.candidates.map((item) => `${item.source}:${item.weight}`).join(' '))}
+                    />
+                  )}
+                </div>
               </div>
 
               {result.vlm_roi && (
-                <div className="rounded-2xl border border-stone-200 bg-white p-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-stone-400">Image validation</p>
-                  <p className="mt-1 text-xs text-stone-600">
-                    Top, 45-degree, and side views verified. Top ROI confidence {Math.round(result.vlm_roi.confidence * 100)}%.
+                <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 px-3.5 py-3">
+                  <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </span>
+                  <p className="text-xs font-medium text-emerald-800">
+                    Top, 45° and side views verified · {Math.round(result.vlm_roi.confidence * 100)}% ROI confidence
                   </p>
                 </div>
               )}
