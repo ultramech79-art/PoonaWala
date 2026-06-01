@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { ChevronRight, History, Image as ImageIcon, LogOut, RefreshCw, Trash2, UserRound, X, AlertTriangle } from 'lucide-react'
 import { assetImageDataUrlAPI, deleteUserAssetAPI, listLoanPredictionsAPI, listMyAssetsAPI, type UserAsset } from '../lib/api'
 import { useSessionStore } from '../store/session'
@@ -27,7 +27,6 @@ function AssetLabel({ asset }: { asset: UserAsset }) {
 
 export function Profile() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { state, clearAuth } = useSessionStore()
   const [assets, setAssets] = useState<UserAsset[]>([])
   const [predictions, setPredictions] = useState<any[]>([])
