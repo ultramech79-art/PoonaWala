@@ -65,25 +65,6 @@ export function Setup() {
       className="page animate-slide-up"
       style={{ position: 'relative', zIndex: 4, isolation: 'isolate' }}
     >
-      {/* Gold jewelry background + grid pattern */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 0,
-          pointerEvents: 'none',
-          backgroundImage: `
-            url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600"><defs><radialGradient id="g1"><stop offset="0%25" style="stop-color:%23D4AF37;stop-opacity:0.08"/><stop offset="100%25" style="stop-color:%23D4AF37;stop-opacity:0"/></radialGradient></defs><circle cx="80" cy="150" r="120" fill="url(%23g1)"/><circle cx="320" cy="400" r="140" fill="url(%23g1)"/></svg>'),
-            linear-gradient(rgba(120,113,108,0.06) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(120,113,108,0.06) 1px, transparent 1px)
-          `,
-          backgroundSize: '400px 600px, 28px 28px, 28px 28px',
-          backgroundRepeat: 'repeat, repeat, repeat',
-          borderRadius: 'inherit',
-        }}
-      />
-
       <div className="relative z-10 flex-1 overflow-y-auto no-scrollbar px-5 pb-6">
         {/* Heading with back button */}
         <div className="pt-6 pb-7">
