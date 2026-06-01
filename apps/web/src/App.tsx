@@ -73,6 +73,17 @@ function ProfileShortcut() {
   )
 }
 
+function RequireRegistered({ children }: { children: JSX.Element }) {
+  const location = useLocation()
+  const { state } = useSessionStore()
+
+  if (!state.authToken || state.authToken === 'guest') {
+    return <Navigate to="/register" replace state={{ from: location.pathname }} />
+  }
+
+  return children
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -88,20 +99,20 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/otp" element={<OTP />} />
-          <Route path="/setup" element={<Setup />} />
-          <Route path="/before-capture" element={<BeforeCapture />} />
-          <Route path="/capture" element={<CaptureFlow />} />
-          <Route path="/live-capture" element={<LiveCapture />} />
-          <Route path="/certificate-scan" element={<CertificateScan />} />
-          <Route path="/video-eval" element={<VideoEval />} />
-          <Route path="/audio-eval" element={<AudioEval />} />
-          <Route path="/audio-remote" element={<AudioRemote />} />
-          <Route path="/add-item" element={<AddItem />} />
-          <Route path="/weight" element={<WeightEntry />} />
-          <Route path="/processing" element={<Processing />} />
-          <Route path="/result" element={<Result />} />
-          <Route path="/final-eval" element={<FinalEvaluation />} />
-          <Route path="/gold-loan-app" element={<GoldLoanApplication />} />
+          <Route path="/setup" element={<RequireRegistered><Setup /></RequireRegistered>} />
+          <Route path="/before-capture" element={<RequireRegistered><BeforeCapture /></RequireRegistered>} />
+          <Route path="/capture" element={<RequireRegistered><CaptureFlow /></RequireRegistered>} />
+          <Route path="/live-capture" element={<RequireRegistered><LiveCapture /></RequireRegistered>} />
+          <Route path="/certificate-scan" element={<RequireRegistered><CertificateScan /></RequireRegistered>} />
+          <Route path="/video-eval" element={<RequireRegistered><VideoEval /></RequireRegistered>} />
+          <Route path="/audio-eval" element={<RequireRegistered><AudioEval /></RequireRegistered>} />
+          <Route path="/audio-remote" element={<RequireRegistered><AudioRemote /></RequireRegistered>} />
+          <Route path="/add-item" element={<RequireRegistered><AddItem /></RequireRegistered>} />
+          <Route path="/weight" element={<RequireRegistered><WeightEntry /></RequireRegistered>} />
+          <Route path="/processing" element={<RequireRegistered><Processing /></RequireRegistered>} />
+          <Route path="/result" element={<RequireRegistered><Result /></RequireRegistered>} />
+          <Route path="/final-eval" element={<RequireRegistered><FinalEvaluation /></RequireRegistered>} />
+          <Route path="/gold-loan-app" element={<RequireRegistered><GoldLoanApplication /></RequireRegistered>} />
           <Route path="/dashboard-home" element={<DashboardHome />} />
           <Route path="/dashboard-home/session/:id" element={<DashboardDetail />} />
           <Route path="/my-evaluations" element={<MyEvaluations />} />
