@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Delete, Check, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { checkPhoneAPI, passwordLoginAPI } from '../lib/api'
@@ -7,6 +8,7 @@ import { useSessionStore } from '../store/session'
 
 export function Login() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { setAuth } = useSessionStore()
 
   const [step, setStep] = useState<1 | 2>(1)
@@ -36,16 +38,16 @@ export function Login() {
     try {
       const res = await checkPhoneAPI(phone)
       if (!res.registered) {
-        setError('This number is not registered. Please register first.')
+        setError(t('login_err_not_registered'))
         return
       }
       if (!res.has_pin) {
-        setError('PIN is not set for this number. Register again and verify OTP to set your PIN.')
+        setError(t('login_err_no_pin'))
         return
       }
       advance()
     } catch (e: any) {
-      setError(e.message || 'Could not verify phone number. Please try again.')
+      setError(e.message || t('login_err_verify'))
     } finally {
       setBusy(false)
     }
@@ -78,12 +80,12 @@ export function Login() {
           setPin('')
           setPinShake(false)
           setBusy(false)
-          setError('PIN is not set for this number. Register again and verify OTP to set your PIN.')
+          setError(t('login_err_no_pin'))
         }, 480)
         return
       }
       setPinShake(true)
-      setTimeout(() => { setPin(''); setPinShake(false); setBusy(false); setError('Incorrect PIN. Try again.') }, 480)
+      setTimeout(() => { setPin(''); setPinShake(false); setBusy(false); setError(t('login_err_wrong_pin')) }, 480)
     }
   }
 
@@ -97,9 +99,9 @@ export function Login() {
             <Check className="w-11 h-11 text-white" strokeWidth={2.5} />
           </div>
           <h1 className="font-display font-bold text-[30px] text-stone-950 tracking-[-0.03em] mt-7">
-            Welcome back
+            {t('login_welcome_back')}
           </h1>
-          <p className="text-[15px] text-stone-500 mt-2">Signing you in…</p>
+          <p className="text-[15px] text-stone-500 mt-2">{t('login_signing_in')}</p>
           <Loader2 className="w-5 h-5 text-stone-400 animate-spin mt-6" />
         </div>
       </div>
@@ -132,10 +134,10 @@ export function Login() {
           <>
             <div className="px-6 pt-7 pb-6">
               <h1 className="font-display font-bold text-[34px] text-stone-950 leading-[1.08] tracking-[-0.03em]">
-                Welcome<br />back
+                {t('login_welcome_back')}
               </h1>
               <p className="text-[15px] text-stone-500 mt-3 leading-relaxed">
-                Enter your registered mobile number.
+                {t('login_enter_mobile')}
               </p>
             </div>
 
@@ -156,14 +158,14 @@ export function Login() {
                     value={phone}
                     onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     onKeyDown={e => e.key === 'Enter' && phone.length === 10 && !busy && handleContinue()}
-                    placeholder="9876543210"
+                    placeholder={t('reg_phone_ph')}
                     className="flex-1 bg-white border border-[#E2DDD6] rounded-2xl px-5 text-[20px] font-bold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors tracking-[0.06em]"
                   />
                 </div>
               </div>
               <div className="pb-8">
                 <button disabled={phone.length !== 10 || busy} onClick={handleContinue} className={btnCls}>
-                  {busy ? 'Checking…' : 'Continue'}
+                  {busy ? t('login_checking') : t('continue')}
                 </button>
               </div>
             </div>
@@ -175,10 +177,10 @@ export function Login() {
           <>
             <div className="px-6 pt-7 pb-4 text-center">
               <h1 className="font-display font-bold text-[34px] text-stone-950 leading-[1.08] tracking-[-0.03em]">
-                Enter your<br />PIN
+                {t('login_enter_pin')}
               </h1>
               <p className="text-[15px] text-stone-500 mt-3">
-                6-digit PIN for <span className="font-semibold text-stone-800">+91 {phone}</span>
+                {t('login_pin_for')} <span className="font-semibold text-stone-800">+91 {phone}</span>
               </p>
             </div>
 
@@ -217,7 +219,7 @@ export function Login() {
                   onClick={() => navigate('/register')}
                   className="w-full pt-5 pb-2 text-[13px] font-medium text-stone-400 active:text-stone-600"
                 >
-                  Forgot PIN? Register again
+                  {t('login_forgot_pin')}
                 </button>
               </div>
             </div>
