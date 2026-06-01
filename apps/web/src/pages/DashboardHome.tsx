@@ -643,6 +643,10 @@ export function DashboardHome() {
     ? fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
     : ''
 
+  const startEvaluation = () => {
+    navigate(isGuest ? '/register' : '/setup')
+  }
+
   const handleQuickAction = (id: string) => {
     if (id === 'evaluations') {
       navigate('/my-evaluations')
@@ -710,7 +714,7 @@ export function DashboardHome() {
       {/* ── Scrollable body ─────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto no-scrollbar pb-6" id="main-content" tabIndex={-1}>
         {/* ── Hero evaluate card ─────────────────────────────────── */}
-        <PoonawallaHeroCarousel onStart={() => navigate('/setup')} />
+        <PoonawallaHeroCarousel onStart={startEvaluation} />
 
         {/* ── Live gold price ────────────────────────────────────── */}
         <div className="mt-4">
@@ -799,7 +803,7 @@ export function DashboardHome() {
         style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       >
         <button
-          onClick={() => navigate('/setup')}
+          onClick={startEvaluation}
           className="w-full py-4 rounded-2xl bg-charcoal text-white font-display font-black text-base shadow-cta active:scale-[0.98] transition-transform flex items-center justify-center gap-2.5"
           aria-label="Evaluate my gold — select item type first"
         >
