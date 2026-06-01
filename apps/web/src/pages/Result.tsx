@@ -356,7 +356,7 @@ export function Result() {
   const confidencePct = Math.max(0, Math.min(100, Math.round(result.confidence.score * 100)))
   const primaryActionTarget =
     effectiveRouting === 'AGENT' || effectiveRouting === 'INSTANT'
-      ? '/final-eval'
+      ? '/gold-loan-app'
       : effectiveRouting === 'RECAPTURE'
         ? '/capture'
       : '/dashboard-home'

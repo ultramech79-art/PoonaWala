@@ -112,7 +112,7 @@
   "result_contact": "सहायता से संपर्क करें",
 
   "result_instant_action": "साइन करें और डोरस्टेप पिकअप बुक करें",
-  "result_agent_action": "एजेंट विज़िट शेड्यूल करें",
+  "result_agent_action": "Next",
   "result_recapture_action": "फोटो फिर से लें",
 
   "confidence_high": "उच्च विश्वास",
@@ -257,7 +257,7 @@
   "routing_instant_action": "आवेदन करें",
   "routing_instant_desc": "आपका आभूषण सभी मानदंडों को पूरा करता है। एजेंट 2 घंटे में आएगा।",
   "routing_agent_label": "एजेंट विज़िट जरूरी",
-  "routing_agent_action": "एजेंट विज़िट शेड्यूल करें",
+  "routing_agent_action": "Next",
   "routing_agent_desc": "भौतिक XRF परीक्षण जरूरी है। हमारा एजेंट आपकी सुविधानुसार आएगा।",
   "routing_recapture_label": "बेहतर फोटो चाहिए",
   "routing_recapture_action": "फोटो फिर से लें",

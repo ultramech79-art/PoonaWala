@@ -112,7 +112,7 @@
   "result_contact": "Contact Support",
 
   "result_instant_action": "Sign & Book Doorstep Pickup",
-  "result_agent_action": "Schedule Agent Visit",
+  "result_agent_action": "Next",
   "result_recapture_action": "Recapture Photos",
 
   "confidence_high": "High confidence",
@@ -257,7 +257,7 @@
   "routing_instant_action": "Proceed to Apply",
   "routing_instant_desc": "Your jewelry meets all criteria for instant approval. An agent will visit within 2 hours.",
   "routing_agent_label": "Agent Visit Required",
-  "routing_agent_action": "Schedule Agent Visit",
+  "routing_agent_action": "Next",
   "routing_agent_desc": "A physical XRF assay is required. Our agent will visit at your convenience.",
   "routing_recapture_label": "Better Photo Needed",
   "routing_recapture_action": "Retake Photos",

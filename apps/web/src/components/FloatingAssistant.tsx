@@ -57,7 +57,6 @@ const routeLabels: Record<string, string> = {
   '/weight': 'Weight entry',
   '/processing': 'Processing',
   '/result': 'Pre-qualification result',
-  '/final-eval': 'Final evaluation',
   '/gold-loan-app': 'Loan application',
   '/dashboard-home': 'Dashboard',
   '/chatbot': 'GoldEye assistant',

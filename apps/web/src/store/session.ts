@@ -20,7 +20,7 @@ export interface CertificateData {
   notes: string[]
 }
 
-// ── Evaluation data (FinalEvaluation page output) ─────────────────────────────
+// ── Evaluation data (loan eligibility output) ─────────────────────────────────
 export interface EvalData {
   state: string
   city: string
