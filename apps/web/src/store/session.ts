@@ -117,6 +117,7 @@ export interface SessionState {
   tapTestResult: TapTestResult | null
   result: AssessmentResult | null
   assessedItems: AssessedItem[]
+  pendingAssessmentItems: PendingAssessmentItem[]
   confidenceBreakdown: ConfidenceComputation | null
   evalData: EvalData | null
   loanAppData: LoanAppData | null
@@ -126,6 +127,21 @@ export interface AssessedItem {
   sessionId: string
   result: AssessmentResult
   evalData: EvalData | null
+  createdAt: string
+}
+
+export interface PendingAssessmentItem {
+  sessionId: string
+  captures: Partial<Record<CaptureType, CapturedAsset>>
+  skippedCaptures: Partial<Record<CaptureType, boolean>>
+  pageEvidence: Partial<Record<EvidencePageKey, PageEvidence>>
+  weightG: number | null
+  huidCode: string | null
+  scannedKarat: number | null
+  certificateData: CertificateData | null
+  huidVerification: HuidVerificationResult | null
+  liveAuthResult: LiveAuthResult | null
+  tapTestResult: TapTestResult | null
   createdAt: string
 }
 
@@ -253,6 +269,7 @@ function serializeState(state: SessionState) {
     tapTestResult: state.tapTestResult,
     result: state.result,
     assessedItems: state.assessedItems,
+    pendingAssessmentItems: state.pendingAssessmentItems,
     confidenceBreakdown: state.confidenceBreakdown,
     evalData: state.evalData,
     loanAppData: state.loanAppData,
@@ -321,6 +338,7 @@ let _state: SessionState = {
   tapTestResult: persistedState.tapTestResult ?? null,
   result: persistedState.result ?? null,
   assessedItems: persistedState.assessedItems ?? [],
+  pendingAssessmentItems: persistedState.pendingAssessmentItems ?? [],
   confidenceBreakdown: persistedState.confidenceBreakdown ?? null,
   evalData: persistedState.evalData ?? null,
   loanAppData: persistedState.loanAppData ?? null,
@@ -364,9 +382,35 @@ function freshAssessmentPatch(sessionId: string | null = null): Partial<SessionS
     tapTestResult: null,
     result: null,
     assessedItems: [],
+    pendingAssessmentItems: [],
     confidenceBreakdown: null,
     evalData: null,
     loanAppData: null,
+  }
+}
+
+function snapshotPendingAssessmentItem(): PendingAssessmentItem | null {
+  const sessionId = _state.sessionId
+  const hasAssessmentInput =
+    Object.keys(_state.captures).length > 0 ||
+    _state.weightG != null ||
+    _state.huidCode != null ||
+    _state.scannedKarat != null ||
+    _state.certificateData != null
+  if (!sessionId || !hasAssessmentInput) return null
+  return {
+    sessionId,
+    captures: _state.captures,
+    skippedCaptures: _state.skippedCaptures,
+    pageEvidence: _state.pageEvidence,
+    weightG: _state.weightG,
+    huidCode: _state.huidCode,
+    scannedKarat: _state.scannedKarat,
+    certificateData: _state.certificateData,
+    huidVerification: _state.huidVerification,
+    liveAuthResult: _state.liveAuthResult,
+    tapTestResult: _state.tapTestResult,
+    createdAt: new Date().toISOString(),
   }
 }
 
@@ -487,6 +531,17 @@ export function useSessionStore() {
       setState(patch)
     },
     setLoanAppData: (loanAppData: LoanAppData) => setState({ loanAppData }),
+    savePendingAssessmentItem: () => {
+      const item = snapshotPendingAssessmentItem()
+      if (!item) return
+      setState({
+        pendingAssessmentItems: [
+          ..._state.pendingAssessmentItems.filter(prev => prev.sessionId !== item.sessionId),
+          item,
+        ],
+      })
+    },
+    clearPendingAssessmentItems: () => setState({ pendingAssessmentItems: [] }),
     setSessionId: (id: string) => setState({ sessionId: id }),
     initSession: () => {
       const id = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
