@@ -7,8 +7,12 @@ import os
 import logging
 from typing import Optional
 import aiohttp
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.database import get_db
+from app.db.models import OtpVerification
 
 router = APIRouter()
 logger = logging.getLogger("goldeye.otp")
@@ -69,6 +73,27 @@ async def verify_otp_code(session_id: str, otp: str) -> VerifyOtpResponse:
         return VerifyOtpResponse(success=False, valid=False, message="Verification service unavailable", error=str(e))
 
 
+async def mark_otp_session_verified(db: AsyncSession, session_id: str) -> None:
+    if session_id:
+        record = await db.get(OtpVerification, session_id)
+        if record:
+            record.consumed_at = None
+        else:
+            db.add(OtpVerification(session_id=session_id))
+        await db.commit()
+
+
+async def consume_verified_otp_session(db: AsyncSession, session_id: str) -> bool:
+    if not session_id:
+        return False
+    record = await db.get(OtpVerification, session_id)
+    if not record or record.consumed_at is not None:
+        return False
+    await db.delete(record)
+    await db.commit()
+    return True
+
+
 @router.post("/otp/send-otp", response_model=SendOtpResponse)
 async def send_otp(req: SendOtpRequest):
     phone = req.phone.strip()
@@ -105,5 +130,8 @@ async def send_otp(req: SendOtpRequest):
 
 
 @router.post("/otp/verify-otp", response_model=VerifyOtpResponse)
-async def verify_otp(req: VerifyOtpRequest):
-    return await verify_otp_code(req.session_id, req.otp)
+async def verify_otp(req: VerifyOtpRequest, db: AsyncSession = Depends(get_db)):
+    result = await verify_otp_code(req.session_id, req.otp)
+    if result.success and result.valid:
+        await mark_otp_session_verified(db, req.session_id)
+    return result

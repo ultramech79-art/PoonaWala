@@ -99,6 +99,14 @@ class User(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class OtpVerification(Base):
+    __tablename__ = "otp_verifications"
+
+    session_id = Column(String, primary_key=True, index=True)
+    verified_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class UserSession(Base):
     __tablename__ = "user_sessions"
 

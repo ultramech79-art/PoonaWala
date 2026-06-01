@@ -513,8 +513,8 @@ export function registerAPI(payload: RegisterPayload): Promise<AuthResponse> {
   return authPost('/api/auth/register', payload)
 }
 
-export function passwordLoginAPI(phoneOrEmail: string, password: string): Promise<AuthResponse> {
-  return authPost('/api/auth/login/password', { phone_or_email: phoneOrEmail, password })
+export function passwordLoginAPI(phone: string, password: string): Promise<AuthResponse> {
+  return authPost('/api/auth/login/password', { phone, password })
 }
 
 export function otpLoginAPI(phone: string, otpSessionId: string, otp: string): Promise<AuthResponse> {

@@ -7,9 +7,9 @@ import uuid
 from datetime import date as date_type, datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel, validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,10 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.data.india_regions import is_valid_region_code
 from app.db.database import get_db
 from app.db.models import User
-from app.routes.otp import verify_otp_code
+from app.routes.otp import consume_verified_otp_session, verify_otp_code
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 JWT_ALGORITHM = "HS256"
 
@@ -95,6 +94,10 @@ class RegisterRequest(BaseModel):
 
     @validator("password")
     def validate_password(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        if not re.fullmatch(r"\d{6}", value):
+            raise ValueError("pin must be 6 digits")
         return value
 
 
@@ -159,6 +162,17 @@ def create_access_token(user_id: str) -> str:
         "exp": int((now + timedelta(minutes=_jwt_minutes())).timestamp()),
     }
     return jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
+
+
+def _hash_pin(pin: str) -> str:
+    return bcrypt.hashpw(pin.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_pin(pin: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(pin.encode("utf-8"), password_hash.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 async def get_current_user(
@@ -230,15 +244,36 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if not req.password:
         raise HTTPException(status_code=422, detail="pin is required")
 
+    phone_verified = False
+    if phone:
+        if req.otp_session_id and req.otp:
+            otp_result = await verify_otp_code(req.otp_session_id, req.otp)
+            phone_verified = bool(otp_result.success and otp_result.valid)
+        elif req.otp_session_id:
+            phone_verified = await consume_verified_otp_session(db, req.otp_session_id)
+        if not phone_verified:
+            raise HTTPException(status_code=401, detail="otp_verification_required")
+
     if phone:
         existing = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
         if existing:
-            raise HTTPException(status_code=409, detail="user already exists")
+            existing.full_name = req.full_name
+            existing.dob = req.dob
+            existing.language = req.language
+            existing.region_code = req.region_code
+            existing.address = req.address
+            existing.city = req.city
+            existing.pincode = req.pincode
+            existing.profile_photo_url = req.profile_photo_url
+            existing.profile_photo_public_id = req.profile_photo_public_id
+            existing.password_hash = _hash_pin(req.password)
+            existing.is_phone_verified = True
+            return await _issue(existing, db)
 
     user = User(
         id=str(uuid.uuid4()),
         phone=phone,
-        password_hash=pwd_context.hash(req.password),
+        password_hash=_hash_pin(req.password),
         google_sub=google_payload.get("sub") if google_payload else None,
         full_name=req.full_name,
         dob=req.dob,
@@ -249,7 +284,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         pincode=req.pincode,
         profile_photo_url=req.profile_photo_url,
         profile_photo_public_id=req.profile_photo_public_id,
-        is_phone_verified=True,
+        is_phone_verified=phone_verified,
     )
     db.add(user)
     return await _issue(user, db)
@@ -259,7 +294,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login_password(req: PasswordLoginRequest, db: AsyncSession = Depends(get_db)):
     phone = _normalize_phone(req.phone.strip())
     user = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
-    if not user or not user.password_hash or not pwd_context.verify(req.password, user.password_hash):
+    if not user or not user.password_hash or not _verify_pin(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="invalid credentials")
     return await _issue(user, db)
 
