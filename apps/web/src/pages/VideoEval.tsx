@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../store/session'
-import { ChevronRight, Video, AlertCircle, SkipForward, CheckCircle } from 'lucide-react'
+import { ChevronRight, Video, AlertCircle, User, Zap, ZapOff } from 'lucide-react'
 import { clsx } from 'clsx'
 import { apiBase } from '../lib/api'
 import { preferredCameraDeviceId } from '../lib/cameraQuality'
@@ -37,7 +37,7 @@ function frameBlob(b64: string): Blob {
   return new Blob([bytes], { type: 'image/jpeg' })
 }
 
-type Phase = 'intro' | 'recording' | 'analyzing' | 'result'
+type Phase = 'intro' | 'preview' | 'recording' | 'analyzing' | 'result'
 
 interface VideoResult {
   video_score: number
@@ -73,8 +73,14 @@ export function VideoEval() {
   const [result, setResult]           = useState<VideoResult | null>(null)
   const [error, setError]             = useState('')
   const [showTutorial, setShowTutorial] = useState(true)
+  const [recBtnActive, setRecBtnActive] = useState(false)
+  const [torchOn, setTorchOn] = useState(false)
+  const [torchSupported, setTorchSupported] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const [zoomMin, setZoomMin] = useState(1)
+  const [zoomMax, setZoomMax] = useState(4)
+  const stopEarlyRef = useRef(false)
 
-  // Speak voice guide on intro
   useEffect(() => {
     const timer = setTimeout(() => speak(t('voice_video')), 500)
     return () => clearTimeout(timer)
@@ -82,12 +88,20 @@ export function VideoEval() {
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach(t => t.stop()) }, [])
 
-  async function startRecording() {
-    setError('')
-    framesRef.current = []
-    setPhase('recording')
-    setSecondsLeft(Math.ceil(VIDEO_DURATION_MS / 1000))
+  // Wire stream to video element whenever phase enters preview/recording
+  useEffect(() => {
+    const vid = videoRef.current
+    if (!vid || !streamRef.current) return
+    if (phase === 'preview' || phase === 'recording') {
+      vid.srcObject = streamRef.current
+      vid.play().catch(() => {})
+    }
+  }, [phase])
 
+  async function openCamera() {
+    setError('')
+    setRecBtnActive(false)
+    setPhase('preview')
     try {
       const deviceId = await preferredCameraDeviceId({ ideal: 'environment' })
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -101,19 +115,61 @@ export function VideoEval() {
       streamRef.current = stream
       const vid = videoRef.current
       if (vid) { vid.srcObject = stream; vid.play().catch(() => {}) }
+      // Detect torch + zoom support
+      const track = stream.getVideoTracks()[0]
+      const caps = track?.getCapabilities?.() as any
+      if (caps?.torch) setTorchSupported(true)
+      if (caps?.zoom && Number(caps.zoom.max ?? 1) > Number(caps.zoom.min ?? 1) + 0.1) {
+        setZoomMin(Number(caps.zoom.min ?? 1)); setZoomMax(Number(caps.zoom.max ?? 1)); setZoom(Number(caps.zoom.min ?? 1))
+      } else {
+        setZoomMin(1); setZoomMax(4); setZoom(1)
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Camera access denied — grant permission and try again.')
+      setPhase('intro')
+    }
+  }
 
+  async function toggleTorch() {
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    const next = !torchOn
+    try { await track.applyConstraints({ advanced: [{ torch: next } as any] }); setTorchOn(next) } catch {}
+  }
+
+  async function applyZoom(value: number) {
+    const next = Math.max(zoomMin, Math.min(zoomMax, value))
+    setZoom(next)
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (track) {
+      try { await track.applyConstraints({ advanced: [{ zoom: next } as any] }) } catch {}
+    }
+    if (videoRef.current) videoRef.current.style.transform = `scale(${next / zoomMin})`
+  }
+
+  async function startRecording() {
+    if (!streamRef.current) return
+    framesRef.current = []
+    stopEarlyRef.current = false
+    setPhase('recording')
+    setSecondsLeft(Math.ceil(VIDEO_DURATION_MS / 1000))
+
+    try {
       const startedAt = Date.now()
       const tickIv  = setInterval(() => setSecondsLeft(Math.max(0, Math.ceil((VIDEO_DURATION_MS - (Date.now() - startedAt)) / 1000))), 300)
       const frameIv = setInterval(() => {
         if (videoRef.current) { const b64 = grabFrame(videoRef.current); if (b64) framesRef.current.push(b64) }
       }, FRAME_INTERVAL_MS)
 
-      await new Promise(r => setTimeout(r, VIDEO_DURATION_MS))
+      await new Promise<void>(r => {
+        const t = setTimeout(r, VIDEO_DURATION_MS)
+        const check = setInterval(() => { if (stopEarlyRef.current) { clearTimeout(t); clearInterval(check); r() } }, 100)
+      })
       clearInterval(tickIv); clearInterval(frameIv)
 
       // Last frame
       if (videoRef.current) { const b64 = grabFrame(videoRef.current); if (b64) framesRef.current.push(b64) }
-      stream.getTracks().forEach(t => t.stop()); streamRef.current = null
+      streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null
 
       framesRef.current = framesRef.current.filter(Boolean).slice(0, MAX_VIDEO_FRAMES)
       const usableFrames = framesRef.current
@@ -140,8 +196,8 @@ export function VideoEval() {
       setPhase('analyzing')
       await runAnalysis()
     } catch (e: any) {
-      setError(e?.message ?? 'Camera access denied — grant permission and try again.')
-      setPhase('intro')
+      setError(e?.message ?? 'Recording failed. Please try again.')
+      setPhase('preview')
     }
   }
 
@@ -215,120 +271,194 @@ export function VideoEval() {
   const barColor   = (s: number) => s >= 70 ? 'bg-emerald-500' : s >= 45 ? 'bg-amber-400' : 'bg-red-400'
 
   return (
-    <div className="page app-page-bg overflow-y-auto">
+    <div className="page overflow-y-auto" style={{ backgroundColor: '#fdf8f6', backgroundImage: 'linear-gradient(rgba(180,100,80,0.9) 1px, transparent 1px), linear-gradient(90deg, rgba(180,100,80,0.9) 1px, transparent 1px)', backgroundSize: '28px 28px', backgroundRepeat: 'repeat' }}>
 
       {/* Tutorial overlay */}
       {showTutorial && phase === 'intro' && (
         <TutorialOverlay stepType="video" onDismiss={() => setShowTutorial(false)} />
       )}
 
+      {/* Tutorial overlay — on intro only */}
+      {showTutorial && phase === 'intro' && (
+        <TutorialOverlay stepType="video" onDismiss={() => setShowTutorial(false)} />
+      )}
+
       {/* Header */}
-      <div className="page-header">
+      <div className="px-5 py-2.5 flex items-center justify-between border-b border-stone-200/50 bg-white/60 backdrop-blur-sm">
         <button
-          onClick={() => phase !== 'recording' && navigate('/capture')}
-          className={clsx('btn-icon', phase === 'recording' && 'opacity-30 cursor-not-allowed')}
+          onClick={() => phase !== 'recording' && (phase === 'preview' ? (streamRef.current?.getTracks().forEach(t => t.stop()), streamRef.current = null, setPhase('intro')) : navigate('/capture'))}
+          className={clsx('flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md', phase === 'recording' && 'opacity-30 cursor-not-allowed')}
           disabled={phase === 'recording'}
         >
-          <ChevronRight className="w-5 h-5 rotate-180 text-stone-500" />
+          <ChevronRight className="w-3.5 h-3.5 rotate-180" />
         </button>
-        <div className="flex flex-col items-center">
-          <span className="text-xs text-stone-400 uppercase tracking-widest font-medium">Video Scan</span>
-          <span className="text-sm font-semibold text-stone-900 mt-0.5">Video Analysis</span>
+        <div className="flex flex-col items-center flex-1 gap-0.5">
+          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Step 6 / 8</span>
+          <span className="text-base font-bold text-stone-950 tracking-tight">Video Scan</span>
         </div>
-        <button
-          onClick={() => speak(t('voice_video'))}
-          className="btn-icon"
-          title="Replay instructions"
-          disabled={phase === 'recording'}
-        >
-          <Video className="w-4 h-4 text-stone-500" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => speak(t('voice_video'))}
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95"
+            disabled={phase === 'recording'}
+          >
+            <Video className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => state.authToken && state.authToken !== 'guest' ? navigate('/dashboard-home') : navigate('/login')}
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-700 text-white shadow-sm hover:shadow-md transition-all active:scale-95"
+          >
+            <User className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      <div className="px-5 py-4 space-y-5">
-
-        {/* INTRO */}
-        {phase === 'intro' && (
-          <div className="space-y-5 animate-fade-in">
-            <div className="surface-panel rounded-3xl p-6 flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center shadow-lg">
-                <Video className="w-8 h-8 text-white" />
+      {/* INTRO */}
+      {phase === 'intro' && (
+        <div className="px-5 py-5 space-y-4 animate-fade-in">
+          <div className="scan-panel rounded-3xl px-5 py-4">
+            <p className="text-sm font-semibold text-stone-800 leading-relaxed">
+              A short video captures what still photos miss. Edge wear, surface consistency and the subtle signs that tell solid gold from plated.
+            </p>
+          </div>
+          <div className="scan-panel rounded-2xl divide-y divide-stone-200/60">
+            {[
+              { n: '1', text: 'Place the piece flat on a white sheet or plain surface' },
+              { n: '2', text: 'Film near a window or in bright, even light' },
+              { n: '3', text: 'Rotate the piece steadily and slowly for the full 15 seconds' },
+              { n: '4', text: 'Keep the edges, clasps and hallmark stamp visible throughout' },
+            ].map(({ n, text }) => (
+              <div key={n} className="flex items-start gap-3 px-4 py-3.5">
+                <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{n}</span>
+                <p className="text-sm text-stone-700 leading-snug">{text}</p>
               </div>
-              <div className="text-center">
-                <p className="font-bold text-stone-900 text-lg">15-Second Video Scan</p>
-                <p className="text-stone-600 text-sm mt-1 leading-relaxed">
-                  Slowly rotate the gold piece. We analyse wear at contact points, edge colour consistency, luster, and surface originality.
-                </p>
-              </div>
+            ))}
+          </div>
+          {error && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{error}</p>
             </div>
+          )}
+          <button onClick={openCamera} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 hover:bg-stone-900 text-white font-semibold transition-colors active:scale-[0.98]">
+            <Video className="w-5 h-5" /> Start 15-Second Video
+          </button>
+          <button onClick={skipVideo} className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
+            Skip Video
+          </button>
+        </div>
+      )}
 
-            <div className="surface-panel rounded-2xl p-4 space-y-2.5">
-              {[
-                'Place gold on a clean white surface',
-                'Good lighting — near a window works best',
-                'Slowly rotate the piece during the 15 seconds',
-                'Show all sides — edges, clasps, and hallmark area',
-              ].map((tip, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
-                  <p className="text-sm text-stone-700">{tip}</p>
-                </div>
+      <div className="px-5 py-5 space-y-4">
+
+        {/* Shared viewfinder — visible in preview + recording */}
+        {(phase === 'preview' || phase === 'recording') && (
+          <div className="animate-fade-in">
+            <div className="relative rounded-3xl overflow-hidden bg-stone-900 aspect-[3/4]">
+              <video ref={videoRef} className="w-full h-full object-cover" muted playsInline autoPlay />
+              <div className="absolute inset-0 pointer-events-none" style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.35)' }} />
+              {['top-3 left-3 border-t-2 border-l-2 rounded-tl-xl','top-3 right-3 border-t-2 border-r-2 rounded-tr-xl','bottom-3 left-3 border-b-2 border-l-2 rounded-bl-xl','bottom-3 right-3 border-b-2 border-r-2 rounded-br-xl'].map((cls, i) => (
+                <div key={i} className={`absolute w-7 h-7 pointer-events-none ${cls}`} style={{ borderColor: 'rgba(255,255,255,0.55)' }} />
               ))}
+              {/* Torch + REC overlay */}
+              <div className="absolute top-3 right-3 flex flex-col gap-2">
+                {torchSupported && (phase === 'preview' || phase === 'recording') && (
+                  <button onClick={toggleTorch}
+                    className={clsx('w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm border transition-all',
+                      torchOn ? 'bg-amber-400 border-amber-300 text-black' : 'bg-black/50 border-white/20 text-white/80')}>
+                    {torchOn ? <Zap className="w-4 h-4 fill-current" /> : <ZapOff className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+              {phase === 'recording' && (
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600/90 backdrop-blur-sm rounded-full px-3 py-1.5">
+                  <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  <span className="text-white text-xs font-semibold tracking-wide">REC</span>
+                </div>
+              )}
             </div>
 
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">{error}</p>
+            {/* Zoom slider — above record button */}
+            {(phase === 'preview' || phase === 'recording') && (
+              <div className="mt-3 px-1">
+                <input
+                  type="range" min={zoomMin} max={zoomMax} step="0.1" value={zoom}
+                  onChange={e => applyZoom(Number(e.target.value))}
+                  className="zoom-slider-minimal w-full"
+                  style={{ '--zoom-fill': `${((zoom - zoomMin) / (zoomMax - zoomMin)) * 100}%` } as React.CSSProperties}
+                />
               </div>
             )}
 
-            <button onClick={startRecording} className="w-full btn-primary">
-              <Video className="w-5 h-5" /> Start 15-Second Video
-            </button>
-            <button
-              onClick={skipVideo}
-              className="w-full btn-secondary text-sm flex items-center justify-center gap-2"
-            >
-              <SkipForward className="w-4 h-4" /> Skip Video — Go to Tap Test
-            </button>
-          </div>
-        )}
-
-        {/* RECORDING */}
-        {phase === 'recording' && (
-          <div className="space-y-4 animate-fade-in">
-            <div className="relative rounded-3xl overflow-hidden bg-stone-900 aspect-[3/4]">
-              <video ref={videoRef} className="w-full h-full object-cover" muted playsInline autoPlay />
-              <div className="absolute inset-0 flex flex-col items-center justify-end pb-8 pointer-events-none">
-                <div className="bg-black/70 backdrop-blur-sm rounded-2xl px-6 py-3 text-center">
-                  <p className="text-white/60 text-xs uppercase tracking-widest">Recording</p>
-                  <p className="text-white font-black text-4xl tabular-nums leading-none mt-1">{secondsLeft}</p>
-                  <p className="text-white/50 text-xs mt-0.5">seconds left</p>
-                </div>
-                <div className="mt-3 w-48 bg-white/20 rounded-full h-1.5">
+            {/* Controls below zoom */}
+            {phase === 'preview' && (
+              <div className="mt-4 flex flex-col items-center gap-3">
+                <button
+                  onClick={() => {
+                    setRecBtnActive(true)
+                    setTimeout(() => startRecording(), 400)
+                  }}
+                  className="w-20 h-20 rounded-full flex items-center justify-center transition-transform active:scale-95"
+                  style={{ background: 'rgba(50,50,50,0.5)', backdropFilter: 'blur(8px)' }}
+                >
                   <div
-                    className="h-1.5 rounded-full bg-amber-400 transition-all duration-300"
+                    className="transition-all duration-300 ease-in-out"
+                    style={{
+                      width: recBtnActive ? '2rem' : '2.5rem',
+                      height: recBtnActive ? '2rem' : '2.5rem',
+                      borderRadius: recBtnActive ? '0.5rem' : '9999px',
+                      background: recBtnActive ? '#ef4444' : '#0c0a09',
+                    }}
+                  />
+                </button>
+                <button onClick={skipVideo} className="text-xs text-stone-400 font-medium py-2 px-4">
+                  Skip Video
+                </button>
+              </div>
+            )}
+
+            {phase === 'recording' && (
+              <div className="mt-4 flex flex-col items-center gap-3">
+                {/* Tap to stop */}
+                <button
+                  onClick={() => { stopEarlyRef.current = true }}
+                  className="w-20 h-20 rounded-full flex items-center justify-center active:scale-95 transition-transform"
+                  style={{ background: 'rgba(50,50,50,0.5)', backdropFilter: 'blur(8px)' }}
+                >
+                  <div className="w-8 h-8 rounded-xl bg-red-500" />
+                </button>
+                <p className="text-stone-950 font-black text-5xl tabular-nums leading-none">{secondsLeft}</p>
+                <p className="text-stone-400 text-xs">seconds remaining</p>
+                <div className="w-full bg-stone-200 rounded-full h-1 mt-1">
+                  <div
+                    className="h-1 rounded-full bg-stone-950 transition-all duration-300"
                     style={{ width: `${100 - (secondsLeft / (VIDEO_DURATION_MS / 1000)) * 100}%` }}
                   />
                 </div>
               </div>
-              <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 rounded-full px-3 py-1.5">
-                <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                <span className="text-white text-xs font-semibold">REC</span>
+            )}
+
+            {error && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 mt-4">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{error}</p>
               </div>
-            </div>
-            <p className="text-center text-sm text-stone-500">Slowly rotate — show all edges and surfaces</p>
+            )}
           </div>
         )}
 
         {/* ANALYZING */}
         {phase === 'analyzing' && (
-          <div className="flex flex-col items-center justify-center gap-5 py-20">
-            <div className="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
-            <div className="text-center">
-              <p className="font-bold text-stone-900 text-base">Analysing {framesRef.current.length} frames…</p>
-              <p className="text-stone-500 text-sm mt-1">Analysing wear, surface originality, and edge consistency…</p>
+          <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in">
+            <img
+              src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif"
+              alt="Analysing…"
+              className="w-44 h-44 object-contain"
+              style={{ imageRendering: 'auto' }}
+            />
+            <div className="text-center mt-2">
+              <p className="font-bold text-stone-900 text-base tracking-tight">Reading {framesRef.current.length} frames</p>
+              <p className="text-stone-400 text-sm mt-1">Checking wear, surface consistency and edge signals</p>
             </div>
           </div>
         )}
@@ -393,16 +523,15 @@ export function VideoEval() {
               </div>
             )}
 
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5">
-              <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <p className="text-xs font-semibold text-emerald-700">Video step complete — next: Tap Test</p>
-            </div>
-
-            <button onClick={() => navigate('/audio-eval')} className="w-full btn-primary">
-              Continue to Tap Test <ChevronRight className="w-5 h-5" />
+            <button
+              onClick={() => navigate('/audio-eval')}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 hover:bg-stone-900 text-white font-semibold transition-colors active:scale-[0.98]"
+            >
+              Continue to Tap Test <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         )}
+
       </div>
     </div>
   )

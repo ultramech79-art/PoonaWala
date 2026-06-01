@@ -644,17 +644,9 @@ export function CaptureFlow() {
         </div>
 
         {/* Demo / Previous Upload Buttons */}
-        {(step.demoUrl || previousForStep.length > 0) && (
+        {previousForStep.length > 0 && (
           <div className="px-5 pb-2 space-y-2">
             <div className="flex gap-2">
-            {step.demoUrl && (
-              <button
-                onClick={() => setShowDemo(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-50 transition-colors font-semibold shadow-xs"
-              >
-                Enter Example Demo
-              </button>
-            )}
             {previousForStep.length > 0 && step.type !== 'macro' && step.type !== 'selfie' && (
               <span className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 font-semibold shadow-xs">
                 <ImageIcon className="w-4 h-4" />
@@ -712,7 +704,6 @@ export function CaptureFlow() {
           <div className="scan-panel rounded-3xl px-4 py-3">
             <p className="text-sm font-semibold text-stone-800 leading-relaxed">
               {t(step.hintKey)}
-              {step.optional && <span className="ml-2 text-xs text-stone-500">(optional)</span>}
             </p>
           </div>
         </div>

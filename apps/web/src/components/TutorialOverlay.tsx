@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, SkipForward, PlayCircle } from 'lucide-react'
+import { X, PlayCircle } from 'lucide-react'
+import { speak, stopSpeech } from '../lib/tts'
 
 interface Props {
   stepType: string        // 'top' | '45deg' | 'side' | 'macro' | 'selfie'
@@ -33,26 +34,17 @@ const TUTORIAL_HINTS: Record<string, string> = {
 
 export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }: Props) {
   const videoRef   = useRef<HTMLVideoElement>(null)
-  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
   const [videoError, setVideoError] = useState(false)
-  const [autoTimer, setAutoTimer] = useState(4)
 
-  const isPortraitLoopingVideo = ['45deg', 'certificate', 'macro', 'selfie'].includes(stepType)
+  const isPortraitVideo = ['45deg', 'certificate', 'macro', 'selfie'].includes(stepType)
   const videoSrc = `/assets/tutorial/${stepType}.mp4`
 
-  const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } }
-
-  // Auto-dismiss after 4 seconds — cleared when video ends early
+  // Speak hint once; auto-dismiss when TTS ends
   useEffect(() => {
-    if (stepType === '45deg') return
-    timerRef.current = setInterval(() => {
-      setAutoTimer(t => {
-        if (t <= 1) { clearTimer(); onDismiss(); return 0 }
-        return t - 1
-      })
-    }, 1000)
-    return clearTimer
-  }, [onDismiss, stepType])
+    const hintText = hint || TUTORIAL_HINTS[stepType] || ''
+    speak(hintText, undefined, onDismiss)
+    return () => stopSpeech()
+  }, [stepType, hint, onDismiss])
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-stone-900/40 backdrop-blur-xl">
@@ -77,7 +69,7 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
 
         {/* Video or placeholder */}
         <div className="w-full px-6 flex justify-center">
-          <div className={`relative rounded-[24px] overflow-hidden bg-stone-900 shadow-xl flex items-center justify-center ${isPortraitLoopingVideo ? 'aspect-[9/16] h-[48vh] sm:h-[55vh]' : 'aspect-video w-full'}`}>
+          <div className={`relative rounded-[24px] overflow-hidden bg-stone-900 shadow-xl flex items-center justify-center ${isPortraitVideo ? 'aspect-[9/16] h-[48vh] sm:h-[55vh]' : 'aspect-video w-full'}`}>
             {!videoError ? (
             <video
               ref={videoRef}
@@ -86,13 +78,7 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
               autoPlay
               muted
               playsInline
-              loop={isPortraitLoopingVideo}
-              onEnded={() => {
-                if (!isPortraitLoopingVideo) {
-                  clearTimer();
-                  onDismiss();
-                }
-              }}
+              loop
               onError={() => setVideoError(true)}
             />
           ) : (
@@ -101,13 +87,6 @@ export function TutorialOverlay({ stepType, title, hint, buttonText, onDismiss }
               <p className="text-white/50 text-xs leading-relaxed">
                 Tutorial video coming soon.<br />Follow the hint below.
               </p>
-            </div>
-          )}
-
-          {/* Auto-dismiss countdown pill */}
-          {autoTimer > 0 && !isPortraitLoopingVideo && (
-            <div className="absolute bottom-3 right-3 bg-black/60 rounded-full px-2.5 py-1 text-white/70 text-[11px] font-semibold tabular-nums">
-              {autoTimer}s
             </div>
           )}
         </div>

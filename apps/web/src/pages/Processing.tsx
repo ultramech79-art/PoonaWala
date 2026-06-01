@@ -566,7 +566,7 @@ export function Processing() {
   useEffect(() => {
     if (started.current) return
     started.current = true
-    STEPS.forEach(({ }, i) => setTimeout(() => setActiveStep(i), i * 900))
+    STEPS.forEach(({ }, i) => setTimeout(() => setActiveStep(i), i * 450))
     
     const factInterval = setInterval(() => {
       setActiveFact(prev => (prev + 1) % facts.length)
@@ -617,7 +617,7 @@ export function Processing() {
             <CheckCircle className="w-16 h-16 text-[#346538] animate-scale-in" />
           ) : (
             <img
-              src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif"
+              src="/assets/aec8c628-117a-11ee-8c6e-a7ad82812cac.gif"
               alt="Analysing…"
               className="w-full h-full object-contain"
               style={{ imageRendering: 'auto' }}

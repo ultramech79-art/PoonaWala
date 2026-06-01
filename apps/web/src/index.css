@@ -1743,11 +1743,8 @@
 }
 
 .sticky-action {
-  background:
-    linear-gradient(180deg, rgba(255,253,248,0) 0%, rgba(255,253,248,0.9) 22%, rgba(255,250,243,0.96) 100%);
-  border-top: 1px solid rgba(221, 198, 171, 0.72);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: transparent;
+  border-top: none;
 }
 
 input[type='range'] {

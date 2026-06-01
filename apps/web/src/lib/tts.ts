@@ -41,7 +41,7 @@ export async function prefetchSpeech(text: string, lang?: string) {
   }
 }
 
-async function sarvamSpeak(text: string): Promise<void> {
+async function sarvamSpeak(text: string, onEnd?: () => void): Promise<void> {
   let b64 = audioCache.get(text)
 
   if (!b64) {
@@ -69,7 +69,7 @@ async function sarvamSpeak(text: string): Promise<void> {
     const data = await res.json()
     b64 = data.audios?.[0]
     if (!b64) throw new Error('No audio returned')
-    
+
     audioCache.set(text, b64)
   }
 
@@ -77,27 +77,30 @@ async function sarvamSpeak(text: string): Promise<void> {
 
   const audio = new Audio(`data:audio/wav;base64,${b64}`)
   currentAudio = audio
-  audio.addEventListener('ended', () => { if (currentAudio === audio) currentAudio = null })
+  audio.addEventListener('ended', () => {
+    if (currentAudio === audio) currentAudio = null
+    onEnd?.()
+  })
   await audio.play()
 }
 
-function webSpeak(text: string, lang: string): void {
+function webSpeak(text: string, lang: string, onEnd?: () => void): void {
   if (!('speechSynthesis' in window)) return
   window.speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(text)
   u.lang = lang
   u.rate = 0.95
+  if (onEnd) u.onend = onEnd
   window.speechSynthesis.speak(u)
 }
 
-export function speak(text: string, lang?: string): void {
+export function speak(text: string, lang?: string, onEnd?: () => void): void {
   if (!text) return
-  // Strip markdown ** bolding before speaking
   const cleanText = text.replace(/\*\*/g, '')
   const language = lang ?? localStorage.getItem('goldeye_lang') ?? 'en'
   if (language === 'hi') {
-    sarvamSpeak(cleanText).catch(() => webSpeak(cleanText, 'hi-IN'))
+    sarvamSpeak(cleanText, onEnd).catch(() => webSpeak(cleanText, 'hi-IN', onEnd))
     return
   }
-  webSpeak(cleanText, 'en-US')
+  webSpeak(cleanText, 'en-US', onEnd)
 }

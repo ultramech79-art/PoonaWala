@@ -327,7 +327,7 @@ export function FloatingAssistant() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="absolute right-4 bottom-[calc(var(--safe-bottom)+5.5rem)] z-50 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800 text-white shadow-brand transition active:scale-95"
+        className="absolute right-4 bottom-8 z-[200] flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800 text-white shadow-brand transition active:scale-95"
         aria-label="Open GoldEye assistant"
       >
         <Bot className="h-6 w-6" />
