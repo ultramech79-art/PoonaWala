@@ -39,6 +39,10 @@ export function Login() {
         setError('This number is not registered. Please register first.')
         return
       }
+      if (!res.has_pin) {
+        setError('PIN is not set for this number. Register again and verify OTP to set your PIN.')
+        return
+      }
       advance()
     } catch (e: any) {
       setError(e.message || 'Could not verify phone number. Please try again.')
@@ -66,7 +70,18 @@ export function Login() {
       const res = await passwordLoginAPI(phone, enteredPin)
       setAuth(res.access_token, res.user)
       finishLogin()
-    } catch {
+    } catch (e: any) {
+      const message = String(e?.message || '')
+      if (message.includes('pin_not_set')) {
+        setPinShake(true)
+        setTimeout(() => {
+          setPin('')
+          setPinShake(false)
+          setBusy(false)
+          setError('PIN is not set for this number. Register again and verify OTP to set your PIN.')
+        }, 480)
+        return
+      }
       setPinShake(true)
       setTimeout(() => { setPin(''); setPinShake(false); setBusy(false); setError('Incorrect PIN. Try again.') }, 480)
     }
@@ -140,7 +155,7 @@ export function Login() {
                     inputMode="numeric"
                     value={phone}
                     onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    onKeyDown={e => e.key === 'Enter' && phone.length === 10 && advance()}
+                    onKeyDown={e => e.key === 'Enter' && phone.length === 10 && !busy && handleContinue()}
                     placeholder="9876543210"
                     className="flex-1 bg-white border border-[#E2DDD6] rounded-2xl px-5 text-[20px] font-bold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors tracking-[0.06em]"
                   />

@@ -55,7 +55,15 @@ async function authPost<T>(path: string, body: unknown, token?: string | null, t
       body: JSON.stringify(body),
       signal: controller.signal,
     })
-    if (!res.ok) throw new Error(`${path} -> ${res.status}: ${(await res.text()).slice(0, 500)}`)
+    if (!res.ok) {
+      const text = await res.text()
+      let message = text
+      try {
+        const parsed = JSON.parse(text)
+        message = parsed.detail || parsed.message || text
+      } catch { /* not JSON */ }
+      throw new Error(`${path} -> ${res.status}: ${String(message).slice(0, 500)}`)
+    }
     return res.json() as Promise<T>
   } finally {
     clearTimeout(timer)
@@ -505,7 +513,7 @@ export function getIndiaRegionsAPI(): Promise<{ regions: IndiaRegion[] }> {
   return authGet('/api/regions/india', '')
 }
 
-export function checkPhoneAPI(phone: string): Promise<{ registered: boolean }> {
+export function checkPhoneAPI(phone: string): Promise<{ registered: boolean; has_pin: boolean }> {
   return post('/api/auth/check-phone', { phone })
 }
 

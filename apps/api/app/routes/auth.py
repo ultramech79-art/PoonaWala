@@ -225,9 +225,9 @@ async def check_phone(req: CheckPhoneRequest, db: AsyncSession = Depends(get_db)
     """Returns whether a phone number is registered. Used by PIN login to gate the PIN step."""
     phone = _normalize_phone(req.phone)
     if not phone:
-        return {"registered": False}
+        return {"registered": False, "has_pin": False}
     user = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
-    return {"registered": user is not None}
+    return {"registered": user is not None, "has_pin": bool(user and user.password_hash)}
 
 
 @router.post("/auth/register", response_model=AuthResponse)
@@ -294,7 +294,11 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login_password(req: PasswordLoginRequest, db: AsyncSession = Depends(get_db)):
     phone = _normalize_phone(req.phone.strip())
     user = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
-    if not user or not user.password_hash or not _verify_pin(req.password, user.password_hash):
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    if not user.password_hash:
+        raise HTTPException(status_code=409, detail="pin_not_set")
+    if not _verify_pin(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="invalid credentials")
     return await _issue(user, db)
 
