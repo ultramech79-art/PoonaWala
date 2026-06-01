@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { stopSpeech } from './lib/tts'
 import { Home } from './pages/Home'
 import { LanguagePicker } from './pages/LanguagePicker'
 import { Register } from './pages/Register'
@@ -29,6 +31,17 @@ import { AddItem } from './pages/AddItem'
 import { useSessionStore } from './store/session'
 import { FloatingAssistant } from './components/FloatingAssistant'
 import { UserRound } from 'lucide-react'
+
+// Stop any in-progress speech the moment the route changes, so the previous
+// page's TTS never bleeds into the page the user just navigated to. The new
+// page starts its own narration fresh on mount.
+function TTSRouteGuard() {
+  const location = useLocation()
+  useEffect(() => {
+    stopSpeech()
+  }, [location.pathname])
+  return null
+}
 
 function ProfileShortcut() {
   const navigate = useNavigate()
@@ -64,6 +77,7 @@ function App() {
   return (
     <BrowserRouter>
       <div className="app-shell">
+        <TTSRouteGuard />
         <ProfileShortcut />
         <Routes>
           <Route path="/" element={<Home />} />

@@ -672,6 +672,12 @@ def _build_frame_prompts(gold_price_24k: float = 0.0) -> dict:
         "top": f"""You are a strict gold loan assessment agent evaluating a photo for a gold appraisal service.
 CRITICAL VALIDATION: This image MUST contain ACTUAL PHYSICAL GOLD JEWELRY and an Indian Rs 10 coin. Reject immediately if either is missing.
 
+COIN IS A SCALE REFERENCE, NOT GOLD: The Indian Rs 10 coin is a plain bimetallic currency coin included ONLY
+as a size reference for comparison. It is NOT gold and is NOT a jewelry item. NEVER classify the coin as a
+"gold coin", as gold, or as the jewelry item. There is NO gold coin in this image. The gold jewelry piece
+(ring, bangle, chain, etc.) is the ONE AND ONLY item being assessed — it is always the primary item, never
+"secondary". Do not let the presence of the coin downgrade or reclassify the jewelry.
+
 REJECT THESE IMMEDIATELY (approved=false):
 - Laptops, phones, computers, screens, electronics
 - Photos, images, screenshots, pictures on screens
@@ -682,24 +688,27 @@ REJECT THESE IMMEDIATELY (approved=false):
 - ANY non-physical-gold items
 - Images with no Indian Rs 10 coin present
 
-STEP 0: COIN CHECK (MANDATORY — evaluate this before everything else)
-This top-down view is used directly for weight estimation. Weight is computed as volume × gold density,
-and the Indian Rs 10 coin (27 mm diameter) is the ONLY accepted scale reference. Without it the weight
-calculation cannot proceed at all.
-- Is a physical Indian Rs 10 coin present and FULLY visible (no part cut off by the frame edge)?
-- Is it lying flat on the surface (not standing upright on its edge)?
-- Is it clearly identifiable as a circular bimetallic metallic coin?
-If the coin is absent, partially cut off, or standing upright → set approved=false, coin_visible=false,
-add "no_coin" or "coin_partially_cut_off" to issues, and state the reason clearly in feedback.
-
-STEP 1: GOLD DETECTION (MANDATORY)
-- Is this a PHYSICAL GOLD JEWELRY item? (Not a picture, not a laptop, not electronics)
+STEP 1: GOLD DETECTION (MANDATORY — evaluate this FIRST, before anything else)
+- Is a PHYSICAL GOLD JEWELRY item present? (Not a picture, not a laptop, not electronics, NOT the coin)
 - Gold is typically yellow/orange metallic, often shiny
 - If this is a PHOTO/SCREENSHOT/IMAGE ON SCREEN → REJECT with approved=false immediately
 - If this is a LAPTOP/PHONE/COMPUTER → REJECT with approved=false immediately
 - If NO ACTUAL PHYSICAL gold jewelry is visible → REJECT with approved=false immediately
+- ONLY if gold jewelry is confirmed, continue to the next steps.
 
-STEP 2: QUALITY SCORING (only if both coin and gold jewelry are confirmed present)
+STEP 2: JEWELRY ITEM CHECK (only if gold confirmed)
+- Identify the gold jewelry item type (ring, bangle, chain, pendant, earring, bracelet, etc.).
+- This jewelry piece is the primary subject. The coin is not a jewelry item — ignore it for this step.
+
+STEP 3: COIN CHECK (MANDATORY — the coin must be present for size comparison)
+The Indian Rs 10 coin (27 mm diameter) is the size reference used for comparison. It is required in the photo.
+- Is a physical Indian Rs 10 coin present and FULLY visible (no part cut off by the frame edge)?
+- Is it lying flat on the surface (not standing upright on its edge)?
+- Is it clearly identifiable as a circular bimetallic metallic coin (NOT gold)?
+If the coin is absent, partially cut off, or standing upright → set approved=false, coin_visible=false,
+add "no_coin" or "coin_partially_cut_off" to issues, and state the reason clearly in feedback.
+
+STEP 4: QUALITY SCORING (only if both gold jewelry and the reference coin are confirmed present)
   +0.25  Indian Rs 10 coin present, flat, fully in frame, and in focus (mandatory scale reference)
   +0.25  jewelry clearly visible and recognisable
   +0.20  image in sharp focus (not blurry)
@@ -732,21 +741,29 @@ Return ONLY valid JSON (no markdown fences):
 CRITICAL: This image MUST contain gold jewelry AND an Indian Rs 10 coin. Reject if either is missing.
 The goal: verify depth and thickness of the piece are clearly visible.
 
-STEP 0: COIN CHECK (MANDATORY — evaluate this before everything else)
-This 45-degree view is reused directly for weight estimation. Weight is computed as volume × gold density,
-and the Indian Rs 10 coin (27 mm diameter) is the ONLY accepted scale reference. Without it the weight
-calculation cannot proceed at all.
+COIN IS A SCALE REFERENCE, NOT GOLD: The Indian Rs 10 coin is a plain bimetallic currency coin included ONLY
+as a size reference for comparison. It is NOT gold and is NOT a jewelry item. NEVER classify the coin as a
+"gold coin", as gold, or as the jewelry item. There is NO gold coin in this image. The gold jewelry piece is
+the ONE AND ONLY item being assessed — always the primary item, never "secondary". Do not let the coin
+downgrade or reclassify the jewelry.
+
+STEP 1: GOLD DETECTION (MANDATORY — evaluate this FIRST, before anything else)
+- Does the image show recognizable gold jewelry (ring, bangle, chain, pendant, bracelet, earring)? (NOT the coin)
+- If NO gold is visible → REJECT immediately with approved=false
+- ONLY if gold jewelry is confirmed, continue to the next steps.
+
+STEP 2: JEWELRY ITEM CHECK (only if gold confirmed)
+- Identify the gold jewelry item type. This jewelry piece is the primary subject; the coin is not a jewelry item.
+
+STEP 3: COIN CHECK (MANDATORY — the coin must be present for size comparison)
+The Indian Rs 10 coin (27 mm diameter) is the size reference used for comparison. It is required in the photo.
 - Is a physical Indian Rs 10 coin present and FULLY visible (no part cut off by the frame edge)?
 - Is it lying flat or nearly flat (not standing upright on its edge)?
-- Is it clearly identifiable as a circular bimetallic metallic coin?
+- Is it clearly identifiable as a circular bimetallic metallic coin (NOT gold)?
 If the coin is absent or partially cut off → set approved=false, coin_visible=false,
 add "no_coin" or "coin_partially_cut_off" to issues, and state the reason in feedback.
 
-STEP 1: GOLD DETECTION (MANDATORY)
-- Does the image show recognizable gold jewelry (ring, bangle, chain, pendant, bracelet, earring)?
-- If NO gold is visible → REJECT immediately with approved=false
-
-STEP 2: QUALITY SCORING (only if both coin and gold jewelry are confirmed present)
+STEP 4: QUALITY SCORING (only if both gold jewelry and the reference coin are confirmed present)
   +0.25  Indian Rs 10 coin present, flat, fully in frame (mandatory scale reference)
   +0.25  jewelry clearly visible
   +0.20  angled view (not flat top-down, not purely side-on) showing 3D form
@@ -777,20 +794,28 @@ Return ONLY valid JSON:
 CRITICAL: This image MUST contain gold jewelry AND an Indian Rs 10 coin. Reject if either is missing.
 Goal: clearly show thickness and cross-section of the piece.
 
-STEP 0: COIN CHECK (MANDATORY — evaluate this before everything else)
-This side view is reused directly for weight estimation. Weight is computed as volume × gold density,
-and the Indian Rs 10 coin (27 mm diameter) is the ONLY accepted scale reference. Without it the weight
-calculation cannot proceed at all.
+COIN IS A SCALE REFERENCE, NOT GOLD: The Indian Rs 10 coin is a plain bimetallic currency coin included ONLY
+as a size reference for comparison. It is NOT gold and is NOT a jewelry item. NEVER classify the coin as a
+"gold coin", as gold, or as the jewelry item. There is NO gold coin in this image. The gold jewelry piece is
+the ONE AND ONLY item being assessed — always the primary item, never "secondary". Do not let the coin
+downgrade or reclassify the jewelry.
+
+STEP 1: GOLD DETECTION (MANDATORY — evaluate this FIRST, before anything else)
+- Does the image show recognizable gold jewelry in side profile? (NOT the coin)
+- If NO gold jewelry visible → REJECT immediately with approved=false
+- ONLY if gold jewelry is confirmed, continue to the next steps.
+
+STEP 2: JEWELRY ITEM CHECK (only if gold confirmed)
+- Identify the gold jewelry item type. This jewelry piece is the primary subject; the coin is not a jewelry item.
+
+STEP 3: COIN CHECK (MANDATORY — the coin must be present for size comparison)
+The Indian Rs 10 coin (27 mm diameter) is the size reference used for comparison. It is required in the photo.
 - Is a physical Indian Rs 10 coin present and FULLY visible (no part cut off by the frame edge)?
-- Is it clearly identifiable as a circular bimetallic metallic coin?
+- Is it clearly identifiable as a circular bimetallic metallic coin (NOT gold)?
 If the coin is absent or partially cut off → set approved=false, coin_visible=false,
 add "no_coin" or "coin_partially_cut_off" to issues, and state the reason in feedback.
 
-STEP 1: GOLD DETECTION (MANDATORY)
-- Does the image show recognizable gold jewelry in side profile?
-- If NO gold jewelry visible → REJECT immediately with approved=false
-
-STEP 2: QUALITY SCORING (only if both coin and gold jewelry are confirmed present)
+STEP 4: QUALITY SCORING (only if both gold jewelry and the reference coin are confirmed present)
   +0.25  Indian Rs 10 coin present, fully in frame (mandatory scale reference)
   +0.25  jewelry visible
   +0.20  side profile view (not top-down, not angled)

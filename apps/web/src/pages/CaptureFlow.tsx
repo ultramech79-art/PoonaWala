@@ -6,6 +6,7 @@ import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon, PlayCircle, User, X } from 'lucide-react'
 import { speak, prefetchSpeech } from '../lib/tts'
+import { localizeFeedback } from '../lib/feedbackMessages'
 import { clsx } from 'clsx'
 import { assetImageDataUrlAPI, evaluateFrameAPI, listMyAssetsAPI, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
@@ -108,7 +109,7 @@ function referenceForStep(
 
 export function CaptureFlow() {
   const navigate = useNavigate()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const {
     addCapture,
     skipCapture,
@@ -248,7 +249,6 @@ export function CaptureFlow() {
   const currentEval = evals[stepIdx]
   const evalState = currentEval?.state ?? 'idle'
   const sameItemMismatch = currentEval?.result?.issues?.includes('same_item_mismatch') ?? false
-  const visibleIssues = currentEval?.result?.issues?.filter(issue => issue !== 'same_item_mismatch') ?? []
 
   useEffect(() => {
     // Eagerly prefetch all voice guides to eliminate network delay
@@ -350,6 +350,10 @@ export function CaptureFlow() {
         }
         console.groupEnd()
       }
+
+      // Replace the raw backend sentence with a polished, localized message so the
+      // UI and TTS surface premium phrasing (in Hindi when chosen) — never raw tags.
+      result.feedback = localizeFeedback(currentStepConfig.type, result, t, i18n.language)
 
       setEvals(prev => ({
         ...prev,
@@ -1051,13 +1055,6 @@ export function CaptureFlow() {
                 <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-red-900">{currentEval.result.feedback}</p>
-                  {visibleIssues.length > 0 && (
-                    <ul className="mt-1.5 space-y-0.5">
-                      {visibleIssues.map((issue, i) => (
-                        <li key={i} className="text-xs text-red-700/70">• {issue}</li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               </div>
             </div>

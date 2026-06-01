@@ -118,28 +118,40 @@ async def estimate_weight(req: WeightEstimateRequest):
 
 
 async def _require_vlm_roi(image_data_url: str, view_label: str) -> dict:
+    """
+    Locate the jewellery ROI for CV seeding.
+
+    This is a SOFT validation step, not a hard re-gate: the photo has already been
+    accepted by the capture flow, and the deterministic CV pipeline independently
+    verifies the Rs 10 coin (scale reference) and segments the jewellery. We therefore
+    only fail here when the VLM is confident there is genuinely no jewellery at all —
+    we do NOT re-reject for coin presence or VLM confidence, which previously caused
+    already-approved photos to be rejected at the weight stage. The VLM is flaky, so
+    we retry once before giving up.
+    """
     roi = await locate_jewellery_roi(image_data_url)
+    if roi is None or not roi.get("jewellery_present"):
+        # One retry to absorb transient VLM misses / empty responses.
+        retry = await locate_jewellery_roi(image_data_url)
+        if retry is not None:
+            roi = retry
+
     if roi is None:
         raise WeightEstimationError(
             "vlm_validation_failed",
-            f"Gemini could not validate the {view_label}. Check Gemini API keys and retry.",
+            f"Could not analyse the {view_label}. Please retry in a moment.",
         )
-    if not roi["valid_image"] or not roi["jewellery_present"]:
+
+    if not roi["valid_image"] and not roi["jewellery_present"]:
         raise WeightEstimationError(
             "non_jewelry_photo",
             f"The {view_label} does not contain a clear physical gold jewellery item.",
             {"vlm_roi": roi, "view": view_label},
         )
+
     if not roi["coin_present"]:
-        raise WeightEstimationError(
-            "reference_object_missing",
-            f"The {view_label} does not contain a clear Rs 10 coin/reference coin.",
-            {"vlm_roi": roi, "view": view_label},
-        )
-    if roi["confidence"] < 0.35:
-        raise WeightEstimationError(
-            "low_vlm_confidence",
-            f"Gemini could not confidently locate jewellery in the {view_label}. Retake that view on a plain background.",
-            {"vlm_roi": roi, "view": view_label},
-        )
+        # Not a rejection — the CV coin detector is the authority on the scale
+        # reference and will raise reference_object_missing if it truly can't find it.
+        logger.info("VLM did not flag a coin in %s; deferring to CV coin detection.", view_label)
+
     return roi
