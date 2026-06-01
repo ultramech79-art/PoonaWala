@@ -155,10 +155,16 @@ export function Register() {
       setAuth(res.access_token, res.user)
       setDone(true)
     } catch (e: any) {
+      // OTP session is consumed — clear it and the PIN so the user can retry
+      // cleanly. Name/DOB/city/region are preserved so they don't re-enter them.
+      setOtp(Array<string>(6).fill(''))
+      setSessionId('')
+      setPin('')
+      setConfirmPin('')
       setError(e.message || 'Registration failed. Please try again.')
       setDir('back')
       setAnimKey(k => k + 1)
-      setStep(1)
+      setStep(4) // back to phone step to send a fresh OTP
     } finally {
       setBusy(false)
     }
