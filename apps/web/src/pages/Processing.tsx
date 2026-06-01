@@ -7,6 +7,9 @@ import { computeEvidenceConfidence, type ConfidenceComputation } from '../lib/co
 import { resizeDataUrl } from '../lib/utils'
 import { metalpriceapiToInrPerGram, computeGoldMarketValue, computeLoanOffer } from '../lib/goldCalc'
 import { CheckCircle, Lock } from 'lucide-react'
+import Lottie from 'lottie-react'
+import type { LottieRefCurrentProps } from 'lottie-react'
+import goldAnim from '../assets/gold-analysis.json'
 
 const METALS_API_KEY = 'ae1f3e7e6228ea2b1aa0ef56f9019b68'
 const CACHE_KEY = 'goldeye_metal_prices_v2'
@@ -560,6 +563,7 @@ export function Processing() {
   const [activeFact, setActiveFact] = useState(0)
   const [done, setDone] = useState(false)
   const started = useRef(false)
+  const lottieRef = useRef<LottieRefCurrentProps>(null)
 
   const facts = state.lang === 'hi' ? FACTS_HI : FACTS_EN
 
@@ -611,16 +615,18 @@ export function Processing() {
           </div>
         </div>
 
-        {/* The Coin / Loading Animation (No background container) */}
-        <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center my-4">
+        {/* The Coin / Loading Animation */}
+        <div className="relative w-44 h-44 sm:w-52 sm:h-52 flex items-center justify-center my-2">
           {done ? (
             <CheckCircle className="w-16 h-16 text-[#346538] animate-scale-in" />
           ) : (
-            <img 
-              src="/assets/aec8c628-117a-11ee-8c6e-a7ad82812cac.gif" 
-              alt="Analysing..." 
-              className="w-full h-full object-contain mix-blend-multiply opacity-90"
-              style={{ filter: 'contrast(1.1) saturate(1.1)' }}
+            <Lottie
+              animationData={goldAnim}
+              loop
+              autoplay
+              lottieRef={lottieRef}
+              onDOMLoaded={() => lottieRef.current?.setSpeed(2)}
+              style={{ width: '100%', height: '100%' }}
             />
           )}
         </div>

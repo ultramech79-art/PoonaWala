@@ -449,11 +449,17 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
         >
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-black" style={{ display: 'block' }} />
 
-          {/* Subtle vignette — keeps focus on subject */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.35)' }}
-          />
+          {/* Vignette */}
+          <div className="absolute inset-0 pointer-events-none" style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.35)' }} />
+          {/* Corner edge guides */}
+          {[
+            'top-3 left-3 border-t-2 border-l-2 rounded-tl-xl',
+            'top-3 right-3 border-t-2 border-r-2 rounded-tr-xl',
+            'bottom-3 left-3 border-b-2 border-l-2 rounded-bl-xl',
+            'bottom-3 right-3 border-b-2 border-r-2 rounded-br-xl',
+          ].map((cls, i) => (
+            <div key={i} className={`absolute w-6 h-6 pointer-events-none ${cls}`} style={{ borderColor: 'rgba(255,255,255,0.55)' }} />
+          ))}
 
           {/* Tap-to-focus ring */}
           {focusTap && (
