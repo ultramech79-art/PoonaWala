@@ -3129,3 +3129,21 @@ input[type='range']::-moz-range-thumb {
 .ring-pulse {
   animation: ringPulse 2.6s ease-out infinite;
 }
+
+/* ─── Screen-capture safe ──────────────────────────────────────────────────
+   backdrop-filter blacks out the ENTIRE captured frame on Chromium during
+   screen share / screenshots (long-standing compositor bug), and the dark
+   html/body base is what then reads as a "black screen". Disable backdrop-filter
+   globally (the translucent bg colours stay, only the blur is dropped) and keep a
+   light base so capture/recording shows the real UI. */
+*,
+*::before,
+*::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html,
+body {
+  background: #f2efe6 !important;
+}
