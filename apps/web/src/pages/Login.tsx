@@ -2,9 +2,11 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Delete, Check, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useSessionStore } from '../store/session'
 
 export function Login() {
   const navigate = useNavigate()
+  const { setAuth } = useSessionStore()
 
   const [step, setStep] = useState<1 | 2>(1)
   const [animKey, setAnimKey] = useState(0)
@@ -40,6 +42,13 @@ export function Login() {
   const verifyPin = (enteredPin: string) => {
     const stored = localStorage.getItem('goldeye_pin')
     if (stored && enteredPin === stored) {
+      // Restore the stored session into the in-memory store so the app
+      // no longer shows "Guest" after navigating to the dashboard.
+      const token = localStorage.getItem('goldeye_auth_token')
+      const profileJson = localStorage.getItem('goldeye_user_profile')
+      if (token && profileJson) {
+        try { setAuth(token, JSON.parse(profileJson)) } catch {}
+      }
       finishLogin()
     } else {
       setPinShake(true)
