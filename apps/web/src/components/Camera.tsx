@@ -449,13 +449,17 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
         >
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-black" style={{ display: 'block' }} />
 
-          {/* Corner guides */}
-          <div className="cam-overlay">
-            <div className="cam-corner cam-corner-tl" />
-            <div className="cam-corner cam-corner-tr" />
-            <div className="cam-corner cam-corner-bl" />
-            <div className="cam-corner cam-corner-br" />
-          </div>
+          {/* Vignette */}
+          <div className="absolute inset-0 pointer-events-none" style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.35)' }} />
+          {/* Corner edge guides */}
+          {[
+            'top-3 left-3 border-t-2 border-l-2 rounded-tl-xl',
+            'top-3 right-3 border-t-2 border-r-2 rounded-tr-xl',
+            'bottom-3 left-3 border-b-2 border-l-2 rounded-bl-xl',
+            'bottom-3 right-3 border-b-2 border-r-2 rounded-br-xl',
+          ].map((cls, i) => (
+            <div key={i} className={`absolute w-6 h-6 pointer-events-none ${cls}`} style={{ borderColor: 'rgba(255,255,255,0.55)' }} />
+          ))}
 
           {/* Tap-to-focus ring */}
           {focusTap && (
@@ -585,13 +589,13 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
               <audio src={capturedUrl} controls className="w-48" />
             </div>
           ) : (
-            <img src={capturedUrl} className="w-full rounded-3xl object-cover" style={{ aspectRatio: '3/4' }} alt="Captured" />
+            <img src={capturedUrl} className="w-full rounded-3xl object-cover mx-auto" style={{ aspectRatio: '3/4', maxHeight: 'min(44vh, 340px)' }} alt="Captured" />
           )}
           <div className="absolute top-3 right-3">
             <span className="badge-green"><CheckCircle className="w-3 h-3" /> Captured</span>
           </div>
           <div className="mt-3 flex flex-col gap-2">
-            <button id={`retake-${type}`} onClick={retake} className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded-2xl py-2.5 font-semibold text-sm transition-colors">Retake</button>
+            <button id={`retake-${type}`} onClick={retake} className="w-full bg-[#FAFAF7] hover:bg-white text-stone-950 border border-stone-200 rounded-2xl py-3 font-semibold text-[15px] transition-colors active:scale-[0.99]">Retake</button>
             <button id={`demo-capture-done-${type}`} onClick={useDemoCapture}
               className="w-full py-2 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors text-center border border-brand-500/20 rounded-2xl hover:border-brand-500/40 hover:bg-brand-500/5">
               Use Demo Capture

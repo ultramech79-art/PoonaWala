@@ -9,6 +9,21 @@ import { speak, prefetchSpeech } from '../lib/tts'
 import { clsx } from 'clsx'
 import { assetImageDataUrlAPI, evaluateFrameAPI, listMyAssetsAPI, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
+import Lottie from 'lottie-react'
+import goldAnim from '../assets/gold-analysis.json'
+
+function GoldLottie({ size = 40 }: { size?: number }) {
+  const ref = useRef<import('lottie-react').LottieRefCurrentProps>(null)
+  return (
+    <Lottie
+      animationData={goldAnim}
+      loop autoplay
+      lottieRef={ref}
+      onDOMLoaded={() => ref.current?.setSpeed(2.5)}
+      style={{ width: size, height: size }}
+    />
+  )
+}
 
 interface Step {
   type: CaptureType
@@ -568,11 +583,11 @@ export function CaptureFlow() {
           >
             <ChevronRight className="w-3.5 h-3.5 rotate-180" />
           </button>
-          <div className="flex flex-col items-center flex-1">
-            <span className="text-[11px] text-stone-500 uppercase tracking-wider font-semibold">
-              Step {stepIdx + 1} of {STEPS.length}
+          <div className="flex flex-col items-center flex-1 gap-1">
+            <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-1 rounded-full bg-stone-100/80 border border-stone-200/60">
+              Step {stepIdx + 1} / {STEPS.length}
             </span>
-            <span className="text-2xl font-black text-stone-950 leading-tight">{STEP_LABELS[stepIdx]}</span>
+            <span className="text-base font-bold text-stone-950 leading-tight tracking-[-0.01em]">{STEP_LABELS[stepIdx]}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -1004,12 +1019,9 @@ export function CaptureFlow() {
 
           {/* Feedback */}
           {evalState === 'evaluating' && (
-            <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl bg-brand-50 border border-brand-200">
-              <Loader2 className="w-5 h-5 text-brand-600 animate-spin flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-brand-700">Analysing image…</p>
-                <p className="text-xs text-brand-600/70 mt-0.5">Checking image quality…</p>
-              </div>
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <GoldLottie size={96} />
+              <p className="text-sm font-semibold text-brand-700 tracking-[-0.01em]">Analysing image…</p>
             </div>
           )}
 
