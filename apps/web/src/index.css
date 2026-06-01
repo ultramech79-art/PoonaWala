@@ -299,26 +299,17 @@
 
   /* ── CAMERA GUIDES ── */
   .camera-viewport {
-    height: clamp(260px, 34dvh, 360px);
-    min-height: 260px;
-    border-radius: 1.5rem;
+    aspect-ratio: 3 / 4;
+    width: 100%;
+    border-radius: 2rem;
     overflow: hidden;
-    background:
-      radial-gradient(circle at 50% 0%, rgba(184, 82, 42, 0.22), transparent 58%),
-      linear-gradient(180deg, #17120f 0%, #0d0c0b 100%) !important;
-    border: 1px solid rgba(255, 246, 235, 0.14);
-    box-shadow: 0 22px 52px rgba(39, 33, 30, 0.22);
+    background: #0d0c0b;
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255,255,255,0.06);
   }
 
-  .cam-corner {
-    @apply absolute w-7 h-7;
-    border-color: rgba(247, 217, 178, 0.92) !important;
-    filter: drop-shadow(0 3px 10px rgba(184, 82, 42, 0.35));
-  }
-  .cam-corner-tl { @apply top-3 left-3 border-t-2 border-l-2 rounded-tl-xl; }
-  .cam-corner-tr { @apply top-3 right-3 border-t-2 border-r-2 rounded-tr-xl; }
-  .cam-corner-bl { @apply bottom-3 left-3 border-b-2 border-l-2 rounded-bl-xl; }
-  .cam-corner-br { @apply bottom-3 right-3 border-b-2 border-r-2 rounded-br-xl; }
+  /* Corner guides hidden — replaced by vignette overlay in Camera.tsx */
+  .cam-corner { display: none; }
+  .cam-corner-tl, .cam-corner-tr, .cam-corner-bl, .cam-corner-br { display: none; }
 
   /* ── DIVIDERS ── */
   .divider { @apply h-px bg-stone-200 w-full; }
@@ -805,12 +796,12 @@ input[type='range']::-moz-range-thumb {
 .camera-viewport {
   position: relative;
   width: 100%;
-  aspect-ratio: 3/4;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
-  border-radius: 1.5rem;
-  background: #000;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), 0 10px 30px rgba(160, 130, 109, 0.1);
-  animation: slideUpIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border-radius: 2rem;
+  background: #0d0c0b;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255,255,255,0.06);
+  animation: slideUpIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes slideUpIn {

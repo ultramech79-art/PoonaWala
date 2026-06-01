@@ -449,13 +449,11 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
         >
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-black" style={{ display: 'block' }} />
 
-          {/* Corner guides */}
-          <div className="cam-overlay">
-            <div className="cam-corner cam-corner-tl" />
-            <div className="cam-corner cam-corner-tr" />
-            <div className="cam-corner cam-corner-bl" />
-            <div className="cam-corner cam-corner-br" />
-          </div>
+          {/* Subtle vignette — keeps focus on subject */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.35)' }}
+          />
 
           {/* Tap-to-focus ring */}
           {focusTap && (
