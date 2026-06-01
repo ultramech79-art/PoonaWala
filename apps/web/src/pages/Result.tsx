@@ -20,6 +20,10 @@ type ItemResultRow = {
   label: string
   purity: number
   weightG: number
+  stoneDeductionG: number
+  netWeightG: number
+  ratePerG: number
+  purityLabel: string
   valueLow: number
   valueHigh: number
   loanLow: number
@@ -175,6 +179,12 @@ export function Result() {
   const itemRows: ItemResultRow[] = assessedItems.map((item, index) => {
     const itemResult = item.result
     const itemKarat = itemResult.purity.point_estimate_karat
+    const itemStoneDeduction = itemResult.value_inr.stone_weight_excluded_g || 0
+    const itemNetWeight = Math.max(
+      itemResult.weight.estimated_g - itemStoneDeduction,
+      itemResult.weight.estimated_g * 0.94,
+    )
+    const itemPurityLabel = itemKarat >= 23 ? '999' : itemKarat >= 21 ? '916' : itemKarat >= 17 ? '750' : itemKarat >= 13 ? '585' : `${Math.round(itemKarat / 24 * 1000)}`
     const itemPriceForKarat =
       itemKarat >= 23 ? livePrice24K :
       itemKarat >= 21 ? (livePrice22K || livePrice24K * 22 / 24) :
@@ -195,6 +205,10 @@ export function Result() {
       label: index === 0 ? 'Current jewellery' : `Jewellery ${index + 1}`,
       purity: itemKarat,
       weightG: itemResult.weight.estimated_g,
+      stoneDeductionG: itemStoneDeduction,
+      netWeightG: itemNetWeight,
+      ratePerG: itemPriceForKarat,
+      purityLabel: itemPurityLabel,
       valueLow: itemValue.band_low,
       valueHigh: itemValue.band_high,
       loanLow: itemLoan.band_low_inr,
@@ -414,15 +428,15 @@ export function Result() {
               </span>
               <span className="prequal-calc-copy">
                 <b>Calculation breakdown</b>
-                <small>Market value {marketValueRange}</small>
+                <small>Market value {aggregateMarketValueRange}</small>
               </span>
               <span className="prequal-calc-view">View</span>
               <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
             <div className="prequal-valuation-meta" aria-label="Evaluation inputs">
               <span>{detectedKarat}K gold</span>
-              <span>{estimatedWeight}</span>
-              <span>{displayLoan.ltv_applied_pct}% LTV</span>
+              <span>{hasMultipleItems ? `${itemRows.length} items` : estimatedWeight}</span>
+              <span>{aggregateLtvPct}% LTV</span>
               <span>{hasLivePrice ? 'Live IBJA' : 'IBJA ref'}</span>
             </div>
           </div>
@@ -501,16 +515,40 @@ export function Result() {
 
       {/* Calculation breakdown */}
       <BottomSheet open={sheet === 'calc'} onClose={() => setSheet(null)} title="Calculation breakdown">
-        <div className="space-y-0">
-          <CalcRow label="Gross weight" value={`${result.weight.estimated_g.toFixed(2)} g`} />
-          <CalcRow label="Stone deduction" value={`− ${(result.value_inr.stone_weight_excluded_g || 0).toFixed(2)} g`} tone="text-error" />
-          <CalcRow label="Net gold weight" value={`${Math.max(result.weight.estimated_g - (result.value_inr.stone_weight_excluded_g || 0), result.weight.estimated_g * 0.94).toFixed(2)} g`} tone="text-stone-900 font-semibold" />
-          <CalcRow label="Purity (AI)" value={`${detectedKarat}K  (${(detectedKarat / 24 * 100).toFixed(1)}%)`} />
-          {hasLivePrice && <>
-            <CalcRow label={`IBJA ${detectedKarat}K rate (${purityLabel})`} value={`₹${livePriceForKarat.toLocaleString('en-IN')}/g`} tone="text-success font-semibold" />
-          </>}
-          <CalcRow label="Market value range" value={marketValueRange} />
-          <CalcRow label={`Loan range (${displayLoan.ltv_applied_pct}% LTV)`} value={loanRange} tone="text-brand-600 font-semibold" />
+        <div className="rounded-2xl border border-brand-200 bg-brand-50/70 p-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brand-700">Aggregate</p>
+          <div className="mt-2 space-y-0">
+            <CalcRow label="Jewellery items" value={`${itemRows.length}`} />
+            <CalcRow label="Total gross weight" value={`${itemRows.reduce((sum, item) => sum + item.weightG, 0).toFixed(2)} g`} />
+            <CalcRow label="Total net gold weight" value={`${itemRows.reduce((sum, item) => sum + item.netWeightG, 0).toFixed(2)} g`} tone="text-stone-900 font-semibold" />
+            <CalcRow label="Market value range" value={aggregateMarketValueRange} />
+            <CalcRow label={`Loan range (${aggregateLtvPct}% blended LTV)`} value={aggregateLoanRange} tone="text-brand-600 font-semibold" />
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {itemRows.map(item => (
+            <div key={item.id} className={clsx('rounded-2xl border p-3', item.isCurrent ? 'border-brand-200 bg-brand-50/50' : 'border-stone-200 bg-white')}>
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-400">{item.label}</p>
+                  <p className="mt-0.5 font-display text-base font-black text-stone-950">{fmt(item.loanLow)} - {fmt(item.loanHigh)}</p>
+                </div>
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-brand-700 shadow-sm">{item.ltvPct}% LTV</span>
+              </div>
+              <div className="space-y-0">
+                <CalcRow label="Gross weight" value={`${item.weightG.toFixed(2)} g`} />
+                <CalcRow label="Stone deduction" value={`- ${item.stoneDeductionG.toFixed(2)} g`} tone="text-error" />
+                <CalcRow label="Net gold weight" value={`${item.netWeightG.toFixed(2)} g`} tone="text-stone-900 font-semibold" />
+                <CalcRow label="Purity (AI)" value={`${item.purity}K (${(item.purity / 24 * 100).toFixed(1)}%)`} />
+                {hasLivePrice && item.ratePerG > 0 && (
+                  <CalcRow label={`IBJA ${item.purity}K rate (${item.purityLabel})`} value={`${fmt(item.ratePerG)}/g`} tone="text-success font-semibold" />
+                )}
+                <CalcRow label="Market value range" value={`${fmt(item.valueLow)} - ${fmt(item.valueHigh)}`} />
+                <CalcRow label={`Loan range (${item.ltvPct}% LTV)`} value={`${fmt(item.loanLow)} - ${fmt(item.loanHigh)}`} tone="text-brand-600 font-semibold" />
+              </div>
+            </div>
+          ))}
         </div>
         <p className="text-[10px] text-stone-400 leading-snug mt-4 pt-4 border-t border-stone-100">
           * Value = IBJA price × net weight × (karat / 24) ± 7% · LTV capped at 75% per RBI/2023-24/107
