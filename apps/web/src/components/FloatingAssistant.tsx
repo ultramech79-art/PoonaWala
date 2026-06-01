@@ -36,6 +36,13 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+const starterPrompts = [
+  'How much loan can I get?',
+  'Help me scan my gold',
+  'What documents are needed?',
+  'Explain HUID verification',
+]
+
 const routeLabels: Record<string, string> = {
   '/': 'Home',
   '/language': 'Language picker',
@@ -52,6 +59,8 @@ const routeLabels: Record<string, string> = {
   '/result': 'Pre-qualification result',
   '/final-eval': 'Final evaluation',
   '/gold-loan-app': 'Loan application',
+  '/dashboard-home': 'Dashboard',
+  '/chatbot': 'GoldEye assistant',
   '/confirmation': 'Confirmation',
 }
 
@@ -167,6 +176,7 @@ export function FloatingAssistant() {
   const location = useLocation()
   const navigate = useNavigate()
   const { state } = useSessionStore()
+  const isChatbotRoute = location.pathname === '/chatbot'
   const quietRoutes = new Set([
     '/',
     '/language',
@@ -186,6 +196,10 @@ export function FloatingAssistant() {
     if (!open) return
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, open])
+
+  useEffect(() => {
+    if (isChatbotRoute) setOpen(true)
+  }, [isChatbotRoute])
 
   useEffect(() => {
     return () => {
@@ -303,7 +317,7 @@ export function FloatingAssistant() {
     recognition.start()
   }
 
-  const showAssistant = ['/language', '/profile', '/welcome', '/otp', '/setup'].includes(location.pathname)
+  const showAssistant = ['/language', '/profile', '/welcome', '/otp', '/setup', '/chatbot'].includes(location.pathname)
   if (!showAssistant) return null
 
   if (quietRoutes.has(location.pathname)) return null
@@ -324,36 +338,58 @@ export function FloatingAssistant() {
   return (
     <div
       data-assistant-root="true"
-      className="absolute inset-x-4 bottom-[calc(var(--safe-bottom)+5.5rem)] z-50 overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-2xl"
+      className="goldeye-chat-panel"
     >
-      <div className="flex items-center justify-between border-b border-brand-100 bg-gradient-to-r from-brand-50 via-white to-gold-50 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 text-white">
-            <Bot className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="font-display text-sm font-bold text-stone-900">GoldEye Assistant</p>
-            <p className="text-xs text-stone-500">Captures, HUID, bills, loans</p>
+      <div className="goldeye-chat-header">
+        <div className="relative z-10 flex min-w-0 items-center gap-3">
+          <div className="goldeye-chat-brand-mark" aria-hidden>PF</div>
+          <div className="min-w-0">
+            <div className="goldeye-chat-status">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              Live assistant
+            </div>
+            <p className="font-display text-[17px] font-black leading-tight text-white">GoldEye Assistant</p>
+            <p className="mt-0.5 truncate text-xs font-medium text-white/72">Scan help, HUID, loans, branch handoff</p>
           </div>
         </div>
         <button
           type="button"
-          onClick={() => setOpen(false)}
-          className="btn-icon h-10 w-10 rounded-full"
+          onClick={() => {
+            setOpen(false)
+            if (isChatbotRoute) navigate('/dashboard-home', { replace: true })
+          }}
+          className="goldeye-chat-close relative z-10"
           aria-label="Close assistant"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
 
-      <div ref={scrollRef} className="max-h-[52dvh] space-y-3 overflow-y-auto bg-[#FFF8F0] px-4 py-4">
+      <div ref={scrollRef} className="goldeye-chat-body">
         {messages.length === 0 && (
-          <div className="rounded-3xl border border-stone-200 bg-white px-4 py-5 text-center shadow-sm">
-            <Bot className="mx-auto mb-3 h-8 w-8 text-brand-600" />
-            <p className="font-display text-sm font-bold text-stone-900">Ask anything about GoldEye</p>
-            <p className="mt-1 text-xs leading-relaxed text-stone-500">
-              Capture help, HUID, bill upload, loan eligibility, or any step where you are stuck.
+          <div className="goldeye-chat-empty">
+            <div className="goldeye-chat-empty-top">
+              <div>
+                <p className="goldeye-chat-eyebrow">Gold loan concierge</p>
+                <p className="font-display text-base font-black leading-tight text-stone-950">What can I help with?</p>
+              </div>
+              <span className="goldeye-chat-mini-badge">PF</span>
+            </div>
+            <p className="mt-2 text-xs font-medium leading-relaxed text-stone-500">
+              Ask about eligibility, scan steps, documents, or how Poonawalla branch verification works.
             </p>
+            <div className="goldeye-chat-prompt-grid">
+              {starterPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => void sendMessage(prompt)}
+                  className="goldeye-chat-prompt"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((message) => (
@@ -434,13 +470,13 @@ export function FloatingAssistant() {
         )}
       </div>
 
-      <div className="border-t border-stone-100 bg-white p-3">
+      <div className="goldeye-chat-composer">
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <button
             type="button"
             onClick={toggleVoice}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
-              listening ? 'border-red-200 bg-red-50 text-red-600' : 'border-stone-200 bg-stone-50 text-stone-600'
+            className={`goldeye-chat-tool ${
+              listening ? 'border-red-200 bg-red-50 text-red-600' : 'border-stone-200 bg-white text-stone-600'
             }`}
             aria-label={listening ? 'Stop voice input' : 'Start voice input'}
           >
@@ -449,13 +485,13 @@ export function FloatingAssistant() {
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm outline-none focus:border-brand-300 focus:bg-white"
-            placeholder="Ask about the app"
+            className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium outline-none transition focus:border-brand-300 focus:bg-white focus:shadow-sm"
+            placeholder="Ask GoldEye..."
           />
           <button
             type="submit"
             disabled={!input.trim() || loading}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-brand-sm transition active:scale-95 disabled:opacity-40"
             aria-label="Send message"
           >
             <Send className="h-5 w-5" />
