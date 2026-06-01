@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Delete, Check, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { checkPhoneAPI } from '../lib/api'
 import { useSessionStore } from '../store/session'
 
 export function Login() {
@@ -15,6 +16,7 @@ export function Login() {
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('')
   const [pinShake, setPinShake] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
@@ -24,8 +26,26 @@ export function Login() {
   }, [navigate])
 
   const advance = useCallback(() => {
-    setDir('fwd'); setAnimKey(k => k + 1); setStep(2); setError('')
+    setDir('fwd'); setAnimKey(k => k + 1); setStep(2); setError(''); setBusy(false)
   }, [])
+
+  const handleContinue = async () => {
+    if (phone.length !== 10) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await checkPhoneAPI(phone)
+      if (!res.registered) {
+        setError('This number is not registered. Please register first.')
+        return
+      }
+      advance()
+    } catch (e: any) {
+      setError(e.message || 'Could not verify phone number. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const retreat = useCallback(() => {
     setDir('back'); setAnimKey(k => k + 1); setStep(1); setPin(''); setError('')
@@ -149,8 +169,8 @@ export function Login() {
                 </div>
               </div>
               <div className="pb-8">
-                <button disabled={phone.length !== 10} onClick={advance} className={btnCls}>
-                  Continue
+                <button disabled={phone.length !== 10 || busy} onClick={handleContinue} className={btnCls}>
+                  {busy ? 'Checking…' : 'Continue'}
                 </button>
               </div>
             </div>

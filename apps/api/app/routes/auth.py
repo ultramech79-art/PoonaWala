@@ -204,6 +204,20 @@ async def _issue(user: User, db: AsyncSession) -> AuthResponse:
     return AuthResponse(access_token=create_access_token(user.id), user=_profile(user))
 
 
+class CheckPhoneRequest(BaseModel):
+    phone: str
+
+
+@router.post("/auth/check-phone")
+async def check_phone(req: CheckPhoneRequest, db: AsyncSession = Depends(get_db)):
+    """Returns whether a phone number is registered. Used by PIN login to gate the PIN step."""
+    phone = _normalize_phone(req.phone)
+    if not phone:
+        return {"registered": False}
+    user = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
+    return {"registered": user is not None}
+
+
 @router.post("/auth/register", response_model=AuthResponse)
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     phone = _normalize_phone(req.phone)

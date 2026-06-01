@@ -505,6 +505,10 @@ export function getIndiaRegionsAPI(): Promise<{ regions: IndiaRegion[] }> {
   return authGet('/api/regions/india', '')
 }
 
+export function checkPhoneAPI(phone: string): Promise<{ registered: boolean }> {
+  return post('/api/auth/check-phone', { phone })
+}
+
 export function registerAPI(payload: RegisterPayload): Promise<AuthResponse> {
   return authPost('/api/auth/register', payload)
 }
