@@ -32,14 +32,20 @@ async def locate_jewellery_roi(image_data_url: str) -> Optional[dict[str, Any]]:
     The returned point/bbox is used to seed CV segmentation. Weight, scale,
     dimensions, volume, and mass remain deterministic CV/physics outputs.
     """
-    prompt = """You are a strict visual ROI selector for a gold weight-estimation system.
+    prompt = """You are a visual ROI selector for a gold weight-estimation system.
 
 Inspect this single image and return ONLY valid JSON.
 
+COIN IS A SCALE REFERENCE, NOT GOLD: The Indian Rs 10 coin is a plain bimetallic currency coin placed beside
+the jewellery ONLY as a size reference. It is NOT gold and is NOT the jewellery item. NEVER treat the coin as
+the jewellery, as a gold coin, or as the primary item. The gold jewellery piece (ring, bangle, chain, etc.) is
+always the ONE AND ONLY item to locate — the presence of the coin must never make you mark the jewellery as
+absent or as "secondary".
+
 Task:
-- Confirm whether a physical gold jewellery item is visible.
-- Confirm whether an Indian Rs 10 coin/reference coin is visible.
-- Identify the jewellery item, not the coin, not paper, not shadows, not text.
+- Confirm whether a physical gold jewellery item is visible (this is the main job).
+- Note whether an Indian Rs 10 reference coin is visible (a hint only — downstream CV verifies the coin itself).
+- Identify the jewellery item, NOT the coin, not paper, not shadows, not text.
 - Return a point at the center of the visible jewellery and a tight bounding box around the jewellery.
 
 Rules:
@@ -48,8 +54,12 @@ Rules:
 - Do not select the printed black/white calibration square, writing, paper folds, shadows, or background.
 - The jewellery bbox should tightly enclose only the visible metal jewellery pixels, with as little background as possible.
 - For a ring, the bbox should surround the ring outline, not the empty paper area around it.
-- If there is no physical jewellery, set valid_image=false.
-- If there is no coin-like circular reference object, set coin_present=false.
+- If any physical gold jewellery is visible, set valid_image=true AND jewellery_present=true — even if a coin
+  or other objects are also in the frame.
+- Only set valid_image=false / jewellery_present=false when there is genuinely NO physical jewellery at all.
+- If you see a coin-like circular reference object, set coin_present=true; otherwise set coin_present=false.
+- "confidence" must reflect how sure you are that you located the jewellery (0.0-1.0). If a clear jewellery
+  item is visible, this should be high (>= 0.7). Always include a numeric confidence.
 - Coordinates must be normalized 0.0 to 1.0 relative to the full image.
 - item_type must be one of: ring, bangle, bracelet, necklace, pendant, chain, irregular, unknown.
 
@@ -121,9 +131,14 @@ JSON schema:
 def _normalize_roi_response(result: dict[str, Any], provider: str, model: str) -> dict[str, Any]:
     point = result.get("jewellery_point") or {}
     bbox = result.get("jewellery_bbox") or {}
+    jewellery_present = bool(result.get("jewellery_present", False))
+    # When the model confirms jewellery but omits/garbles "confidence", default to a
+    # passing value rather than 0.0 — otherwise a perfectly valid, already-approved
+    # photo gets falsely rejected for "low confidence" at the weight stage.
+    confidence = _clamp01(result.get("confidence"), 0.7 if jewellery_present else 0.0)
     normalized = {
         "valid_image": bool(result.get("valid_image", False)),
-        "jewellery_present": bool(result.get("jewellery_present", False)),
+        "jewellery_present": jewellery_present,
         "coin_present": bool(result.get("coin_present", False)),
         "item_type": str(result.get("item_type", "unknown")).lower(),
         "jewellery_point": {
@@ -136,7 +151,7 @@ def _normalize_roi_response(result: dict[str, Any], provider: str, model: str) -
             "width": _clamp01(bbox.get("width"), 0.0),
             "height": _clamp01(bbox.get("height"), 0.0),
         },
-        "confidence": _clamp01(result.get("confidence"), 0.0),
+        "confidence": confidence,
         "issues": result.get("issues") if isinstance(result.get("issues"), list) else [],
         "provider": provider,
         "model": model,

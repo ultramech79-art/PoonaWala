@@ -308,5 +308,19 @@
   "speak_skip": "Skipping this step.",
   "speak_audio_done": "Audio recorded. Great job!",
   "speak_image_accepted": "Image accepted. You may continue.",
-  "speak_demo": "Using example demo. Analysing now."
+  "speak_demo": "Using example demo. Analysing now.",
+  "fb_approved": "Perfect — this shot looks great. You're good to continue.",
+  "fb_selfie_ok": "Great, your identity photo is clear. You're all set to continue.",
+  "fb_macro_ok": "Clear shot of the hallmark — we've captured the marking.",
+  "fb_macro_karat": "We've read a {{karat}} hallmark on your piece. Looks great.",
+  "fb_macro_priced": "We've read a {{karat}} hallmark — estimated ₹{{price}} per gram at today's rate.",
+  "fb_no_gold": "We couldn't spot any gold jewellery in this shot. Please place your piece in frame and try again.",
+  "fb_no_coin": "We need the ₹10 coin beside your jewellery as a size reference. Please add it to the frame and retake.",
+  "fb_coin_cut": "The ₹10 coin is partly out of frame. Please bring it fully into view and retake.",
+  "fb_coin_upright": "The ₹10 coin is standing on its edge. Please lay it flat beside your jewellery and retake.",
+  "fb_blurry": "The photo came out a little blurry. Hold steady for a moment and retake.",
+  "fb_dark": "It's a bit too dark to see clearly. Move to brighter light and retake.",
+  "fb_no_hallmark": "We couldn't find the hallmark marking. Move in closer to the stamp and retake.",
+  "fb_selfie_retry": "We need to see your face and the jewellery together. Please retake the photo.",
+  "fb_reject_generic": "This shot didn't quite work. Please adjust and retake."
 }
