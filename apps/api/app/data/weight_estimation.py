@@ -1522,8 +1522,9 @@ def estimate_weight_from_image(
         issues.append("low_depth_consistency")
 
     band_pct = 0.16 + (1.0 - confidence) * 0.42
-    low = max(0.01, estimated_weight_g * (1.0 - band_pct))
-    high = estimated_weight_g * (1.0 + band_pct)
+    range_half_width_g = min(1.0, max(0.25, estimated_weight_g * band_pct))
+    low = max(0.01, estimated_weight_g - range_half_width_g)
+    high = estimated_weight_g + range_half_width_g
 
     response = {
         "ok": True,
