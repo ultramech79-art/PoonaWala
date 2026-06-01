@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Delete, ShieldCheck, Zap, BadgeCheck } from 'lucide-react'
 import { clsx } from 'clsx'
 import { registerAPI, sendOtpAPI, verifyOtpAPI } from '../lib/api'
@@ -20,6 +21,7 @@ const HEADINGS: Record<number, { tag: string; title: string; sub: string }> = {
 
 export function Register() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { setAuth } = useSessionStore()
 
   const [step, setStep] = useState(1)
@@ -172,7 +174,8 @@ export function Register() {
 
   const isPinStep = step === 6 || step === 7
   const activePin = step === 6 ? pin : confirmPin
-  const { title, sub } = HEADINGS[step]
+  const title = t(`reg_h${step}_title`, { defaultValue: HEADINGS[step].title })
+  const sub = t(`reg_h${step}_sub`, { defaultValue: HEADINGS[step].sub })
 
   const inputCls = 'w-full bg-white border border-[#E2DDD6] rounded-2xl px-5 py-[18px] text-[18px] font-semibold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors'
   const btnCls = 'w-full h-[60px] rounded-2xl bg-stone-950 text-white font-semibold text-[16px] tracking-[-0.01em] disabled:opacity-25 active:opacity-75 transition-opacity'
@@ -181,9 +184,9 @@ export function Register() {
   if (done) {
     const initials = name.trim().split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'U'
     const features = [
-      { icon: ShieldCheck, label: 'Bank-grade security', sub: 'Your data is encrypted end-to-end.',      color: '#1C3552' },
-      { icon: Zap,         label: 'Instant valuation',   sub: 'AI-powered gold assessment in seconds.',  color: '#7B3F00' },
-      { icon: BadgeCheck,  label: 'KYC ready',           sub: 'Your profile is verified and ready.',     color: '#134E4A' },
+      { icon: ShieldCheck, label: t('reg_feat_security'), sub: t('reg_feat_security_sub'), color: '#1C3552' },
+      { icon: Zap,         label: t('reg_feat_instant'),  sub: t('reg_feat_instant_sub'),  color: '#7B3F00' },
+      { icon: BadgeCheck,  label: t('reg_feat_kyc'),      sub: t('reg_feat_kyc_sub'),      color: '#134E4A' },
     ]
     return (
       <div className="page flex flex-col" style={{ background: '#FEFEFE', zIndex: 5, isolation: 'isolate' }}>
@@ -203,9 +206,9 @@ export function Register() {
           {/* Heading */}
           <div className="text-center mb-10">
             <h1 className="font-display font-bold text-[36px] text-stone-950 tracking-[-0.03em] leading-tight">
-              All done.<br />Let's go!
+              {t('reg_done_title')}
             </h1>
-            <p className="text-[16px] text-stone-500 mt-2 font-medium">{name || 'Welcome'}</p>
+            <p className="text-[16px] text-stone-500 mt-2 font-medium">{name || t('reg_welcome')}</p>
             {phone && <p className="text-[14px] text-stone-400 mt-0.5">+91 {phone}</p>}
           </div>
 
@@ -231,7 +234,7 @@ export function Register() {
             onClick={() => navigate('/dashboard-home')}
             className="w-full h-[60px] rounded-2xl bg-stone-950 text-white font-semibold text-[16px] tracking-[-0.01em] active:opacity-75 transition-opacity"
           >
-            Enter the app →
+            {t('reg_enter_app')} →
           </button>
         </div>
       </div>
@@ -271,7 +274,7 @@ export function Register() {
           {sub && <p className="text-[15px] text-stone-500 mt-3 leading-relaxed">{sub}</p>}
           {step === 5 && (
             <p className="text-[15px] text-stone-500 mt-3 leading-relaxed">
-              Code sent to <span className="font-semibold text-stone-800">+91 {phone}</span>
+              {t('reg_code_sent')} <span className="font-semibold text-stone-800">+91 {phone}</span>
             </p>
           )}
         </div>
@@ -293,13 +296,13 @@ export function Register() {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && name.trim().length >= 2 && advance()}
-                placeholder="Rahul Sharma"
+                placeholder={t('reg_name_ph')}
                 className={inputCls}
               />
             </div>
             <div className="pb-8">
               <button disabled={name.trim().length < 2} onClick={advance} className={btnCls}>
-                Continue
+                {t('continue')}
               </button>
             </div>
           </div>
@@ -337,21 +340,21 @@ export function Register() {
                   const month = parseInt(dobMonth, 10)
                   const year = parseInt(dobYear, 10)
                   if (day < 1 || day > 31 || month < 1 || month > 12) {
-                    setError('Please enter a valid date.')
+                    setError(t('reg_err_date'))
                     return
                   }
                   const dob = new Date(year, month - 1, day)
                   const today = new Date()
                   let age = today.getFullYear() - dob.getFullYear()
                   if (today.getMonth() < dob.getMonth() || (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())) age--
-                  if (age < 21) { setError('Applicant must be at least 21 years old.'); return }
-                  if (age > 65) { setError('Applicant must be 65 years old or younger.'); return }
+                  if (age < 21) { setError(t('reg_err_min_age')); return }
+                  if (age > 65) { setError(t('reg_err_max_age')); return }
                   setError('')
                   advance()
                 }}
                 className={btnCls}
               >
-                Continue
+                {t('continue')}
               </button>
             </div>
           </div>
@@ -362,18 +365,18 @@ export function Register() {
           <div className="flex-1 flex flex-col px-6">
             <div className="flex-1 space-y-4">
               <div>
-                <p className="text-[11px] font-bold text-stone-400 tracking-wider mb-2">CITY</p>
+                <p className="text-[11px] font-bold text-stone-400 tracking-wider mb-2">{t('reg_city')}</p>
                 <input
                   autoFocus
                   type="text"
                   value={city}
                   onChange={e => setCity(e.target.value)}
-                  placeholder="Mumbai"
+                  placeholder={t('reg_city_ph')}
                   className={inputCls}
                 />
               </div>
               <div>
-                <p className="text-[11px] font-bold text-stone-400 tracking-wider mb-2">STATE</p>
+                <p className="text-[11px] font-bold text-stone-400 tracking-wider mb-2">{t('reg_state')}</p>
                 <div className="relative">
                   <select
                     value={regionCode}
@@ -389,7 +392,7 @@ export function Register() {
               </div>
             </div>
             <div className="pb-8">
-              <button onClick={advance} className={btnCls}>Continue</button>
+              <button onClick={advance} className={btnCls}>{t('continue')}</button>
             </div>
           </div>
         )}
@@ -408,7 +411,7 @@ export function Register() {
                   inputMode="numeric"
                   value={phone}
                   onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="9876543210"
+                  placeholder={t('reg_phone_ph')}
                   className="flex-1 bg-white border border-[#E2DDD6] rounded-2xl px-5 text-[20px] font-bold text-stone-950 placeholder:text-stone-300 outline-none focus:border-stone-950 transition-colors tracking-[0.06em]"
                 />
               </div>
@@ -419,7 +422,7 @@ export function Register() {
                 onClick={sendOtp}
                 className={btnCls}
               >
-                {busy ? 'Sending…' : 'Send OTP'}
+                {busy ? t('reg_sending') : t('reg_send_otp')}
               </button>
             </div>
           </div>
@@ -452,7 +455,7 @@ export function Register() {
                 disabled={busy}
                 className="block mx-auto mt-6 text-[14px] font-semibold text-stone-400 disabled:opacity-40"
               >
-                Resend OTP
+                {t('reg_resend_otp')}
               </button>
             </div>
             <div className="pb-8">
@@ -461,7 +464,7 @@ export function Register() {
                 onClick={verifyOtp}
                 className={btnCls}
               >
-                {busy ? 'Verifying…' : 'Verify'}
+                {busy ? t('reg_verifying') : t('reg_verify')}
               </button>
             </div>
           </div>

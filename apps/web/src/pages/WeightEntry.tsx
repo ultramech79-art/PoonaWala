@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Lottie from 'lottie-react'
 import goldAnim from '../assets/gold-analysis.json'
 import {
@@ -50,11 +51,11 @@ const SLOT_FRAME_TYPE = {
   side: 'side',
 } as const
 
-const ANALYSING_MSGS = [
-  'Detecting the ₹10 coin reference…',
-  'Measuring the jewellery outline…',
-  'Weighing the gold…',
-  'Almost done…',
+const ANALYSING_MSG_KEYS = [
+  'weight_analysing_coin',
+  'weight_analysing_outline',
+  'weight_analysing_weigh',
+  'weight_analysing_done',
 ]
 
 type WeightSlot = keyof typeof SLOT_FRAME_TYPE
@@ -160,6 +161,7 @@ function Visualization({ title, src }: { title: string; src: string }) {
 
 export function WeightEntry() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { setWeight, setPageEvidence, savePendingAssessmentItem, state } = useSessionStore()
   const [topImageDataUrl, setTopImageDataUrl] = useState<string | null>(null)
   const [angleImageDataUrl, setAngleImageDataUrl] = useState<string | null>(null)
@@ -188,11 +190,11 @@ export function WeightEntry() {
 
   useEffect(() => {
     if (mode === 'manual') {
-      speak('If you know the weight of your jewellery, enter it here. If not, let our AI estimate it from your photos.')
+      speak(t('weight_speak_manual'))
     } else {
-      speak('Place the jewellery photos for weight estimation, or skip to continue.')
+      speak(t('weight_speak_ai'))
     }
-  }, [mode])
+  }, [mode, t])
 
   useEffect(() => {
     if (!state.authToken || state.authToken === 'guest') {
@@ -299,7 +301,7 @@ export function WeightEntry() {
   // Cycle the analysing copy while the estimate is running.
   useEffect(() => {
     if (!loading) { setAnalysingMsg(0); return }
-    const id = setInterval(() => setAnalysingMsg(i => Math.min(i + 1, ANALYSING_MSGS.length - 1)), 1400)
+    const id = setInterval(() => setAnalysingMsg(i => Math.min(i + 1, ANALYSING_MSG_KEYS.length - 1)), 1400)
     return () => clearInterval(id)
   }, [loading])
 
@@ -345,7 +347,7 @@ export function WeightEntry() {
   async function loadFile(slot: WeightSlot, file: File | undefined) {
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      setError('Upload a JPG, PNG, or HEIC image.')
+      setError(t('weight_bad_image'))
       return
     }
     setError('')
@@ -360,7 +362,7 @@ export function WeightEntry() {
 
   async function runEstimate() {
     if (!topImageDataUrl || !angleImageDataUrl || !sideImageDataUrl) {
-      setError('Upload all three required photos: top view, 45-degree view, and side view. Keep the Rs 10 coin visible in each.')
+      setError(t('weight_need_three'))
       return
     }
     setLoading(true)
@@ -391,7 +393,7 @@ export function WeightEntry() {
   function continueWithManual() {
     const grams = parseFloat(manualWeight)
     if (!isFinite(grams) || grams <= 0 || grams > 5000) {
-      setError('Enter a valid weight in grams (e.g. 12.5).')
+      setError(t('weight_invalid'))
       return
     }
     setError('')
@@ -479,8 +481,8 @@ export function WeightEntry() {
           ) : (
             <>
               <ImageUp className="mb-2 h-7 w-7 text-stone-300" />
-              <p className="text-sm font-bold text-stone-400">Not Captured</p>
-              <p className="mt-1 max-w-xs px-2 text-xs leading-relaxed text-stone-400">This view was skipped during capture.</p>
+              <p className="text-sm font-bold text-stone-400">{t('not_captured')}</p>
+              <p className="mt-1 max-w-xs px-2 text-xs leading-relaxed text-stone-400">{t('view_skipped')}</p>
             </>
           )}
         </div>
@@ -533,11 +535,11 @@ export function WeightEntry() {
             <ChevronRight className="w-3.5 h-3.5 rotate-180" />
           </button>
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Weight Estimate</span>
-            <span className="text-base font-bold text-stone-950 tracking-tight">Jewellery Weight</span>
+            <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">{t('weight_chip')}</span>
+            <span className="text-base font-bold text-stone-950 tracking-tight">{t('weight_title_manual')}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => speak('If you know the weight of your jewellery, enter it here. If not, let our AI estimate it from your photos.')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+            <button onClick={() => speak(t('weight_speak_manual'))} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
               <Volume2 className="w-3.5 h-3.5" />
             </button>
             <button onClick={() => state.authToken && state.authToken !== 'guest' ? navigate('/dashboard-home') : navigate('/login')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-700 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
@@ -549,12 +551,12 @@ export function WeightEntry() {
         <div className="flex-1 overflow-y-auto px-5 pb-6">
           <div className="py-5">
             <div className="mb-5">
-              <h1 className="font-display text-xl font-bold text-stone-950">Do you know the weight?</h1>
-              <p className="text-xs leading-relaxed text-stone-500 mt-1">Entering the exact weight gives the most accurate valuation. If you don't know it, let our AI estimate it from your photos.</p>
+              <h1 className="font-display text-xl font-bold text-stone-950">{t('weight_q')}</h1>
+              <p className="text-xs leading-relaxed text-stone-500 mt-1">{t('weight_q_sub')}</p>
             </div>
 
             <div className="rounded-2xl border border-stone-200 bg-white p-5">
-              <label htmlFor="manual-weight" className="label mb-2 block">Weight</label>
+              <label htmlFor="manual-weight" className="label mb-2 block">{t('weight_label')}</label>
               <div className="relative">
                 <Scale className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
                 <input
@@ -565,7 +567,7 @@ export function WeightEntry() {
                   step="0.1"
                   value={manualWeight}
                   onChange={(event) => { setManualWeight(event.target.value); setError('') }}
-                  placeholder="e.g. 12.5"
+                  placeholder={t('weight_placeholder')}
                   className="input-field py-4 pl-12 pr-12 text-lg font-semibold"
                 />
                 <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400">g</span>
@@ -573,7 +575,7 @@ export function WeightEntry() {
               {prefilledFromBill && (
                 <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-medium text-emerald-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                  Pre-filled from your bill — the most reliable weight. Edit it only if it's wrong.
+                  {t('weight_bill_note')}
                 </div>
               )}
             </div>
@@ -587,8 +589,8 @@ export function WeightEntry() {
                 <Sparkles className="h-5 w-5" />
               </span>
               <span className="flex-1">
-                <span className="block text-sm font-bold text-stone-900">Don't know the weight?</span>
-                <span className="block text-xs text-stone-500">Estimate it with AI from your top, 45° and side photos.</span>
+                <span className="block text-sm font-bold text-stone-900">{t('weight_ai_card_title')}</span>
+                <span className="block text-xs text-stone-500">{t('weight_ai_card_sub')}</span>
               </span>
               <ArrowRight className="h-4 w-4 flex-shrink-0 text-stone-400" />
             </button>
@@ -604,10 +606,10 @@ export function WeightEntry() {
 
         <div className="space-y-3 border-t border-stone-200 px-5 pb-6 pt-4">
           <button onClick={continueWithManual} disabled={!manualValid} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 text-white font-semibold transition-colors active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed">
-            Continue <ArrowRight className="h-4 w-4" />
+            {t('continue')} <ArrowRight className="h-4 w-4" />
           </button>
           <button onClick={skipWeightEstimate} disabled={loading} className="w-full py-2 text-sm font-medium text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-30">
-            Skip weight estimate
+            {t('weight_skip_btn')}
           </button>
         </div>
       </div>
@@ -621,8 +623,8 @@ export function WeightEntry() {
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#fffdf8]/95 backdrop-blur-sm animate-fade-in">
           <GoldLottie size={176} />
           <div className="text-center mt-2">
-            <p className="font-bold text-stone-900 text-base tracking-tight">Analysing your jewellery</p>
-            <p className="text-stone-400 text-sm mt-1 transition-all duration-300">{ANALYSING_MSGS[analysingMsg]}</p>
+            <p className="font-bold text-stone-900 text-base tracking-tight">{t('weight_analysing_title')}</p>
+            <p className="text-stone-400 text-sm mt-1 transition-all duration-300">{t(ANALYSING_MSG_KEYS[analysingMsg])}</p>
           </div>
         </div>
       )}
@@ -632,11 +634,11 @@ export function WeightEntry() {
           <ChevronRight className="w-3.5 h-3.5 rotate-180" />
         </button>
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">Weight Estimate</span>
-          <span className="text-base font-bold text-stone-950 tracking-tight">AI Weight</span>
+          <span className="text-[9px] text-stone-500 uppercase tracking-[0.18em] font-bold px-2.5 py-0.5 rounded-full bg-stone-100/80 border border-stone-200/60">{t('weight_chip')}</span>
+          <span className="text-base font-bold text-stone-950 tracking-tight">{t('weight_title_ai')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={() => speak('Place the jewellery photos for weight estimation, or skip to continue.')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+          <button onClick={() => speak(t('weight_speak_ai'))} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-800 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
             <Volume2 className="w-3.5 h-3.5" />
           </button>
           <button onClick={() => state.authToken && state.authToken !== 'guest' ? navigate('/dashboard-home') : navigate('/login')} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-700 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
@@ -648,24 +650,24 @@ export function WeightEntry() {
       <div className="flex-1 overflow-y-auto px-5 pb-6">
         <div className="py-5">
           <div className="mb-4">
-            <h1 className="font-display text-xl font-bold text-stone-950">Optional weight estimate</h1>
-            <p className="text-xs leading-relaxed text-stone-500 mt-1">Use top, 45-degree, and side photos for a better estimate, or skip and continue.</p>
+            <h1 className="font-display text-xl font-bold text-stone-950">{t('weight_opt_title')}</h1>
+            <p className="text-xs leading-relaxed text-stone-500 mt-1">{t('weight_opt_sub')}</p>
           </div>
 
           {/* Auto-populated notice */}
           {(fileNames.top === 'capture_top.jpg' || fileNames.angle === 'capture_45deg.jpg' || fileNames.side === 'capture_side.jpg') && (
             <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Images pre-filled from your capture session. You can replace any by tapping.
+              {t('weight_prefilled_note')}
             </div>
           )}
 
           {/* Photo carousel — one view at a time, auto-rotating, no overflow */}
           {(() => {
             const views = [
-              { slot: 'top' as WeightSlot, title: 'Top view', short: 'Top', hint: 'Flat overhead photo for diameter and outline. Coin must be fully visible.', src: topImageDataUrl, fileName: fileNames.top },
-              { slot: 'angle' as WeightSlot, title: '45-degree view', short: '45°', hint: 'Tilted photo to validate profile and reflective edges.', src: angleImageDataUrl, fileName: fileNames.angle },
-              { slot: 'side' as WeightSlot, title: 'Side view', short: 'Side', hint: 'Profile photo for actual thickness. Coin must stay in frame.', src: sideImageDataUrl, fileName: fileNames.side },
+              { slot: 'top' as WeightSlot, title: t('view_top_title'), short: t('view_top'), hint: t('view_top_hint'), src: topImageDataUrl, fileName: fileNames.top },
+              { slot: 'angle' as WeightSlot, title: t('view_45_title'), short: t('view_45'), hint: t('view_45_hint'), src: angleImageDataUrl, fileName: fileNames.angle },
+              { slot: 'side' as WeightSlot, title: t('view_side_title'), short: t('view_side'), hint: t('view_side_hint'), src: sideImageDataUrl, fileName: fileNames.side },
             ]
             const active = views[viewIdx]
             return (
@@ -691,21 +693,21 @@ export function WeightEntry() {
 
           {topImageDataUrl && viewIdx === 0 && (
             <p className="mt-2 text-xs font-medium text-stone-500">
-              Optional: tap the jewellery in the top view if the automatic selector misses it. Avoid tapping the coin.
+              {t('weight_tap_hint')}
             </p>
           )}
 
           <div className="mt-5 grid grid-cols-2 gap-3">
             <div>
-              <label className="label mb-2 block">Jewellery type</label>
+              <label className="label mb-2 block">{t('jewellery_type')}</label>
               <select className="input-field py-3 text-sm" value={jewelryType} onChange={(event) => setJewelryType(event.target.value as JewelryType)}>
                 {JEWELRY_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
+                  <option key={type.value} value={type.value}>{t(`jt_${type.value}`, { defaultValue: type.label })}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="label mb-2 block">Gold karat</label>
+              <label className="label mb-2 block">{t('gold_karat')}</label>
               <select className="input-field py-3 text-sm" value={karat} onChange={(event) => setKarat(Number(event.target.value) as GoldKarat)}>
                 {KARATS.map((value) => (
                   <option key={value} value={value}>{value}K</option>
@@ -718,9 +720,9 @@ export function WeightEntry() {
             <div className="flex gap-3">
               <Coins className="mt-0.5 h-5 w-5 flex-shrink-0 text-gold-700" />
               <div>
-                <p className="text-sm font-bold text-stone-900">Reference object</p>
+                <p className="text-sm font-bold text-stone-900">{t('ref_obj_title')}</p>
                 <p className="mt-1 text-xs leading-relaxed text-stone-500">
-                  The ₹10 Indian coin (27 mm) is used as the size reference for scaling.
+                  {t('ref_obj_sub')}
                 </p>
               </div>
             </div>
@@ -740,43 +742,43 @@ export function WeightEntry() {
                 <span className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-gold-300 to-transparent" />
                 <div className="flex items-end justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gold-700">Estimated weight</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gold-700">{t('result_est_weight')}</p>
                     <p className="mt-1 font-display text-[2.75rem] font-black leading-none tracking-tight bg-gradient-to-br from-[#B45309] via-[#8C6B31] to-[#57401F] bg-clip-text text-transparent">{result.weight.estimated_g}g</p>
-                    <p className="mt-1.5 text-xs font-medium text-stone-500">Range {result.weight.low_g}g – {result.weight.high_g}g</p>
+                    <p className="mt-1.5 text-xs font-medium text-stone-500">{t('result_range', { low: result.weight.low_g, high: result.weight.high_g })}</p>
                   </div>
                   <div className="flex flex-col items-center rounded-2xl bg-white/80 px-3.5 py-2 shadow-sm backdrop-blur-sm">
                     <span className="font-display text-lg font-black text-stone-900">{confidencePct}%</span>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-stone-400">confidence</span>
+                    <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-stone-400">{t('confidence')}</span>
                   </div>
                 </div>
               </div>
 
               {/* Measurements & analysis */}
               <div>
-                <p className="mb-2 px-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">Measurements &amp; analysis</p>
+                <p className="mb-2 px-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">{t('measurements')}</p>
                 <div className="grid grid-cols-2 gap-2.5">
-                  <Metric label="Detected type" value={pretty(result.jewelry_type)} />
-                  <Metric label="Volume" value={`${result.physics.volume_cm3} cm³`} />
-                  <Metric label="Width" value={`${result.dimensions.width_mm} mm`} />
-                  <Metric label="Height" value={`${result.dimensions.height_mm} mm`} />
-                  <Metric label="Thickness" value={`${result.dimensions.estimated_depth_mm} mm`} />
-                  <Metric label="Density" value={`${result.physics.density_g_cm3} g/cm³`} />
-                  <Metric label="Mask method" value={pretty(result.geometry.segmentation_method)} />
+                  <Metric label={t('m_detected_type')} value={pretty(result.jewelry_type)} />
+                  <Metric label={t('m_volume')} value={`${result.physics.volume_cm3} cm³`} />
+                  <Metric label={t('m_width')} value={`${result.dimensions.width_mm} mm`} />
+                  <Metric label={t('m_height')} value={`${result.dimensions.height_mm} mm`} />
+                  <Metric label={t('m_thickness')} value={`${result.dimensions.estimated_depth_mm} mm`} />
+                  <Metric label={t('m_density')} value={`${result.physics.density_g_cm3} g/cm³`} />
+                  <Metric label={t('m_mask_method')} value={pretty(result.geometry.segmentation_method)} />
                   {result.geometry.profile_measurement && (
-                    <Metric label="Depth source" value={pretty(result.geometry.profile_measurement.method)} />
+                    <Metric label={t('m_depth_source')} value={pretty(result.geometry.profile_measurement.method)} />
                   )}
                   {result.geometry.profile_measurement && (
-                    <Metric label="Side / 45° thickness" value={`${result.geometry.profile_measurement.side_thickness_mm} / ${result.geometry.profile_measurement.angle_45_thickness_mm} mm`} />
+                    <Metric label={t('m_side45_thickness')} value={`${result.geometry.profile_measurement.side_thickness_mm} / ${result.geometry.profile_measurement.angle_45_thickness_mm} mm`} />
                   )}
                   {result.geometry.volume_model?.minor_radius_mm && (
-                    <Metric label="Torus radii" value={`${result.geometry.volume_model.major_radius_mm} / ${result.geometry.volume_model.minor_radius_mm} mm`} />
+                    <Metric label={t('m_torus_radii')} value={`${result.geometry.volume_model.major_radius_mm} / ${result.geometry.volume_model.minor_radius_mm} mm`} />
                   )}
                   {result.geometry.volume_model?.band_width_mm && (
-                    <Metric label="Band / profile" value={`${result.geometry.volume_model.band_width_mm} / ${result.geometry.volume_model.profile_input_mm ?? '-'} mm`} />
+                    <Metric label={t('m_band_profile')} value={`${result.geometry.volume_model.band_width_mm} / ${result.geometry.volume_model.profile_input_mm ?? '-'} mm`} />
                   )}
                   {result.geometry.volume_model?.cross_section && (
                     <Metric
-                      label="Thickness model"
+                      label={t('m_thickness_model')}
                       value={pretty(result.geometry.volume_model.cross_section.candidates.map((item) => `${item.source}:${item.weight}`).join(' '))}
                     />
                   )}
@@ -789,7 +791,7 @@ export function WeightEntry() {
                     <Sparkles className="h-3.5 w-3.5" />
                   </span>
                   <p className="text-xs font-medium text-emerald-800">
-                    Top, 45° and side views verified · {Math.round(result.vlm_roi.confidence * 100)}% ROI confidence
+                    {t('views_verified', { pct: Math.round(result.vlm_roi.confidence * 100) })}
                   </p>
                 </div>
               )}
@@ -806,7 +808,7 @@ export function WeightEntry() {
 
               {result.confidence.issues.length > 0 && (
                 <div className="rounded-2xl border border-orange-200 bg-orange-50 p-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-orange-700">Quality notes</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-orange-700">{t('quality_notes')}</p>
                   <p className="mt-1 text-xs leading-relaxed text-orange-800">{result.confidence.issues.join(', ')}</p>
                 </div>
               )}
@@ -818,13 +820,13 @@ export function WeightEntry() {
       <div className="space-y-3 border-t border-stone-200 px-5 pb-6 pt-4">
         <button onClick={runEstimate} disabled={loading || !topImageDataUrl || !angleImageDataUrl || !sideImageDataUrl} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 text-white font-semibold transition-colors active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed">
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-          {loading ? 'Estimating…' : 'Estimate Weight'}
+          {loading ? t('weight_estimating') : t('weight_estimate_btn')}
         </button>
         <button onClick={continueFlow} disabled={!result} className="btn-secondary w-full text-sm disabled:opacity-40">
-          Continue with estimate <ArrowRight className="h-4 w-4" />
+          {t('weight_continue_estimate')} <ArrowRight className="h-4 w-4" />
         </button>
         <button onClick={skipWeightEstimate} disabled={loading} className="w-full py-2 text-sm font-medium text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-30">
-          Skip weight estimate
+          {t('weight_skip_btn')}
         </button>
       </div>
     </div>

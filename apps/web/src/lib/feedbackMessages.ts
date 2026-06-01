@@ -12,6 +12,21 @@ import type { FrameEvalResult } from './api'
 
 type Translate = (key: string, opts?: Record<string, unknown>) => string
 
+/**
+ * Localize the audio (drop-test) verdict for display + TTS. The backend returns a
+ * fixed set of English verdicts; we map them to the active language by keyword and
+ * fall back to the original text for anything unrecognised (so nothing is lost).
+ */
+export function localizeAudioVerdict(verdict: string, t: Translate): string {
+  const v = (verdict || '').toLowerCase()
+  if (!v) return verdict
+  if (/plated|imitation/.test(v)) return v.includes('possibly') ? t('verdict_possibly_plated') : t('verdict_likely_plated')
+  if (/inconclusive|mixed/.test(v)) return t('verdict_inconclusive')
+  if (/solid gold|solid|genuine/.test(v)) return t('verdict_solid_gold')
+  if (/invalid/.test(v)) return t('verdict_invalid')
+  return verdict
+}
+
 export function localizeFeedback(
   stepType: string,
   result: FrameEvalResult,
