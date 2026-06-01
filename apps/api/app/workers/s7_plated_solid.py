@@ -67,13 +67,13 @@ async def run(session_id: str, frames: list[str], **_) -> SignalResult:
                         "solid_probability": round(solid_prob, 3),
                         "plated_probability": round(1.0 - solid_prob, 3),
                         "visual_cues": result.get("wear_indicators", ""),
-                        "model": "gemini_image_analysis",
+                        "model": "image_analysis",
                         "frames_scored": 1,
-                        "gemini_reason": result.get("reason", ""),
+                        "reason": result.get("reason", ""),
                     },
                     error=None,
                     duration_ms=int((time.time() - t0) * 1000),
-                    model_version="gemini-plated-solid-v1",
+                    model_version="plated-solid-v1",
                 )
 
         # If all frames failed or returned errors
@@ -84,12 +84,12 @@ async def run(session_id: str, frames: list[str], **_) -> SignalResult:
                 "solid_probability": 0.5,
                 "plated_probability": 0.5,
                 "visual_cues": [],
-                "model": "gemini_analysis_failed",
+                "model": "analysis_failed",
                 "frames_scored": 0,
             },
-            error="Could not analyze frames with Gemini",
+            error="Could not analyze frames",
             duration_ms=int((time.time() - t0) * 1000),
-            model_version="gemini-plated-solid-v1",
+            model_version="plated-solid-v1",
         )
 
     except Exception as e:

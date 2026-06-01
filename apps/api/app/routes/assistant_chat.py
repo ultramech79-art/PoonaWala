@@ -419,21 +419,21 @@ async def assistant_chat(payload: AssistantChatRequest) -> AssistantChatResponse
     try:
         return await _call_groq(payload)
     except Exception as exc:
-        errors.append(f"groq:{exc}")
-        logger.warning("assistant Groq failed, trying Gemini: %s", exc)
+        errors.append(f"primary:{exc}")
+        logger.warning("assistant primary model failed, trying fallback: %s", exc)
 
     try:
         return await _call_gemini(payload)
     except Exception as exc:
-        errors.append(f"gemini:{exc}")
-        logger.error("assistant Gemini failed: %s", exc)
+        errors.append(f"fallback:{exc}")
+        logger.error("assistant fallback model failed: %s", exc)
 
+    logger.error("assistant unavailable: %s", "; ".join(errors[-3:]))
     raise HTTPException(
         status_code=503,
         detail={
             "error": "assistant_model_unavailable",
-            "message": "Assistant brain is unavailable. Check backend LLM keys.",
-            "providers": errors[-3:],
+            "message": "The assistant is temporarily unavailable. Please try again in a moment.",
         },
     )
 

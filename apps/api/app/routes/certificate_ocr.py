@@ -184,13 +184,13 @@ async def certificate_ocr(req: CertificateOCRRequest):
                 content = extract_gemini_text(data)
                 logger.info("certificate_ocr Groq primary ok using %s", GROQ_MODEL)
                 return _normalize_result(parse_json_response(content))
-            errors.append(str(data.get("error") or "groq_failed"))
+            errors.append(str(data.get("error") or "ocr_failed"))
         except Exception as exc:
             logger.warning("Certificate OCR Groq primary failed: %s", exc)
-            errors.append(f"groq: {exc}")
+            errors.append(f"primary_ocr: {exc}")
 
     if not GEMINI_GUIDANCE_FALLBACK_API_KEYS:
-        return CertificateOCRResponse(notes=["Groq OCR failed and Gemini fallback is not configured"])
+        return CertificateOCRResponse(notes=["Could not read the document details from this image."])
 
     payload = {
         "contents": [{
@@ -211,9 +211,10 @@ async def certificate_ocr(req: CertificateOCRRequest):
             content = extract_gemini_text(data)
             logger.info("certificate_ocr Gemini fallback ok using %s", GEMINI_MODEL)
             return _normalize_result(parse_json_response(content))
-        errors.append(str(data.get("error") or "gemini_failed"))
+        errors.append(str(data.get("error") or "ocr_failed"))
     except Exception as exc:
         logger.warning("Certificate OCR Gemini fallback failed: %s", exc)
-        errors.append(f"gemini: {exc}")
+        errors.append(f"fallback_ocr: {exc}")
 
-    return CertificateOCRResponse(notes=["Could not extract document details", *errors[:2]])
+    logger.warning("Certificate OCR failed: %s", "; ".join(errors[:2]))
+    return CertificateOCRResponse(notes=["Could not extract document details. Please retake a clearer photo."])

@@ -19,7 +19,7 @@ async function post<T>(path: string, body: unknown, timeoutMs = 25000): Promise<
       })
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new Error(`${path} timed out. Weight estimation needs three Gemini image validations; retry with smaller images or wait for the server to finish.`)
+        throw new Error(`${path} timed out. Weight estimation needs three image validations; retry with smaller images or wait for the server to finish.`)
       }
       throw error
     }

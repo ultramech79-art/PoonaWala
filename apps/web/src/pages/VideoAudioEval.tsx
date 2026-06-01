@@ -118,7 +118,7 @@ export function VideoAudioEval() {
         setAuthResult(result)
         setLiveAuthResult(result)
       } catch (e: any) {
-        setError(e?.message ?? 'Video analysis failed — Vertex AI may be unavailable.')
+        setError(e?.message ?? 'Video analysis failed — please try again in a moment.')
       }
       setVideoOk(true)
       setPhase('video-result')
@@ -303,7 +303,7 @@ export function VideoAudioEval() {
             <div className="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
             <div className="text-center">
               <p className="font-bold text-stone-900 text-base">Analysing {framesRef.current.length} frames…</p>
-              <p className="text-stone-500 text-sm mt-1">Gemini AI is checking colour, luster, and edge wear</p>
+              <p className="text-stone-500 text-sm mt-1">AI is checking colour, luster, and edge wear</p>
             </div>
           </div>
         )}

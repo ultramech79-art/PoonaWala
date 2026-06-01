@@ -964,7 +964,7 @@ export function LiveCapture() {
       </div>
       <div className="text-center">
         <p className="text-white font-bold text-xl mb-1">AI Live Capture</p>
-        <p className="text-white/50 text-sm">Gemini guides you through 5 shots<br/>with voice instructions</p>
+        <p className="text-white/50 text-sm">AI guides you through 5 shots<br/>with voice instructions</p>
       </div>
       <div className="flex items-center bg-white/10 rounded-full p-1 gap-1">
         <button onClick={() => setLanguage('en')} className={`text-sm font-semibold px-5 py-2 rounded-full transition-all ${language==='en' ? 'bg-amber-500 text-black' : 'text-white/50'}`}>English</button>

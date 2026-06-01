@@ -562,6 +562,17 @@ export function WeightEntry() {
 
   return (
     <div className="page animate-slide-up">
+      {/* Analysing overlay — gold animation while the weight estimate runs */}
+      {loading && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#fffdf8]/95 backdrop-blur-sm animate-fade-in">
+          <img src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif" alt="Analysing…" className="w-44 h-44 object-contain" />
+          <div className="text-center mt-2">
+            <p className="font-bold text-stone-900 text-base tracking-tight">Analysing your jewellery</p>
+            <p className="text-stone-400 text-sm mt-1">Measuring dimensions against the coin reference</p>
+          </div>
+        </div>
+      )}
+
       <div className="px-5 py-2.5 flex items-center justify-between border-b border-stone-200/50 bg-white/60 backdrop-blur-sm">
         <button id="weight-back" onClick={() => { setError(''); setMode('manual') }} className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 text-white active:scale-95 transition-transform shadow-md">
           <ChevronRight className="w-3.5 h-3.5 rotate-180" />
@@ -712,9 +723,9 @@ export function WeightEntry() {
 
               {result.vlm_roi && (
                 <div className="rounded-2xl border border-stone-200 bg-white p-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-stone-400">VLM validation</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-stone-400">Image validation</p>
                   <p className="mt-1 text-xs text-stone-600">
-                    Top, 45-degree, and side views validated by {result.vlm_roi.provider}. Top ROI confidence {Math.round(result.vlm_roi.confidence * 100)}%.
+                    Top, 45-degree, and side views verified. Top ROI confidence {Math.round(result.vlm_roi.confidence * 100)}%.
                   </p>
                 </div>
               )}
