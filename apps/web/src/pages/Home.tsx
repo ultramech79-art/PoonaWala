@@ -85,6 +85,18 @@ export function Home() {
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-[#FEFDFC] via-white to-amber-50/30 overflow-hidden flex flex-col font-sans">
 
+      {/* Grid pattern overlay — fades down the page so it frames the hero without colliding with the sheet */}
+      <div
+        className="absolute inset-0 z-[6] pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(120,113,108,0.20) 1px, transparent 1px), linear-gradient(90deg, rgba(120,113,108,0.20) 1px, transparent 1px)',
+          backgroundSize: '30px 30px',
+          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 22%, transparent 62%)',
+          maskImage: 'linear-gradient(to bottom, black 0%, black 22%, transparent 62%)',
+        }}
+      />
+
       {/* Ambient glow overlays — static, no animation */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-gradient-to-br from-brand-400/12 via-amber-400/8 to-transparent blur-3xl" />
@@ -137,6 +149,11 @@ export function Home() {
           boxShadow: '0 -24px 60px rgba(32,24,18,0.14), inset 0 1px 0 rgba(255,200,80,0.15)',
         }}>
 
+        {/* Grab handle */}
+        <div className="flex justify-center -mt-1 mb-3">
+          <div className="h-1 w-10 rounded-full bg-gradient-to-r from-gold-300/50 via-gold-400/70 to-gold-300/50" />
+        </div>
+
         {/* Feature carousel — compact */}
         <div className="mb-2">
           <FeatureCarousel currentIndex={featureIndex} lang={state.lang} />
@@ -147,23 +164,30 @@ export function Home() {
           </div>
         </div>
 
-        {/* Brand — compact */}
-        <div className="text-center mb-3">
-          <h1 className="font-display font-black text-[3.2rem] leading-none tracking-[-0.04em]"
-            style={{ color: '#B45309' }}>
+        {/* Brand */}
+        <div className="text-center mb-4">
+          <h1 className="font-display font-black text-[3.4rem] leading-[0.92] tracking-[-0.045em] bg-gradient-to-br from-[#B45309] via-[#C96634] to-[#8C6B31] bg-clip-text text-transparent">
             {state.lang === 'hi' ? 'गोल्ड आई' : 'GoldEye'}
           </h1>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <span className="h-px w-5 bg-gradient-to-r from-transparent to-gold-300" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">
+              {state.lang === 'hi' ? 'सोने का तुरंत मूल्यांकन' : 'Instant Gold Valuation'}
+            </p>
+            <span className="h-px w-5 bg-gradient-to-l from-transparent to-gold-300" />
+          </div>
         </div>
 
         {/* Actions */}
-        <div className="space-y-1">
+        <div className="space-y-2.5">
           <button onClick={handleGetStarted}
-            className="w-full h-[54px] rounded-2xl bg-stone-950 text-white font-semibold text-[15px] tracking-[-0.01em] flex items-center justify-center gap-2 active:opacity-75 transition-opacity">
+            className="group relative w-full h-[56px] rounded-2xl bg-stone-950 text-white font-semibold text-[15px] tracking-[-0.01em] flex items-center justify-center gap-2 overflow-hidden shadow-[0_16px_36px_-12px_rgba(180,83,9,0.55)] active:scale-[0.98] transition-transform">
+            <span className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-gold-300/70 to-transparent" />
             {state.lang === 'hi' ? 'रजिस्टर करें' : 'Create Account'}
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
           </button>
           <button onClick={() => navigate('/login')}
-            className="w-full h-[46px] rounded-2xl bg-transparent border border-[#E2DDD6] text-stone-950 font-semibold text-[15px] tracking-[-0.01em] active:bg-stone-50 transition-colors">
+            className="w-full h-[50px] rounded-2xl bg-white/70 border border-gold-300/70 text-stone-900 font-semibold text-[15px] tracking-[-0.01em] backdrop-blur-sm shadow-[0_2px_10px_-4px_rgba(140,107,49,0.25)] active:bg-white transition-colors">
             {state.lang === 'hi' ? 'लॉगिन करें' : 'Log In'}
           </button>
           <button onClick={handleGuest}
