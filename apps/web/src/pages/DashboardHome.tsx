@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../store/session'
 import { useMetalPrices } from '../hooks/useGoldPrice'
 import {
   ChevronRight, ChevronDown, TrendingUp, TrendingDown,
   Sparkles, Shield, FileCheck, Clock, Zap, Percent,
   Scale, IndianRupee, Award, BadgeCheck, LayoutDashboard,
-  UserRound, Landmark, Phone, MessageCircle,
+  UserRound, Landmark, Phone, MessageCircle, MapPin,
+  Bell, BookOpen, Headphones, CalendarDays, CheckCircle2,
+  CircleHelp,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -17,9 +19,9 @@ const GUIDELINES = [
     id: 'loan-amount',
     Icon: IndianRupee,
     title: 'Loan Amount',
-    summary: '₹10,000 – ₹1.5 Crore',
+    summary: '₹25,000 – ₹50 Lakh',
     detail:
-      'Gold loans are offered from ₹10,000 up to ₹1.5 Crore based on the assessed gold value. Larger amounts are processed with in-branch physical verification. AI pre-qualification via GoldEye speeds up branch approval significantly.',
+      'Poonawalla Fincorp advertises gold loans up to ₹50 Lakh, subject to branch verification, purity, weight, KYC, and policy checks. GoldEye keeps the pre-check ready before the branch handoff.',
     badge: 'Flexible',
     badgeClass: 'bg-brand-50 text-brand-600 border-brand-200',
   },
@@ -37,9 +39,9 @@ const GUIDELINES = [
     id: 'purity',
     Icon: Award,
     title: 'Eligible Gold Purity',
-    summary: '18K to 24K BIS Hallmarked gold',
+    summary: '18K to 22K BIS Hallmarked gold',
     detail:
-      'We accept 18K, 20K, 22K, and 24K gold jewellery, coins, and bars. BIS Hallmarked gold with a valid 6-character HUID (verified against BIS CARE) qualifies for the highest LTV. Plain 999 bars and 916 hallmark pieces are also accepted.',
+      'Poonawalla Fincorp eligibility mentions 18K to 22K gold. BIS Hallmarked ornaments with a valid HUID make the verification trail cleaner and faster for final branch assessment.',
     badge: 'HUID Preferred',
     badgeClass: 'bg-gold-50 text-gold-700 border-gold-200',
   },
@@ -67,9 +69,9 @@ const GUIDELINES = [
     id: 'interest',
     Icon: Percent,
     title: 'Interest Rate',
-    summary: 'Starting from 10.5% p.a.',
+    summary: 'Starting from 11% p.a.',
     detail:
-      'Rates start at 10.5% per annum and vary based on loan amount, tenor, and LTV. Monthly interest, overdraft, and bullet repayment options are available. No hidden fees — processing fee is clearly disclosed before disbursal.',
+      'Poonawalla Fincorp publishes gold-loan rates starting from 11% p.a. Final pricing may vary by scheme, loan amount, tenure, and policy checks, with charges disclosed before disbursal.',
     badge: 'Competitive',
     badgeClass: 'bg-brand-50 text-brand-600 border-brand-200',
   },
@@ -111,7 +113,7 @@ function GoldPriceBar() {
   const metals = [gold22, gold18].filter(Boolean)
 
   return (
-    <div className="mx-5 rounded-2xl bg-white border border-stone-200 shadow-card overflow-hidden" role="region" aria-label="Today's gold rates">
+    <div className="gold-rate-card mx-5 rounded-2xl overflow-hidden" role="region" aria-label="Today's gold rates">
       <div className="px-4 py-2 border-b border-stone-100 flex items-center justify-between">
         <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-400">
           Today's Gold Rates · IBJA
@@ -145,27 +147,510 @@ function GoldPriceBar() {
   )
 }
 
-// ─── Quick Stats Strip ─────────────────────────────────────────────────────────
+// ─── Hero, quick actions, and Poonawalla carousel ──────────────────────────────
 
-const STATS = [
-  { label: 'Max LTV', value: '85%', sub: 'for ≤₹2.5L' },
-  { label: 'Min Karat', value: '18K', sub: 'BIS standard' },
-  { label: 'Disbursal', value: '60 min', sub: 'same-day' },
-  { label: 'Rates from', value: '10.5%', sub: 'p.a.' },
+const QUICK_ACTIONS = [
+  { id: 'evaluations', Icon: LayoutDashboard, title: 'My Evaluations', subtitle: 'View past results' },
+  { id: 'guide', Icon: BookOpen, title: 'Loan Guide', subtitle: 'Gold loan terms' },
+  { id: 'branch', Icon: MapPin, title: 'Branch Locator', subtitle: 'Nearest branch' },
+  { id: 'support', Icon: Headphones, title: 'Support', subtitle: 'Call or WhatsApp' },
 ]
 
-function StatsStrip() {
+const HERO_AD_SLIDES = [
+  {
+    id: 'gold-momentum',
+    tone: 'is-copper',
+    Icon: IndianRupee,
+    kicker: 'Poonawalla Gold Loan',
+    headline: 'Gold that moves your goals.',
+    copy: 'Unlock funds against jewellery with quick approval and minimal paperwork.',
+    image: '/assets/hero/gold-ring-red-card.jpg',
+    cta: 'Start GoldEye scan',
+    metrics: [
+      { value: '₹50L', label: 'Up to' },
+      { value: '11%', label: 'From p.a.' },
+      { value: '75%', label: 'LTV' },
+    ],
+  },
+  {
+    id: 'trust-engine',
+    tone: 'is-charcoal',
+    Icon: Award,
+    kicker: 'Trusted Financial Brand',
+    headline: 'Trust that travels with you.',
+    copy: '160M+ loans, 7M+ happy customers, and AAA/Stable CRISIL & CARE rating.',
+    image: '/assets/hero/gold-rings-texture.jpg',
+    cta: 'Explore loan benefits',
+    metrics: [
+      { value: '160M+', label: 'Loans' },
+      { value: '7M+', label: 'Customers' },
+      { value: 'AAA', label: 'Stable' },
+    ],
+  },
+  {
+    id: 'gold-safety',
+    tone: 'is-gold',
+    Icon: Shield,
+    kicker: 'Gold Safety Promise',
+    headline: 'Secure gold. Smooth funds.',
+    copy: 'Complete safety, transparent charges, and flexible repayment options.',
+    image: '/assets/hero/gold-ring-red-card.jpg',
+    cta: 'Check eligibility',
+    metrics: [
+      { value: '18-22K', label: 'Purity' },
+      { value: 'Zero', label: 'Hidden fees' },
+      { value: 'Fast', label: 'Approval' },
+    ],
+  },
+]
+
+const RECENT_EVALUATION = {
+  title: 'Gold Ring',
+  meta: '22K · 5.12 g',
+  date: '2 days ago',
+  eligibleLoan: '₹1,82,000',
+  status: 'Completed',
+  image: '/assets/hero/gold-rings-texture.jpg',
+}
+
+const FAQ_ITEMS = [
+  {
+    question: 'What type of gold is accepted for loan?',
+    answer: 'Poonawalla Fincorp accepts eligible gold jewellery, generally 18K to 22K. BIS hallmarked gold with HUID keeps verification smoother.',
+  },
+  {
+    question: 'How much loan can I get against my gold?',
+    answer: 'The eligible loan depends on purity, weight, live gold rate, LTV norms, and branch verification. Published gold loans go up to ₹50 Lakh.',
+  },
+  {
+    question: 'How long does disbursal take?',
+    answer: 'After KYC and physical gold verification, the branch can move toward same-day disbursal based on policy checks and account readiness.',
+  },
+  {
+    question: 'What documents are required?',
+    answer: 'Carry Aadhaar, PAN, and the gold ornaments being pledged. The final branch team may ask for any additional KYC detail if required.',
+  },
+  {
+    question: 'Is my pledged gold stored safely?',
+    answer: 'Gold is stored through branch-led secured handling with receipts and audit controls. Confirm vault and insurance details at handoff.',
+  },
+  {
+    question: 'What interest rate will I get?',
+    answer: 'Poonawalla Fincorp publishes gold-loan rates starting from 11% p.a. Final rate depends on amount, tenure, scheme, and policy checks.',
+  },
+  {
+    question: 'Can I repay early or renew the loan?',
+    answer: 'Repayment and renewal options depend on the chosen scheme and tenure. The branch shares the exact terms before disbursal.',
+  },
+  {
+    question: 'Does GoldEye give final approval?',
+    answer: 'GoldEye helps with a fast pre-check. Final loan approval, valuation, and disbursal happen after Poonawalla branch verification.',
+  },
+]
+
+const PRIMARY_ESSENTIAL_IDS = ['loan-amount', 'ltv', 'purity', 'interest']
+const PRIMARY_ESSENTIALS = GUIDELINES.filter(item => PRIMARY_ESSENTIAL_IDS.includes(item.id))
+const SECONDARY_ESSENTIALS = GUIDELINES.filter(item => !PRIMARY_ESSENTIAL_IDS.includes(item.id))
+const ESSENTIAL_TILE_LABEL: Record<string, string> = {
+  'loan-amount': 'Loan Amount',
+  ltv: 'LTV Ratio',
+  purity: 'Gold Purity',
+  disbursement: 'Disbursal',
+  documents: 'Documents',
+  interest: 'Interest Rate',
+  tenure: 'Tenure',
+  security: 'Security',
+}
+const ESSENTIAL_TILE_SUMMARY: Record<string, string> = {
+  'loan-amount': '₹25K - ₹50L',
+  ltv: '75% - 85% LTV',
+  purity: '18K - 22K BIS',
+  disbursement: 'Same-day path',
+  documents: 'Aadhaar + PAN',
+  interest: 'From 11% p.a.',
+  tenure: '3 - 36 months',
+  security: 'Insured vault',
+}
+
+function NearestBranchPill() {
   return (
-    <div className="mx-5 mt-4 grid grid-cols-4 gap-2" role="list" aria-label="Loan at a glance">
-      {STATS.map(s => (
-        <div key={s.label} role="listitem"
-          className="bg-white border border-stone-200 rounded-2xl px-2 py-3 flex flex-col items-center gap-0.5 shadow-card">
-          <span className="text-sm font-display font-black text-stone-900 tabular-nums">{s.value}</span>
-          <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wider leading-none text-center">{s.label}</span>
-          <span className="text-[8px] font-medium text-stone-400 leading-none text-center">{s.sub}</span>
-        </div>
-      ))}
+    <div id="branch-location" className="mx-5 mt-4">
+      <button
+        type="button"
+        className="branch-pill active:scale-[0.98] transition-transform"
+        aria-label="Nearest Poonawalla Fincorp branch"
+      >
+        <span className="branch-pill-icon" aria-hidden>
+          <MapPin className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 text-left">
+          <span className="block text-[9px] font-bold uppercase tracking-[0.08em] text-stone-400">Nearest Branch</span>
+          <span className="block truncate text-xs font-display font-black text-stone-950">Pune - FC Road</span>
+        </span>
+        <ChevronRight className="ml-auto h-4 w-4 text-stone-400" aria-hidden />
+      </button>
     </div>
+  )
+}
+
+function LoanEssentialsPanel() {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showMore, setShowMore] = useState(false)
+  const selected = selectedId ? GUIDELINES.find(item => item.id === selectedId) : null
+  const DetailIcon = selected?.Icon
+
+  const renderTile = (item: typeof GUIDELINES[number], compact = false) => {
+    const TileIcon = item.Icon
+    const active = selectedId === item.id
+
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
+        className={clsx('loan-essential-tile', compact && 'is-compact', active && 'is-active')}
+        aria-pressed={active}
+      >
+        <span className="loan-essential-icon" aria-hidden>
+          <TileIcon className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 text-left">
+          <span className="block truncate font-display text-[12px] font-black leading-tight">{ESSENTIAL_TILE_LABEL[item.id] || item.title}</span>
+          <span className="mt-1 block truncate text-[10px] font-semibold leading-none">{ESSENTIAL_TILE_SUMMARY[item.id] || item.summary}</span>
+        </span>
+      </button>
+    )
+  }
+
+  return (
+    <section className="mt-6 px-5" aria-labelledby="guidelines-heading">
+      <div className="loan-essentials-panel">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="guidelines-heading" className="font-display font-black text-lg leading-none text-stone-950">
+              Loan Essentials
+            </h2>
+            <p className="mt-1.5 text-[11px] font-medium leading-snug text-stone-500">
+              Key terms before branch verification.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand-600 px-2.5 py-1 text-white" aria-hidden>
+            <Landmark className="h-3 w-3 text-white" />
+            <span className="text-[10px] font-black uppercase tracking-wider">Poonawalla</span>
+          </div>
+        </div>
+
+        <div className="loan-essentials-hero mt-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.13em] text-gold-200">Gold loan snapshot</p>
+            <p className="mt-1 whitespace-nowrap font-display text-[18px] font-black leading-none text-white">₹50L · 11% · 75% LTV</p>
+          </div>
+          <span className="rounded-full bg-white/10 px-2.5 py-1.5 text-[9px] font-black text-white/72">
+            Branch ready
+          </span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {PRIMARY_ESSENTIALS.map(item => renderTile(item))}
+        </div>
+
+        <div className={clsx('loan-more-terms', showMore && 'is-open')}>
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            {SECONDARY_ESSENTIALS.map(item => renderTile(item, true))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (showMore && selectedId && SECONDARY_ESSENTIALS.some(item => item.id === selectedId)) {
+              setSelectedId(null)
+            }
+            setShowMore(!showMore)
+          }}
+          className="loan-more-button mt-3"
+          aria-expanded={showMore}
+        >
+          <span>{showMore ? 'Hide extra terms' : 'More terms'}</span>
+          {showMore
+            ? <ChevronDown className="h-4 w-4 rotate-180 transition-transform duration-300 ease-smooth" aria-hidden />
+            : <ChevronRight className="h-4 w-4 transition-transform duration-300 ease-smooth" aria-hidden />}
+        </button>
+
+        {selected && (
+          <div className="loan-essential-detail mt-3">
+            <div className="flex items-start gap-3">
+              <span className="loan-detail-icon" aria-hidden>
+                {DetailIcon && <DetailIcon className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-sm font-black leading-none text-stone-950">{selected.title}</p>
+                    <p className="mt-1 text-[11px] font-semibold text-brand-700">{selected.summary}</p>
+                  </div>
+                  <span className={clsx('shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black', selected.badgeClass)}>
+                    {selected.badge}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] font-medium leading-relaxed text-stone-600">
+                  {selected.detail}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function SectionHeader({
+  id,
+  title,
+  actionLabel,
+  onAction,
+  expanded,
+}: {
+  id?: string
+  title: string
+  actionLabel: string
+  onAction: () => void
+  expanded?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h2 id={id} className="font-display text-sm font-black text-stone-950">{title}</h2>
+      <button
+        type="button"
+        onClick={onAction}
+        className="inline-flex items-center gap-1 text-[11px] font-black text-charcoal active:scale-[0.96] transition-transform"
+      >
+        {actionLabel}
+        {expanded === undefined
+          ? <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          : expanded
+            ? <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform duration-300 ease-smooth" aria-hidden />
+            : <ChevronRight className="h-3.5 w-3.5 transition-transform duration-300 ease-smooth" aria-hidden />}
+      </button>
+    </div>
+  )
+}
+
+function PoonawallaHeroCarousel({ onStart }: { onStart: () => void }) {
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setActive(prev => (prev + 1) % HERO_AD_SLIDES.length)
+    }, 4600)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const slide = HERO_AD_SLIDES[active]
+  const { Icon } = slide
+
+  return (
+    <section className="mx-5 mt-3" aria-label="Poonawalla Fincorp offers">
+      <div className={clsx('poonawalla-ad-card', slide.tone)}>
+        <div className="ad-card-media" aria-hidden>
+          <img src={slide.image} alt="" />
+        </div>
+
+        <div className="relative z-10 flex min-h-[238px] flex-col">
+          <div className="flex items-center justify-between gap-3">
+            <span className="ad-brand-pill">
+              <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" />
+            </span>
+            <span className="ad-slide-count">{active + 1}/{HERO_AD_SLIDES.length}</span>
+          </div>
+
+          <div className="mt-auto">
+            <div className="max-w-[17rem]">
+              <span className="ad-kicker">
+                <Icon className="h-3.5 w-3.5" aria-hidden />
+                {slide.kicker}
+              </span>
+              <h1 className="mt-2.5 font-display text-[26px] font-black leading-[1] tracking-[-0.032em] text-white">
+                {slide.headline}
+              </h1>
+              <p className="mt-2.5 max-w-[14.5rem] text-xs font-medium leading-snug text-white/72">
+                {slide.copy}
+              </p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {slide.metrics.map(metric => (
+                <div key={`${slide.id}-${metric.label}`} className="ad-stat">
+                  <b>{metric.value}</b>
+                  <small>{metric.label}</small>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3.5 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onStart}
+                className="ad-cta group flex-1 active:scale-[0.98] transition-transform"
+              >
+                <span>{slide.cta}</span>
+                <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+              </button>
+              <div className="flex gap-1.5" aria-label="Hero ad slides">
+                {HERO_AD_SLIDES.map((item, idx) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActive(idx)}
+                    className={clsx('ad-dot', idx === active && 'is-active')}
+                    aria-label={`Show ${item.headline}`}
+                    aria-current={idx === active}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function RecentEvaluationCard({ onOpen }: { onOpen: () => void }) {
+  return (
+    <section className="mx-5 mt-5" aria-labelledby="recent-evaluation-heading">
+      <div className="dashboard-bottom-card p-3.5">
+        <SectionHeader
+          id="recent-evaluation-heading"
+          title="Recent Evaluation"
+          actionLabel="View All"
+          onAction={onOpen}
+        />
+
+        <button
+          type="button"
+          onClick={onOpen}
+          className="recent-evaluation-row mt-3 w-full active:scale-[0.985] transition-transform"
+          aria-label="Open recent gold ring evaluation"
+        >
+          <img
+            src={RECENT_EVALUATION.image}
+            alt=""
+            className="recent-evaluation-image"
+            draggable={false}
+          />
+
+          <div className="min-w-0 flex-1 text-left">
+            <h3 className="truncate font-display text-sm font-black leading-tight text-stone-950">
+              {RECENT_EVALUATION.title}
+            </h3>
+            <p className="mt-1 text-xs font-semibold text-stone-500">{RECENT_EVALUATION.meta}</p>
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-stone-400">
+              <CalendarDays className="h-3.5 w-3.5" aria-hidden />
+              {RECENT_EVALUATION.date}
+            </p>
+          </div>
+
+          <div className="recent-evaluation-divider" aria-hidden />
+
+          <div className="min-w-[6.4rem] text-left">
+            <p className="text-[10px] font-bold text-stone-400">Eligible Loan</p>
+            <p className="mt-1 font-display text-lg font-black leading-none text-stone-950">
+              {RECENT_EVALUATION.eligibleLoan}
+            </p>
+            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">
+              <CheckCircle2 className="h-3 w-3" aria-hidden />
+              {RECENT_EVALUATION.status}
+            </span>
+          </div>
+
+          <ChevronRight className="h-5 w-5 flex-shrink-0 text-stone-500" aria-hidden />
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function FaqPreviewCard() {
+  const [expanded, setExpanded] = useState(false)
+  const [openQuestion, setOpenQuestion] = useState<string | null>(null)
+  const primaryQuestions = FAQ_ITEMS.slice(0, 3)
+  const extraQuestions = FAQ_ITEMS.slice(3)
+
+  const toggleExpanded = () => {
+    if (expanded) setOpenQuestion(null)
+    setExpanded(!expanded)
+  }
+
+  const renderFaqItem = (item: typeof FAQ_ITEMS[number]) => (
+    <div key={item.question} className="faq-preview-item">
+      <button
+        type="button"
+        onClick={() => setOpenQuestion(openQuestion === item.question ? null : item.question)}
+        className="faq-preview-row"
+        aria-expanded={openQuestion === item.question}
+      >
+        <CircleHelp className="h-4 w-4 flex-shrink-0 text-gold-700" aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-left text-xs font-semibold text-stone-700">
+          {item.question}
+        </span>
+        <ChevronDown
+          className={clsx('h-4 w-4 flex-shrink-0 text-stone-500 transition-transform duration-300 ease-smooth', openQuestion === item.question && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
+      <div className={clsx('faq-preview-answer', openQuestion === item.question && 'is-open')}>
+        <p>{item.answer}</p>
+      </div>
+    </div>
+  )
+
+  return (
+    <section className="mx-5 mt-3" aria-labelledby="faq-preview-heading">
+      <div className="dashboard-bottom-card overflow-hidden">
+        <div className="px-3.5 pt-3.5 pb-2">
+          <SectionHeader
+            id="faq-preview-heading"
+            title="Frequently Asked Questions"
+            actionLabel={expanded ? 'Show Less' : 'View All'}
+            onAction={toggleExpanded}
+            expanded={expanded}
+          />
+        </div>
+
+        <div className={clsx('faq-preview-list', expanded && 'is-expanded')}>
+          {primaryQuestions.map(renderFaqItem)}
+          <div className={clsx('faq-extra-list', expanded && 'is-open')} aria-hidden={!expanded}>
+            {extraQuestions.map(renderFaqItem)}
+          </div>
+            </div>
+      </div>
+    </section>
+  )
+}
+
+function QuickActions({ onAction }: { onAction: (id: string) => void }) {
+  return (
+    <section className="mx-5 mt-4" aria-label="Quick actions">
+      <div className="quick-actions-panel">
+        <h2 className="px-1 pb-2 font-display text-sm font-black text-stone-950">Quick Actions</h2>
+        <div className="grid grid-cols-4 gap-2">
+          {QUICK_ACTIONS.map(({ id, Icon, title, subtitle }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onAction(id)}
+              className="quick-action-tile active:scale-[0.97] transition-transform"
+            >
+              <Icon className="mx-auto h-5 w-5 text-gold-700" strokeWidth={1.9} aria-hidden />
+              <span className="mt-2 block text-[10px] font-display font-black leading-tight text-stone-950">{title}</span>
+              <span className="mt-0.5 block text-[8px] font-medium leading-tight text-stone-400">{subtitle}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -224,9 +709,10 @@ function GuidelineItem({
 
 export function DashboardHome() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { state } = useSessionStore()
-  const [openId, setOpenId] = useState<string | null>(null)
   const [greeting, setGreeting] = useState('Good morning')
+  const assistantOpen = location.pathname === '/chatbot'
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -239,6 +725,26 @@ export function DashboardHome() {
   const initials = fullName && !isGuest
     ? fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
     : ''
+
+  const handleQuickAction = (id: string) => {
+    if (id === 'evaluations') {
+      navigate('/my-evaluations')
+      return
+    }
+    if (id === 'guide') {
+      document.getElementById('guidelines-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    if (id === 'support') {
+      document.getElementById('contact-strip')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    if (id === 'branch') {
+      document.getElementById('branch-location')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    navigate('/dashboard-home')
+  }
 
   return (
     <div className="flex flex-col app-page-bg animate-fade-in relative z-[5]" style={{ height: '100dvh' }}>
@@ -260,6 +766,13 @@ export function DashboardHome() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            className="w-10 h-10 rounded-2xl bg-stone-100 text-stone-700 active:scale-95 transition-transform flex items-center justify-center"
+            aria-label="Notifications"
+          >
+            <Bell className="w-5 h-5" strokeWidth={1.8} />
+          </button>
+          <button
             onClick={() => isGuest
               ? navigate('/register')
               : navigate('/profile', { state: { from: '/dashboard-home' } })
@@ -280,117 +793,24 @@ export function DashboardHome() {
       {/* ── Scrollable body ─────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto no-scrollbar pb-6" id="main-content" tabIndex={-1}>
 
+        <NearestBranchPill />
+
         {/* ── Hero evaluate card ─────────────────────────────────── */}
-        <div className="mx-5 mt-5 rounded-3xl overflow-hidden hero-card relative">
-          {/* Ambient gold glow top-right */}
-          <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-gradient-to-bl from-gold-300/20 to-transparent blur-2xl pointer-events-none" aria-hidden />
-
-          <div className="relative z-10 px-6 pt-5 pb-6 flex flex-col items-center text-center">
-            {/* Top badge */}
-            <div className="self-start flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/10 border border-white/15 mb-5">
-              <Sparkles className="w-3 h-3 text-gold-300" aria-hidden />
-              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/80">AI-Powered · RBI Compliant</span>
-            </div>
-
-            {/* Big gold scan button */}
-            <button
-              onClick={() => navigate('/setup')}
-              className="relative flex items-center justify-center mb-5 active:scale-95 transition-transform duration-150"
-              style={{ width: 154, height: 154 }}
-              aria-label="Tap to scan gold jewellery"
-            >
-              {/* Pulse ring */}
-              <span className="absolute inset-0 rounded-full bg-gold-400/20 animate-ping" style={{ animationDuration: '2s' }} aria-hidden />
-              {/* Ring 1 */}
-              <span className="absolute rounded-full border border-gold-300/25" style={{ inset: 6 }} aria-hidden />
-              {/* Ring 2 */}
-              <span className="absolute rounded-full border border-gold-400/20" style={{ inset: 14 }} aria-hidden />
-              {/* Core button */}
-              <span className="absolute rounded-full shadow-lg flex items-center justify-center" style={{
-                inset: 20,
-                background: 'conic-gradient(from 135deg, #C8A24B, #F0D080, #C8A24B, #E0B860, #C8A24B)',
-              }} aria-hidden>
-                {/* Gold coin SVG */}
-                <svg width="46" height="46" viewBox="0 0 46 46" fill="none" aria-hidden>
-                  <circle cx="23" cy="23" r="21" fill="none" stroke="rgba(120,80,10,0.25)" strokeWidth="1.5" />
-                  <circle cx="23" cy="23" r="17" fill="rgba(120,80,10,0.15)" />
-                  <text x="23" y="28.5" textAnchor="middle" fontSize="20" fill="rgba(100,65,5,0.85)" fontWeight="900" fontFamily="serif">₹</text>
-                </svg>
-              </span>
-            </button>
-
-            {/* Label */}
-            <p className="font-display font-black text-[17px] text-white leading-none mb-1">Tap to Scan Gold</p>
-            <p className="text-[12px] text-white/55 mb-5 leading-snug">AI assessment · under 60 seconds</p>
-
-            {/* Feature chips */}
-            <div className="flex items-center gap-2 flex-wrap justify-center">
-              {['BIS HUID', 'RBI Norms', 'Instant'].map(chip => (
-                <div key={chip} className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
-                  <BadgeCheck className="w-3 h-3 text-gold-300" aria-hidden />
-                  <span className="text-[10px] font-bold text-white/80">{chip}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Quick at-a-glance stats ────────────────────────────── */}
-        <StatsStrip />
+        <PoonawallaHeroCarousel onStart={() => navigate('/setup')} />
 
         {/* ── Live gold price ────────────────────────────────────── */}
         <div className="mt-4">
           <GoldPriceBar />
         </div>
 
-        {/* ── Previous evaluations shortcut ─────────────────────── */}
-        <div className="mx-5 mt-4">
-          <button
-            onClick={() => navigate('/dashboard-home')}
-            className="w-full flex items-center justify-between px-4 py-3.5 bg-white border border-stone-200 rounded-2xl shadow-card active:scale-[0.98] transition-transform"
-            aria-label="View my past evaluations"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-stone-100 flex items-center justify-center" aria-hidden>
-                <LayoutDashboard className="w-4 h-4 text-stone-600" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-display font-bold text-stone-900 leading-none mb-0.5">My Evaluations</p>
-                <p className="text-[10px] text-stone-500 leading-none">View past sessions &amp; results</p>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-stone-400" aria-hidden />
-          </button>
-        </div>
+        <QuickActions onAction={handleQuickAction} />
 
-        {/* ── Gold loan guidelines ───────────────────────────────── */}
-        <section className="mt-6 px-5" aria-labelledby="guidelines-heading">
-          <div className="flex items-center justify-between mb-1">
-            <h2 id="guidelines-heading" className="font-display font-black text-lg text-stone-900">
-              Gold Loan Guidelines
-            </h2>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 border border-brand-200" aria-hidden>
-              <Landmark className="w-3 h-3 text-brand-600" />
-              <span className="text-[10px] font-black text-brand-600 uppercase tracking-wider">Poonawalla</span>
-            </div>
-          </div>
-          <p className="text-xs text-stone-500 mb-4 leading-snug">
-            Key eligibility criteria &amp; terms. Tap any item to expand.
-          </p>
-          <div className="flex flex-col gap-2.5">
-            {GUIDELINES.map(item => (
-              <GuidelineItem
-                key={item.id}
-                item={item}
-                isOpen={openId === item.id}
-                onToggle={() => setOpenId(openId === item.id ? null : item.id)}
-              />
-            ))}
-          </div>
-        </section>
+        <RecentEvaluationCard onOpen={() => navigate('/my-evaluations')} />
+        <LoanEssentialsPanel />
+        <FaqPreviewCard />
 
         {/* ── Contact strip ──────────────────────────────────────── */}
-        <div className="mx-5 mt-5 grid grid-cols-2 gap-3">
+        <div id="contact-strip" className="mx-5 mt-5 grid grid-cols-2 gap-3">
           <a href="tel:18001036444"
             className="flex items-center gap-2.5 px-3.5 py-3 bg-white border border-stone-200 rounded-2xl shadow-card active:scale-95 transition-transform"
             aria-label="Call Poonawalla Fincorp support"
@@ -439,10 +859,16 @@ export function DashboardHome() {
 
       {/* ── Chatbot bubble ───────────────────────────────────────── */}
       <button
-        onClick={() => navigate('/chatbot')}
-        className="absolute right-0 z-40 active:scale-95 transition-transform"
-        style={{ bottom: 72, width: 176, height: 176 }}
-        aria-label="Open GoldEye assistant"
+        type="button"
+        onClick={() => {
+          if (!assistantOpen) navigate('/chatbot')
+        }}
+        className={clsx(
+          'assistant-bubble absolute z-[60] transition-transform',
+          assistantOpen ? 'is-open' : 'active:scale-95'
+        )}
+        aria-label={assistantOpen ? 'GoldEye assistant is open' : 'Open GoldEye assistant'}
+        aria-pressed={assistantOpen}
       >
         <img
           src="/assets/tutorial/1d64f64e-dfe1-11ee-a390-a7bd47dd18d6%20(1).gif"

@@ -32,7 +32,7 @@ export function DashboardDetail() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, reason }),
       });
-      navigate('/dashboard');
+      navigate('/my-evaluations');
     } catch (e) {
       console.error(e);
       setActionLoading(false);
@@ -55,7 +55,7 @@ export function DashboardDetail() {
   return (
     <div className="page app-page-bg min-h-screen p-6 text-stone-900 overflow-y-auto">
       <div className="max-w-5xl mx-auto space-y-6">
-        <Button variant="ghost" className="text-stone-500 hover:text-stone-900 mb-4" onClick={() => navigate('/dashboard')}>
+        <Button variant="ghost" className="text-stone-500 hover:text-stone-900 mb-4" onClick={() => navigate('/my-evaluations')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> {t('detail_back')}
         </Button>
 

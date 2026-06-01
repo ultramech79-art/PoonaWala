@@ -18,6 +18,7 @@ import { Result } from './pages/Result'
 import { FinalEvaluation } from './pages/FinalEvaluation'
 import { GoldLoanApplication } from './pages/GoldLoanApplication'
 import { DashboardHome } from './pages/DashboardHome'
+import { MyEvaluations } from './pages/MyEvaluations'
 import { DashboardDetail } from './pages/DashboardDetail'
 import { FieldAgent } from './pages/FieldAgent'
 import { Confirmation } from './pages/Confirmation'
@@ -41,6 +42,7 @@ function ProfileShortcut() {
     '/setup',
     '/before-capture',
     '/dashboard-home',
+    '/my-evaluations',
     '/gold-loan-app',
   ])
   if (!state.authToken || hiddenRoutes.has(location.pathname)) return null
@@ -86,7 +88,9 @@ function App() {
           <Route path="/gold-loan-app" element={<GoldLoanApplication />} />
           <Route path="/dashboard-home" element={<DashboardHome />} />
           <Route path="/dashboard-home/session/:id" element={<DashboardDetail />} />
-          <Route path="/chatbot" element={<Navigate to="/dashboard-home" replace />} />
+          <Route path="/my-evaluations" element={<MyEvaluations />} />
+          <Route path="/my-evaluations/session/:id" element={<DashboardDetail />} />
+          <Route path="/chatbot" element={<DashboardHome />} />
           <Route path="/agent" element={<FieldAgent />} />
           <Route path="/confirmation" element={<Confirmation />} />
           <Route path="*" element={<Navigate to="/" replace />} />
