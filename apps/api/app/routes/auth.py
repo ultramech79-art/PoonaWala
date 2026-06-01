@@ -95,8 +95,6 @@ class RegisterRequest(BaseModel):
 
     @validator("password")
     def validate_password(cls, value: Optional[str]) -> Optional[str]:
-        if value is not None and len(value) < 8:
-            raise ValueError("password must be at least 8 characters")
         return value
 
 
