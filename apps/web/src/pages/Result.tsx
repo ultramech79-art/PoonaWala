@@ -24,6 +24,7 @@ type ItemResultRow = {
   valueHigh: number
   loanLow: number
   loanHigh: number
+  ltvPct: number
   confidencePct: number
   isCurrent: boolean
 }
@@ -198,6 +199,7 @@ export function Result() {
       valueHigh: itemValue.band_high,
       loanLow: itemLoan.band_low_inr,
       loanHigh: itemLoan.band_high_inr,
+      ltvPct: Math.round((itemLoan.band_high_inr / Math.max(itemValue.band_high, 1)) * 100),
       confidencePct: Math.max(0, Math.min(100, Math.round(itemResult.confidence.score * 100))),
       isCurrent: index === 0,
     }
@@ -206,6 +208,16 @@ export function Result() {
   const cumulativeValueHigh = itemRows.reduce((sum, item) => sum + item.valueHigh, 0)
   const cumulativeLoanLow = itemRows.reduce((sum, item) => sum + item.loanLow, 0)
   const cumulativeLoanHigh = itemRows.reduce((sum, item) => sum + item.loanHigh, 0)
+  const hasMultipleItems = itemRows.length > 1
+  const aggregateLoanLow = hasMultipleItems ? fmt(cumulativeLoanLow) : loanLow
+  const aggregateLoanHigh = hasMultipleItems ? fmt(cumulativeLoanHigh) : loanHigh
+  const aggregateLoanRange = `${aggregateLoanLow} - ${aggregateLoanHigh}`
+  const aggregateMarketValueRange = hasMultipleItems
+    ? `${fmt(cumulativeValueLow)} - ${fmt(cumulativeValueHigh)}`
+    : marketValueRange
+  const aggregateLtvPct = hasMultipleItems
+    ? Math.round((cumulativeLoanHigh / Math.max(cumulativeValueHigh, 1)) * 100)
+    : displayLoan.ltv_applied_pct
 
   function handlePrimaryAction() {
     navigate(primaryActionTarget)
@@ -242,11 +254,13 @@ export function Result() {
               {!isFail ? (
                 <>
                   <h1 className="prequal-amount prequal-amount-range">
-                    <span>{loanLow}</span>
+                    <span>{aggregateLoanLow}</span>
                     <em>to</em>
-                    <span>{loanHigh}</span>
+                    <span>{aggregateLoanHigh}</span>
                   </h1>
-                  <p className="prequal-amount-sub">Eligible loan band after verification</p>
+                  <p className="prequal-amount-sub">
+                    {hasMultipleItems ? `Aggregated across ${itemRows.length} jewellery items` : 'Eligible loan band after verification'}
+                  </p>
                 </>
               ) : (
                 <>
@@ -265,7 +279,7 @@ export function Result() {
           <div className="prequal-hero-stats">
             <button type="button" className="prequal-hero-stat" onClick={() => setSheet('calc')}>
               <span>LTV ratio</span>
-              <b>Up to {displayLoan.ltv_applied_pct}%</b>
+              <b>Up to {aggregateLtvPct}%</b>
             </button>
             <button type="button" className="prequal-hero-stat" onClick={() => setSheet('calc')}>
               <span>Est. weight</span>
@@ -298,40 +312,62 @@ export function Result() {
         <motion.section {...si} className="surface-panel rounded-3xl p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-stone-500">All jewellery results</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-stone-500">Aggregated result</p>
               <h2 className="mt-1 font-display text-xl font-black text-stone-950">
-                {fmt(cumulativeLoanLow)} - {fmt(cumulativeLoanHigh)}
+                {aggregateLoanRange}
               </h2>
               <p className="mt-1 text-xs font-semibold text-stone-500">
-                Cumulative loan across {itemRows.length} item{itemRows.length === 1 ? '' : 's'}
+                {itemRows.length} jewellery item{itemRows.length === 1 ? '' : 's'} calculated separately
               </p>
             </div>
             <div className="rounded-2xl bg-brand-50 px-3 py-2 text-right">
               <p className="text-[10px] font-black uppercase tracking-wider text-brand-700">Gold value</p>
-              <p className="mt-0.5 text-xs font-black text-stone-900">{fmt(cumulativeValueLow)} - {fmt(cumulativeValueHigh)}</p>
+              <p className="mt-0.5 text-xs font-black text-stone-900">{aggregateMarketValueRange}</p>
             </div>
           </div>
 
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 flex gap-3 overflow-x-auto pb-1 no-scrollbar snap-x snap-mandatory">
             {itemRows.map(item => (
-              <div key={item.id} className={clsx('rounded-2xl border p-3', item.isCurrent ? 'border-brand-200 bg-brand-50/60' : 'border-stone-200 bg-white')}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-stone-900">{item.label}</p>
-                    <p className="mt-0.5 text-[11px] font-semibold text-stone-500">
-                      {item.purity}K - {item.weightG.toFixed(2)}g - {item.confidencePct}% confidence
-                    </p>
+              <div key={item.id} className={clsx('min-w-[86%] snap-start rounded-3xl border p-4', item.isCurrent ? 'border-brand-200 bg-brand-50/60' : 'border-stone-200 bg-white')}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-400">{item.label}</p>
+                    <h3 className="mt-1 font-display text-xl font-black text-stone-950">{fmt(item.loanLow)} - {fmt(item.loanHigh)}</h3>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-brand-700 tabular-nums">{fmt(item.loanHigh)}</p>
-                    <p className="text-[10px] font-semibold text-stone-400">loan cap</p>
+                  <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-brand-700 shadow-sm">
+                    {item.ltvPct}% LTV
                   </div>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
-                  <div
-                    className="h-full rounded-full bg-brand-600"
-                    style={{ width: `${Math.max(8, Math.min(100, (item.loanHigh / Math.max(cumulativeLoanHigh, 1)) * 100))}%` }}
-                  />
+
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="rounded-xl bg-white/80 px-2.5 py-2">
+                    <p className="text-[10px] font-semibold text-stone-400">Purity</p>
+                    <p className="mt-0.5 text-sm font-black text-stone-900">{item.purity}K</p>
+                  </div>
+                  <div className="rounded-xl bg-white/80 px-2.5 py-2">
+                    <p className="text-[10px] font-semibold text-stone-400">Weight</p>
+                    <p className="mt-0.5 text-sm font-black text-stone-900">{item.weightG.toFixed(2)}g</p>
+                  </div>
+                  <div className="rounded-xl bg-white/80 px-2.5 py-2">
+                    <p className="text-[10px] font-semibold text-stone-400">Confidence</p>
+                    <p className="mt-0.5 text-sm font-black text-stone-900">{item.confidencePct}%</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-2xl bg-white/80 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-stone-400">Calculation share</span>
+                    <span className="text-xs font-black text-stone-700">{fmt(item.valueHigh)} value</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                    <div
+                      className="h-full rounded-full bg-brand-600"
+                      style={{ width: `${Math.max(8, Math.min(100, (item.loanHigh / Math.max(cumulativeLoanHigh, 1)) * 100))}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] font-semibold text-stone-500">
+                    Loan cap {fmt(item.loanHigh)} contributes to aggregate {fmt(cumulativeLoanHigh)}.
+                  </p>
                 </div>
               </div>
             ))}

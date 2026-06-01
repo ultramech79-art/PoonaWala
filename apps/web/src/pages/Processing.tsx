@@ -555,7 +555,7 @@ export function Processing() {
     { key: 'processing_step4', label: t('processing_step4_label') },
     { key: 'processing_step5', label: t('processing_step5_label') },
   ]
-  const { state, setResult, setConfidenceBreakdown } = useSessionStore()
+  const { state, setResult, setConfidenceBreakdown, clearPendingAssessmentItems } = useSessionStore()
   const [activeStep, setActiveStep] = useState(0)
   const [activeFact, setActiveFact] = useState(0)
   const [done, setDone] = useState(false)
@@ -572,19 +572,46 @@ export function Processing() {
       setActiveFact(prev => (prev + 1) % facts.length)
     }, 2000)
 
-    assessSession(state).then(result => {
-      setResult(result)
-      // Recompute the evidence-based confidence breakdown so the full rubric
-      // (signals, active caps/floors, evidence) is stored in the session and
-      // persisted to the backend for the prequalification report.
-      const confidence = computeEvidenceConfidence(result, state)
-      sendConfidenceTrace(state, confidence)
-      setConfidenceBreakdown(confidence)
-      persistAssessmentResult(result, state, confidence).catch(err => console.warn('[history] failed to save assessment result', err))
+    const queuedItems = state.pendingAssessmentItems.length > 0 ? state.pendingAssessmentItems : null
+    const itemStates = queuedItems
+      ? queuedItems.map(item => ({
+          ...state,
+          sessionId: item.sessionId,
+          captures: item.captures,
+          skippedCaptures: item.skippedCaptures,
+          pageEvidence: item.pageEvidence,
+          weightG: item.weightG,
+          huidCode: item.huidCode,
+          scannedKarat: item.scannedKarat,
+          certificateData: item.certificateData,
+          huidVerification: item.huidVerification,
+          liveAuthResult: item.liveAuthResult,
+          tapTestResult: item.tapTestResult,
+          result: null,
+          evalData: null,
+          loanAppData: null,
+        } satisfies SessionState))
+      : [state]
+
+    ;(async () => {
+      let finalConfidence: ConfidenceComputation | null = null
+      for (const itemState of itemStates) {
+        const result = await assessSession(itemState)
+        setResult(result)
+        // Recompute the evidence-based confidence breakdown so the full rubric
+        // (signals, active caps/floors, evidence) is stored in the session and
+        // persisted to the backend for the prequalification report.
+        const confidence = computeEvidenceConfidence(result, itemState)
+        sendConfidenceTrace(itemState, confidence)
+        finalConfidence = confidence
+        persistAssessmentResult(result, itemState, confidence).catch(err => console.warn('[history] failed to save assessment result', err))
+      }
+      if (finalConfidence) setConfidenceBreakdown(finalConfidence)
+      if (queuedItems) clearPendingAssessmentItems()
       setDone(true)
       clearInterval(factInterval)
       setTimeout(() => navigate('/result'), 600)
-    })
+    })()
     
     return () => clearInterval(factInterval)
   }, [state.lang, facts.length])

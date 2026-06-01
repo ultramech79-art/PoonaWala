@@ -127,7 +127,7 @@ function Visualization({ title, src }: { title: string; src: string }) {
 
 export function WeightEntry() {
   const navigate = useNavigate()
-  const { setWeight, setPageEvidence, state } = useSessionStore()
+  const { setWeight, setPageEvidence, savePendingAssessmentItem, state } = useSessionStore()
   const [topImageDataUrl, setTopImageDataUrl] = useState<string | null>(null)
   const [angleImageDataUrl, setAngleImageDataUrl] = useState<string | null>(null)
   const [sideImageDataUrl, setSideImageDataUrl] = useState<string | null>(null)
@@ -336,6 +336,7 @@ export function WeightEntry() {
       confidence: result?.confidence.score ?? null,
       method: result?.weight.method ?? null,
     })
+    savePendingAssessmentItem()
     navigate('/add-item')
   }
 
@@ -347,6 +348,7 @@ export function WeightEntry() {
       estimatedG: null,
       confidence: null,
     })
+    savePendingAssessmentItem()
     navigate('/add-item')
   }
 
