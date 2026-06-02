@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../store/session'
-import { CheckCircle, Home, TrendingUp, Calendar, IndianRupee, Shield, ChevronDown, ChevronUp } from 'lucide-react'
+import { CheckCircle, LayoutDashboard, TrendingUp, Calendar, IndianRupee, Shield, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
 import { clsx } from 'clsx'
 
@@ -9,11 +9,15 @@ const fmtPct = (n: number) => `${n.toFixed(2)}%`
 
 export function Confirmation() {
   const navigate = useNavigate()
-  const { state, reset } = useSessionStore()
+  const { state, resetAssessment } = useSessionStore()
   const loan    = state.loanAppData
   const evalD   = state.evalData
   const result  = state.result
   const [showDetails, setShowDetails] = useState(false)
+  const goToDashboard = () => {
+    resetAssessment()
+    navigate('/dashboard-home', { replace: true })
+  }
 
   // Fallback if someone lands here directly without data
   if (!loan || !evalD || !result) {
@@ -24,8 +28,8 @@ export function Confirmation() {
         </div>
         <h1 className="font-display font-black text-2xl text-stone-900 text-center mb-3">Request Submitted</h1>
         <p className="text-sm text-stone-500 text-center mb-10">An agent will contact you shortly.</p>
-        <button onClick={() => { reset(); navigate('/') }} className="btn-primary w-full max-w-sm">
-          <Home className="w-5 h-5 mr-1" /> Back to Home
+        <button onClick={goToDashboard} className="btn-primary w-full max-w-sm">
+          <LayoutDashboard className="w-5 h-5 mr-1" /> Go to Dashboard
         </button>
       </div>
     )
@@ -148,11 +152,11 @@ export function Confirmation() {
 
         {/* CTA */}
         <button
-          onClick={() => { reset(); navigate('/') }}
+          onClick={goToDashboard}
           className="btn-primary w-full mt-2"
         >
-          <Home className="w-5 h-5 mr-1" />
-          Back to Home
+          <LayoutDashboard className="w-5 h-5 mr-1" />
+          Go to Dashboard
         </button>
       </div>
     </div>
