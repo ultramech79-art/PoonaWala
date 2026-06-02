@@ -666,7 +666,10 @@ export function AudioEval() {
                   <p className="text-sm font-black text-emerald-700">Acoustic test complete — next: Bill scan</p>
                 </div>
 
-                <button onClick={() => navigate('/certificate-scan')} className="w-full btn-primary">
+                <button
+                  onClick={() => navigate('/certificate-scan')}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-950 px-6 py-4 font-display text-base font-black text-white shadow-lg shadow-stone-900/20 transition active:scale-[0.98]"
+                >
                   Continue to Bill Scan <ChevronRight className="w-5 h-5" />
                 </button>
                 <button onClick={returnToIntro} className="w-full btn-secondary text-sm">Try Again</button>
