@@ -566,6 +566,10 @@ export function Processing() {
   const facts = state.lang === 'hi' ? FACTS_HI : FACTS_EN
 
   useEffect(() => {
+    if (state.result && state.pendingAssessmentItems.length === 0) {
+      navigate('/result', { replace: true })
+      return
+    }
     if (started.current) return
     started.current = true
     STEPS.forEach(({ }, i) => setTimeout(() => setActiveStep(i), i * 450))

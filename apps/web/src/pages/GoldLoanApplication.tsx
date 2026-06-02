@@ -98,10 +98,10 @@ export function GoldLoanApplication() {
   const hasVerificationRange = provisionalLowLoan < maxLoan
 
   // ── User inputs ─────────────────────────────────────────────────────────────
-  const [loanAmount, setLoanAmount] = useState(() => Math.round(maxLoan * 0.75 / 1000) * 1000)
-  const [tenure, setTenure]         = useState(12)
+  const [loanAmount, setLoanAmount] = useState(() => state.loanAppData?.requestedLoanInr ?? Math.round(maxLoan * 0.75 / 1000) * 1000)
+  const [tenure, setTenure]         = useState(() => state.loanAppData?.tenureMonths ?? 12)
   // Default to interest_only — matches Poonawalla's actual product structure
-  const [repayType, setRepayType]   = useState<RepaymentType>('interest_only')
+  const [repayType, setRepayType]   = useState<RepaymentType>(() => state.loanAppData?.repaymentType ?? 'interest_only')
 
   const availableRepay = useMemo(() => getRepaymentTypes(tenure) as RepaymentType[], [tenure])
   useEffect(() => {
