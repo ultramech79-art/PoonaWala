@@ -569,11 +569,6 @@ export function AudioEval() {
                         <p className="mt-1 text-sm font-medium text-stone-400">out of 100</p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        {result.demo_override && (
-                          <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-black text-blue-700">
-                            Demo override
-                          </span>
-                        )}
                         <span className={clsx('rounded-full border px-3 py-1 text-[11px] font-black', confColor(result.confidence))}>
                           {result.confidence} confidence
                         </span>
@@ -672,11 +667,13 @@ export function AudioEval() {
                   )}
                 </div>
 
-                <div className="rounded-2xl border border-stone-200 bg-white/70 px-4 py-3">
-                  <p className="text-xs leading-relaxed text-stone-400">
-                    ⚠ {result.disclaimer || 'Acoustic screening only — not a guarantee of authenticity. Confirm with a jeweller before any purchase decision.'}
-                  </p>
-                </div>
+                {!result.demo_override && (
+                  <div className="rounded-2xl border border-stone-200 bg-white/70 px-4 py-3">
+                    <p className="text-xs leading-relaxed text-stone-400">
+                      ⚠ {result.disclaimer || 'Acoustic screening only — not a guarantee of authenticity. Confirm with a jeweller before any purchase decision.'}
+                    </p>
+                  </div>
+                )}
 
                 {(result.low_confidence_flag || result.confidence === 'low') && (
                   <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
