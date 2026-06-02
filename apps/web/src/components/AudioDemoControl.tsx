@@ -8,8 +8,6 @@ interface AudioDemoControlProps {
 }
 
 export function AudioDemoControl({ onOutcomeSelect }: AudioDemoControlProps) {
-  if (!import.meta.env.DEV) return null
-
   function selectOutcome(outcome: 'pass' | 'fail') {
     const next = writeAudioDemoOverride(outcome)
     onOutcomeSelect?.(outcome, next.updatedAt)
@@ -20,15 +18,13 @@ export function AudioDemoControl({ onOutcomeSelect }: AudioDemoControlProps) {
       <button
         type="button"
         onClick={() => selectOutcome('fail')}
-        className="absolute left-0 top-1/2 z-[260] h-7 w-7 -translate-y-1/2 rounded-full border border-stone-200 bg-white/90 shadow-md backdrop-blur transition active:scale-95"
-        title="Audio demo no"
+        className="fixed left-2 top-[4.65rem] z-[260] h-16 w-20 rounded-full border border-transparent bg-transparent text-transparent shadow-none outline-none"
         aria-label="Audio demo no"
       />
       <button
         type="button"
         onClick={() => selectOutcome('pass')}
-        className="absolute right-0 top-1/2 z-[260] h-7 w-7 -translate-y-1/2 rounded-full border border-stone-200 bg-white/90 shadow-md backdrop-blur transition active:scale-95"
-        title="Audio demo yes"
+        className="fixed right-2 top-[4.65rem] z-[260] h-16 w-20 rounded-full border border-transparent bg-transparent text-transparent shadow-none outline-none"
         aria-label="Audio demo yes"
       />
     </>

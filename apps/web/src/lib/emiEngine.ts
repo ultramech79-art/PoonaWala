@@ -18,6 +18,11 @@ export interface EMIResult {
   schedule: AmortizationRow[]
 }
 
+const toRupee = (value: number) => Math.round(Number.isFinite(value) ? value : 0)
+const normalizeMonths = (months: number) => Math.max(1, Math.round(months))
+const sumRows = (rows: AmortizationRow[], key: 'payment' | 'principal' | 'interest') =>
+  rows.reduce((total, row) => total + row[key], 0)
+
 /**
  * Standard reducing-balance EMI (most common NBFC gold loan structure).
  * EMI = P × r(1+r)^n / ((1+r)^n - 1)
@@ -27,35 +32,42 @@ export function computeReducingEMI(
   roiPaPct: number,
   tenureMonths: number,
 ): EMIResult {
+  const principalInr = toRupee(principal)
   const r = roiPaPct / 100 / 12
-  const n = tenureMonths
-  const emi = principal * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1)
+  const n = normalizeMonths(tenureMonths)
+  const emi = r === 0
+    ? principalInr / n
+    : principalInr * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1)
+  const monthlyPayment = toRupee(emi)
 
   const schedule: AmortizationRow[] = []
-  let balance = principal
+  let balance = principalInr
 
   for (let i = 1; i <= n; i++) {
-    const interest  = balance * r
-    const princ     = emi - interest
-    const closing   = Math.max(0, balance - princ)
+    const interest = toRupee(balance * r)
+    const principalPaid = i === n
+      ? balance
+      : Math.min(balance, Math.max(0, monthlyPayment - interest))
+    const payment = principalPaid + interest
+    const closing = Math.max(0, balance - principalPaid)
+
     schedule.push({
       month: i,
-      openingBalance: Math.round(balance),
-      payment: Math.round(emi),
-      principal: Math.round(princ),
-      interest: Math.round(interest),
-      closingBalance: Math.round(closing),
+      openingBalance: balance,
+      payment,
+      principal: principalPaid,
+      interest,
+      closingBalance: closing,
     })
     balance = closing
   }
 
-  const totalPayment = Math.round(emi * n)
   return {
     repaymentType: 'emi',
-    monthlyPayment: Math.round(emi),
+    monthlyPayment,
     bulletPayment: 0,
-    totalPayment,
-    totalInterest: totalPayment - principal,
+    totalPayment: sumRows(schedule, 'payment'),
+    totalInterest: sumRows(schedule, 'interest'),
     schedule,
   }
 }
@@ -69,29 +81,30 @@ export function computeInterestOnly(
   roiPaPct: number,
   tenureMonths: number,
 ): EMIResult {
+  const principalInr = toRupee(principal)
   const r = roiPaPct / 100 / 12
-  const monthlyInterest = Math.round(principal * r)
+  const n = normalizeMonths(tenureMonths)
+  const monthlyInterest = toRupee(principalInr * r)
 
   const schedule: AmortizationRow[] = []
-  for (let i = 1; i <= tenureMonths; i++) {
-    const isFinal = i === tenureMonths
+  for (let i = 1; i <= n; i++) {
+    const isFinal = i === n
     schedule.push({
       month: i,
-      openingBalance: principal,
-      payment: isFinal ? principal + monthlyInterest : monthlyInterest,
-      principal: isFinal ? principal : 0,
+      openingBalance: principalInr,
+      payment: isFinal ? principalInr + monthlyInterest : monthlyInterest,
+      principal: isFinal ? principalInr : 0,
       interest: monthlyInterest,
-      closingBalance: isFinal ? 0 : principal,
+      closingBalance: isFinal ? 0 : principalInr,
     })
   }
 
-  const totalInterest = monthlyInterest * tenureMonths
   return {
     repaymentType: 'interest_only',
     monthlyPayment: monthlyInterest,
-    bulletPayment: principal,
-    totalPayment: principal + totalInterest,
-    totalInterest,
+    bulletPayment: principalInr,
+    totalPayment: sumRows(schedule, 'payment'),
+    totalInterest: sumRows(schedule, 'interest'),
     schedule,
   }
 }
@@ -105,8 +118,10 @@ export function computeBullet(
   roiPaPct: number,
   tenureMonths: number,
 ): EMIResult {
-  const totalInterest = Math.round(principal * roiPaPct / 100 * tenureMonths / 12)
-  const bulletAmount  = principal + totalInterest
+  const principalInr = toRupee(principal)
+  const n = normalizeMonths(tenureMonths)
+  const totalInterest = toRupee(principalInr * roiPaPct / 100 * n / 12)
+  const bulletAmount  = principalInr + totalInterest
 
   return {
     repaymentType: 'bullet',
@@ -115,10 +130,10 @@ export function computeBullet(
     totalPayment: bulletAmount,
     totalInterest,
     schedule: [{
-      month: tenureMonths,
-      openingBalance: principal,
+      month: n,
+      openingBalance: principalInr,
       payment: bulletAmount,
-      principal,
+      principal: principalInr,
       interest: totalInterest,
       closingBalance: 0,
     }],

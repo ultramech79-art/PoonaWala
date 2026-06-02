@@ -46,32 +46,6 @@ interface StepEval {
   dataUrl?: string
 }
 
-/**
- * Returns the reference image to compare against for each step.
- * Strategy: always anchor to the FIRST captured frame (45deg), so a user
- * cannot swap jewelry after any step. If 45deg isn't captured yet (shouldn't
- * happen since it's step 0), fall back to top.
- */
-function referenceForStep(
-  stepType: CaptureType,
-  captures: Partial<Record<CaptureType, { dataUrl: string }>>,
-) {
-  // The first step (45deg) has nothing to compare against — it IS the reference.
-  if (stepType === '45deg') {
-    return { referenceFrameType: 'top', referenceImageDataUrl: undefined }
-  }
-
-  // For every subsequent step, always compare against 45deg (the anchor).
-  // This prevents swapping the item between any two steps.
-  const angleReference = captures['45deg']?.dataUrl
-  if (angleReference) {
-    return { referenceFrameType: '45deg', referenceImageDataUrl: angleReference }
-  }
-
-  // Fallback: use top if somehow 45deg is missing
-  const topReference = captures.top?.dataUrl
-  return { referenceFrameType: 'top', referenceImageDataUrl: topReference }
-}
 
 
 export function CaptureFlow() {
@@ -174,7 +148,6 @@ export function CaptureFlow() {
 
   const currentEval = evals[stepIdx]
   const evalState = currentEval?.state ?? 'idle'
-  const sameItemMismatch = currentEval?.result?.issues?.includes('same_item_mismatch') ?? false
 
   useEffect(() => {
     // Eagerly prefetch all voice guides to eliminate network delay
@@ -211,11 +184,10 @@ export function CaptureFlow() {
 
     try {
       const optimizedDataUrl = await resizeDataUrl(dataUrl, 1024, 0.8)
-      const { referenceFrameType, referenceImageDataUrl } = referenceForStep(currentStepConfig.type, state.captures)
+      // Same-jewellery matching removed — no reference image is sent, so the backend
+      // never runs the same-item comparison (it falsely flagged the same ring).
       const evalOptions = {
         sessionId,
-        referenceFrameType,
-        referenceImageDataUrl,
         language: localStorage.getItem('goldeye_lang') || 'en',
       }
 
@@ -432,16 +404,16 @@ export function CaptureFlow() {
     return 0
   })() : 0
 
-  const hasManualHuidOverride = step.type === 'macro' && !!manualHuid && !sameItemMismatch
-  const hasSelectedPurity = step.type === 'macro' && !!selectedKarat && !sameItemMismatch
+  const hasManualHuidOverride = step.type === 'macro' && !!manualHuid
+  const hasSelectedPurity = step.type === 'macro' && !!selectedKarat
   // Macro step: proceed if photo approved, OR purity selected/manual HUID entered (photo optional), OR BIS verified
-  const macroCanProceed = step.type === 'macro' && !sameItemMismatch && (
+  const macroCanProceed = step.type === 'macro' && (
     evalState === 'approved' ||
     hasSelectedPurity ||
     hasManualHuidOverride ||
     !!huidVerifyResult
   )
-  const canProceed = !sameItemMismatch && (
+  const canProceed = (
     macroCanProceed ||
     evalState === 'approved' ||
     (step.optional && step.type !== 'selfie') ||

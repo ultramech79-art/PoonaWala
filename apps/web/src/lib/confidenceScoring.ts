@@ -26,6 +26,7 @@ export interface FraudModifier {
 
 export interface ConfidenceEvidence {
   capturedTypes: string[]
+  onlyCoreStillCaptures: boolean
   skippedTypes: string[]
   stillCoverage: number
   has45deg: boolean
@@ -108,13 +109,15 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
   const capturedTypes = Object.keys(state.captures)
   const skippedTypes = Object.keys(state.skippedCaptures ?? {})
   const has = (type: CaptureType) => Boolean(state.captures[type])
+  const onlyCoreStillCaptures =
+    capturedTypes.length === 3 &&
+    (['top', '45deg', 'side'] as CaptureType[]).every(type => capturedTypes.includes(type))
   const stillViews = ['45deg', 'top', 'side', 'macro'] as const
   const stillCoverage = stillViews.filter(has).length / stillViews.length
 
   const huidEvidence = state.pageEvidence.huid ?? {}
   const certificateEvidence = state.pageEvidence.certificate ?? {}
   const videoEvidence = state.pageEvidence.video ?? {}
-  const captureEvidence = state.pageEvidence.capture ?? {}
 
   const billHuid = normalizeHuid(state.certificateData?.huid ?? String(certificateEvidence.huid ?? ''))
   const currentHuid = normalizeHuid(state.huidCode ?? String(huidEvidence.code ?? ''))
@@ -213,11 +216,9 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
   const nonAudioTriggers = (result.fraud_signals.triggers ?? []).filter(
     trigger => !/audio|acoustic|tap/i.test(trigger),
   )
-  const sameItemMismatch = Boolean(
-    nonAudioTriggers.includes('same_item_mismatch') ||
-    (captureEvidence.lastIssues as string[] | undefined)?.includes?.('same_item_mismatch') ||
-    (videoEvidence.sameItem as { verdict?: string } | undefined)?.verdict === 'different',
-  )
+  // Same-jewellery matching has been removed from the product — it never blocks,
+  // rejects, or scores. Kept as a constant false so dependent logic stays inert.
+  const sameItemMismatch = false
   const hardMetalTrigger = nonAudioTriggers.some(trigger =>
     ['plated_metal_suspected', 'non_gold_specular_signature'].includes(trigger),
   )
@@ -238,6 +239,7 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
 
   return {
     capturedTypes,
+    onlyCoreStillCaptures,
     skippedTypes,
     stillCoverage,
     has45deg: has('45deg'),
@@ -386,13 +388,7 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     evidence.selfieSkipped ? 0.50 :
     0.60
 
-  // 8. Same-item consistency across the captured stages.
-  const sameItemScore =
-    evidence.sameItemMismatch ? 0.05 :
-    evidence.stillCoverage >= 0.75 && evidence.videoFrameCoverage >= 0.6 ? 0.97 :
-    evidence.stillCoverage >= 0.75 ? 0.78 :   // stills only, no video cross-check
-    evidence.stillCoverage >= 0.5 ? 0.65 :
-    0.55
+  // (Same-item consistency scoring removed — same-jewellery matching is no longer used.)
 
   // Weights reflect each signal's decisiveness for a gold-loan assessment. HUID
   // identity dominates; photos are next (physical proof + they enable purity/weight/
@@ -419,7 +415,6 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     { id: 'weight',    label: 'Weight agreement',                    score: weightScore,   weight: 0.10,         detail: 'bill / manual vs estimated weight' },
     { id: 'bill',      label: 'Bill / certificate',                  score: billScore,     weight: billWeightInBlend, detail: billWeightInBlend > 0 ? 'bill OCR fields + HUID cross-check (dynamic weight: valid/matching bill counts more)' : 'skipped / not uploaded; omitted from confidence blend' },
     { id: 'selfie',    label: 'Selfie (face) capture',               score: selfieScore,   weight: selfieWeight, detail: 'borrower selfie with the gold (0 weight when skipped)' },
-    { id: 'same_item', label: 'Same-item consistency',               score: sameItemScore, weight: 0.05,         detail: 'same jewellery across all stages' },
   ]
 
   const weightTotal = componentDefs.reduce((sum, component) => sum + component.weight, 0) || 1
@@ -455,7 +450,7 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
   // a bill HUID match — sets a FLOOR that skipped or missing corroboration cannot
   // drag below. Genuine fraud disables the floor (0) and is crushed by the
   // multipliers below.
-  const hardMismatch = evidence.sameItemMismatch || evidence.billHuidMismatch
+  const hardMismatch = evidence.billHuidMismatch
   const identityFloor =
     hardMismatch                                          ? 0 :
     evidence.photoHuidEvidence && evidence.billHuidMatch  ? 0.94 :  // bill HUID == photo-read HUID → >90
@@ -491,9 +486,9 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
   // contradicts the item HUID. They also drive REJECT routing.
   const modifiers: FraudModifier[] = [
     { id: 'identity_floor', kind: 'floor', active: identityFloor > 0, value: identityFloor, detail: 'strong HUID / hallmark / photo-karat identity sets a minimum — skipped captures cannot drag below it' },
-    { id: 'same_item_mismatch', kind: 'multiplier', active: evidence.sameItemMismatch, value: 0.30, detail: 'different jewellery detected across stages' },
     { id: 'bill_huid_mismatch', kind: 'multiplier', active: evidence.billHuidMismatch, value: 0.45, detail: 'bill HUID contradicts the entered / scanned HUID' },
     { id: 'audio_plated', kind: 'multiplier', active: evidence.audioPlated, value: 0.92, detail: 'tap/acoustic test hints at possible plating — NOT conclusive, so only a small ~8% caution reduction; routed to manual agent verification' },
+    { id: 'three_core_stills_only_ceiling', kind: 'ceiling', active: evidence.onlyCoreStillCaptures, value: 0.46, detail: 'only top / 45-degree / side photos captured — keep confidence below 47% until stronger evidence is added' },
     { id: 'no_hallmark_photo_ceiling', kind: 'ceiling', active: evidence.huidPresent && !evidence.hasMacro && !evidence.photoHuidEvidence && !evidence.huidVerified, value: noHallmarkPhotoCeiling, detail: 'unverified HUID with no hallmark photo — ceiling raised by corroboration; BIS verification removes this cap' },
     { id: 'no_identity_ceiling', kind: 'ceiling', active: noIdentity, value: 0.47, detail: 'no HUID / karat established — photos alone cannot exceed ~47%; routed to manual agent verification' },
   ]
@@ -618,7 +613,7 @@ function logConfidenceComputation(args: {
 
 export function routeFromConfidence(score: number, evidence: ConfidenceEvidence): Route {
   return [
-    { route: 'REJECT' as Route, active: evidence.sameItemMismatch || evidence.billHuidMismatch },
+    { route: 'REJECT' as Route, active: evidence.billHuidMismatch },
     // A possible-plating acoustic verdict is never an instant approval — it always
     // prefers manual agent verification (we are not certain it is plated).
     { route: 'INSTANT' as Route, active: evidence.huidVerified && score > 0.75 && !evidence.hardMetalTrigger && !evidence.audioPlated },
