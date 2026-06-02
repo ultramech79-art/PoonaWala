@@ -219,8 +219,7 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
   )
   const sameItemMismatch = Boolean(
     nonAudioTriggers.includes('same_item_mismatch') ||
-    (captureEvidence.lastIssues as string[] | undefined)?.includes?.('same_item_mismatch') ||
-    (videoEvidence.sameItem as { verdict?: string } | undefined)?.verdict === 'different',
+    (captureEvidence.lastIssues as string[] | undefined)?.includes?.('same_item_mismatch'),
   )
   const hardMetalTrigger = nonAudioTriggers.some(trigger =>
     ['plated_metal_suspected', 'non_gold_specular_signature'].includes(trigger),
@@ -391,11 +390,10 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     evidence.selfieSkipped ? 0.50 :
     0.60
 
-  // 8. Same-item consistency across the captured stages.
+  // 8. Same-item consistency across still-photo capture stages.
   const sameItemScore =
     evidence.sameItemMismatch ? 0.05 :
-    evidence.stillCoverage >= 0.75 && evidence.videoFrameCoverage >= 0.6 ? 0.97 :
-    evidence.stillCoverage >= 0.75 ? 0.78 :   // stills only, no video cross-check
+    evidence.stillCoverage >= 0.75 ? 0.78 :
     evidence.stillCoverage >= 0.5 ? 0.65 :
     0.55
 
@@ -424,7 +422,7 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     { id: 'weight',    label: 'Weight agreement',                    score: weightScore,   weight: 0.10,         detail: 'bill / manual vs estimated weight' },
     { id: 'bill',      label: 'Bill / certificate',                  score: billScore,     weight: billWeightInBlend, detail: billWeightInBlend > 0 ? 'bill OCR fields + HUID cross-check (dynamic weight: valid/matching bill counts more)' : 'skipped / not uploaded; omitted from confidence blend' },
     { id: 'selfie',    label: 'Selfie (face) capture',               score: selfieScore,   weight: selfieWeight, detail: 'borrower selfie with the gold (0 weight when skipped)' },
-    { id: 'same_item', label: 'Same-item consistency',               score: sameItemScore, weight: 0.05,         detail: 'same jewellery across all stages' },
+    { id: 'same_item', label: 'Same-item consistency',               score: sameItemScore, weight: 0.05,         detail: 'same jewellery across still-photo capture stages' },
   ]
 
   const weightTotal = componentDefs.reduce((sum, component) => sum + component.weight, 0) || 1

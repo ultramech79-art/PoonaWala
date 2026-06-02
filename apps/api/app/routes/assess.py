@@ -146,7 +146,7 @@ async def assess(request: Request, req: AssessRequest, db: AsyncSession = Depend
         run_s10(req.session_id, device_metadata=req.device_metadata),
         run_s11(req.session_id, audio_url=req.audio),
         run_s13(req.session_id, selfie_url=req.selfie),
-        run_s14(req.session_id, frames=req.frames, selfie_url=req.selfie),
+        run_s14(req.session_id, frames=req.frames, selfie_url=req.selfie, frame_types=resolved_frame_types),
         return_exceptions=False,
     )
 
