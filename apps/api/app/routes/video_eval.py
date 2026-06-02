@@ -59,21 +59,17 @@ from app.data.gemini import (
 )
 from app.data.groq_client import GROQ_MODEL, call_groq_vision_with_keys
 from app.data.capture_assets import store_capture_asset
-from app.data.item_match import compare_item_images, is_blocking_mismatch
 
 logger = logging.getLogger("goldeye.video_eval")
 router = APIRouter()
 MAX_VIDEO_FRAMES = 11
 
 
-def _is_video_frame(frame_type: str | None) -> bool:
-    label = str(frame_type or "").lower()
-    return label == "video" or label.startswith("video_")
-
-
 class VideoEvalRequest(BaseModel):
     frames_b64: list[str]
     language: str = "en"
+    # Kept for backwards-compatible clients. Video evaluation intentionally does
+    # not perform same-item/reference matching anymore.
     session_id: Optional[str] = None
     reference_image_data_url: Optional[str] = None
     reference_frame_type: str = "top"
@@ -278,88 +274,13 @@ Return ONLY valid JSON:
     if red_flags: signals.append("⚠ " + "; ".join(red_flags))
     if pos_sigs:  signals.append("✓ " + "; ".join(pos_sigs))
 
-    same_item_summary = None
-    if req.reference_image_data_url:
-        comparisons = []
-        for idx, b64 in enumerate(analysis_frames):
-            item_result = await compare_item_images(
-                req.reference_image_data_url,
-                f"data:image/jpeg;base64,{b64}",
-                reference_frame_type=req.reference_frame_type,
-                candidate_frame_type=f"video_{idx}",
-                use_remote=False,
-            )
-            comparisons.append({**item_result, "frame_idx": idx, "frame_type": f"video_{idx}"})
-
-        # All video frames get a fast local check. Confirm the riskiest frames
-        # semantically so one bad local fingerprint does not unfairly block.
-        suspect_frames = sorted(
-            [
-                item for item in comparisons
-                if item.get("verdict") != "same" or float(item.get("same_item_score", 0.5)) < 0.55
-            ],
-            key=lambda item: (1.0 - float(item.get("same_item_score", 0.5))) * float(item.get("confidence", 0.0)),
-            reverse=True,
-        )[:3]
-        for item in suspect_frames:
-            idx = int(item["frame_idx"])
-            confirmed = await compare_item_images(
-                req.reference_image_data_url,
-                f"data:image/jpeg;base64,{analysis_frames[idx]}",
-                reference_frame_type=req.reference_frame_type,
-                candidate_frame_type=f"video_{idx}",
-            )
-            comparisons[idx] = {**confirmed, "frame_idx": idx, "frame_type": f"video_{idx}"}
-
-        blocking_mismatches = [item for item in comparisons if is_blocking_mismatch(item)]
-        video_mismatches = [item for item in blocking_mismatches if _is_video_frame(item.get("frame_type"))]
-        non_video_mismatches = [item for item in blocking_mismatches if not _is_video_frame(item.get("frame_type"))]
-        severe_video_mismatches = [
-            item for item in video_mismatches
-            if float(item.get("confidence", 0.0)) >= 0.92 and float(item.get("same_item_score", 0.5)) <= 0.18
-        ]
-        mismatches = non_video_mismatches + (
-            video_mismatches if len(video_mismatches) >= 2 else severe_video_mismatches
-        )
-        if mismatches:
-            strongest = sorted(mismatches, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
-            same_item_summary = {
-                **strongest,
-                "frames_checked": len(comparisons),
-                "blocking_mismatch": True,
-                "mismatched_frames": mismatches,
-                "comparisons": comparisons,
-            }
-            video_score = min(video_score, 35)
-            cat_a = strongest.get("category_a")
-            cat_b = strongest.get("category_b")
-            if strongest.get("category_mismatch") and cat_a and cat_b:
-                signals.insert(0, f"Different jewelry detected in video: reference shows a {cat_a} but video shows a {cat_b}")
-            else:
-                signals.insert(0, "Different jewelry item detected in video compared with the reference photo")
-        elif comparisons:
-            strongest = sorted(comparisons, key=lambda item: float(item.get("confidence", 0.0)), reverse=True)[0]
-            same_item_summary = {
-                **strongest,
-                "frames_checked": len(comparisons),
-                "blocking_mismatch": False,
-                "mismatched_frames": [],
-                "comparisons": comparisons,
-            }
-
     if req.session_id:
-        comparison_by_idx = {
-            int(item["frame_idx"]): item
-            for item in (same_item_summary or {}).get("comparisons", [])
-            if "frame_idx" in item
-        }
         for idx, b64 in enumerate(analysis_frames):
             try:
                 await store_capture_asset(
                     req.session_id,
                     f"video_{idx}",
                     f"data:image/jpeg;base64,{b64}",
-                    same_item=comparison_by_idx.get(idx) or same_item_summary,
                 )
             except Exception as exc:
                 logger.warning(f"video_eval asset store failed: {exc}")
@@ -375,9 +296,6 @@ Return ONLY valid JSON:
             "अनिश्चित"              if video_score >= 50 else
             "संभवतः गोल्ड-प्लेटेड"
         )
-    if same_item_summary and same_item_summary.get("blocking_mismatch"):
-        verdict = "Different jewelry item detected" if req.language == "en" else "अलग गहना मिला"
-
     logger.info(
         f"video_eval score={video_score} wear={wear_score} edge={edge_substrate_score} "
         f"luster={luster_score} surface={surface_originality_score} hue={hue_score}"
@@ -394,7 +312,7 @@ Return ONLY valid JSON:
         video_signals=signals,
         purity_estimate=res.get("purity_estimate") or None,
         guidance=str(res.get("guidance", "")),
-        same_item=same_item_summary,
+        same_item=None,
     )
 
 

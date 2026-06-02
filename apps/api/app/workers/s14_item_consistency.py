@@ -8,9 +8,10 @@ Why a CHAIN (not everything-vs-one-reference):
   "different" at conf 1.0 on genuine same-ring side/macro). The comparisons that
   ARE reliable are between adjacent capture steps (small angle change).
 
-So we verify the capture as a chain:  top → 45° → side (→ video frames).
-  selfie and macro/huid are excluded: selfie is a face shot; macro is an extreme
-  hallmark closeup that looks nothing like the full-item reference views.
+So we verify the still-photo capture as a chain:  top → 45° → side.
+  video, selfie and macro/huid are excluded: video is for solid/plated
+  authenticity, selfie is a face shot, and macro is an extreme hallmark closeup
+  that looks nothing like the full-item reference views.
   • ORB collapses near-duplicate/same-angle bursts into groups (fast, reliable).
   • Consecutive groups are linked if they share strong ORB inliers; otherwise the
     VLM judges that one adjacent (similar-angle) pair — which it does reliably.
@@ -43,8 +44,9 @@ _PHASE_RANK = {"top": 0, "45deg": 1, "side": 2, "macro": 3}
 _LABEL_PRIORITY = {"top": 0, "45deg": 1, "side": 2, "macro": 3}
 # Frames excluded from same-item chain: selfie is a face shot; macro/huid are
 # extreme hallmark closeups that look nothing like the full-item reference views.
+# Video frames are also excluded: the video test should judge solid/plated
+# authenticity only, not same-jewellery identity.
 _SKIP_FRAME_LABELS = {"selfie", "macro", "huid", "closeup"}
-MAX_VIDEO_FRAMES = 3
 
 # ORB inliers between adjacent groups to auto-link as the same item (no VLM).
 LINK_INLIERS = int(os.getenv("ITEM_CHAIN_LINK_INLIERS", "10"))
@@ -82,7 +84,7 @@ def _result(session_id, t0, *, mismatch=False, score=0.0, comparisons=None, mism
         },
         error=error,
         duration_ms=int((time.time() - t0) * 1000),
-        model_version="orb-chain-vlm-v3",
+        model_version="orb-chain-vlm-v4",
     )
 
 
@@ -111,26 +113,29 @@ def _max_inliers(ga: list[int], gb: list[int], inlier_matrix: dict) -> int:
     return best
 
 
-async def run(session_id: str, frames: list[str], selfie_url: Optional[str] = None, **_) -> SignalResult:  # noqa: ARG001 selfie excluded from chain
+async def run(
+    session_id: str,
+    frames: list[str],
+    selfie_url: Optional[str] = None,
+    frame_types: Optional[list[str]] = None,
+    **_,
+) -> SignalResult:  # noqa: ARG001 selfie excluded from chain
     t0 = time.time()
     tag = f"ITEMCHK[{session_id}]"
     try:
         # ── Collect candidate frames ──────────────────────────────────────────
-        # Only top / 45deg / side stills and video frames are included.
-        # selfie (face shot) and macro/huid (hallmark closeup) are excluded
-        # because they look nothing like the full-item reference views.
+        # Only top / 45deg / side still photos are included. Video frames are
+        # deliberately ignored so video evaluation cannot create same-item
+        # mismatch failures.
         raw_entries: list[tuple[str, str]] = []
-        video_count = 0
         for idx, url in enumerate(frames or []):
             if not url:
                 continue
-            label = _frame_label(idx)
+            label = str(frame_types[idx] if frame_types and idx < len(frame_types) else _frame_label(idx)).lower()
             if label in _SKIP_FRAME_LABELS:
                 continue
             if label.startswith("video_"):
-                if video_count >= MAX_VIDEO_FRAMES:
-                    continue
-                video_count += 1
+                continue
             raw_entries.append((label, url))
         if len(raw_entries) < 2:
             return _result(session_id, t0, note="not_enough_frames")

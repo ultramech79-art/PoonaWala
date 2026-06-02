@@ -50,12 +50,6 @@ interface VideoResult {
   video_signals: string[]
   purity_estimate: string | null
   guidance: string
-  same_item?: {
-    verdict: 'same' | 'different' | 'inconclusive'
-    confidence: number
-    same_item_score: number
-    mismatch_reasons: string[]
-  } | null
 }
 
 export function VideoEval() {
@@ -217,8 +211,6 @@ export function VideoEval() {
 
   async function runAnalysis() {
     try {
-      const referenceCapture = state.captures['45deg'] ?? state.captures.top
-      const referenceFrameType = state.captures['45deg'] ? '45deg' : 'top'
       const res = await fetch(`${apiBase}/api/video-eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,8 +218,6 @@ export function VideoEval() {
           frames_b64: framesRef.current,
           language: lang,
           session_id: state.sessionId ?? undefined,
-          reference_image_data_url: referenceCapture?.dataUrl ?? null,
-          reference_frame_type: referenceFrameType,
         }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
@@ -253,7 +243,6 @@ export function VideoEval() {
         frameCount: framesRef.current.length,
         signals: data.video_signals ?? [],
         purityEstimate: data.purity_estimate ?? null,
-        sameItem: data.same_item ?? null,
       })
     } catch (e: any) {
       setError(e?.message ?? 'Video analysis failed. Please try again.')

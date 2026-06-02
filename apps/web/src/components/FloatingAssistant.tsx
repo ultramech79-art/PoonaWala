@@ -316,7 +316,7 @@ export function FloatingAssistant() {
     recognition.start()
   }
 
-  const showAssistant = ['/language', '/profile', '/welcome', '/otp', '/setup', '/chatbot'].includes(location.pathname)
+  const showAssistant = ['/language', '/welcome', '/otp', '/setup', '/chatbot'].includes(location.pathname)
   if (!showAssistant) return null
 
   if (quietRoutes.has(location.pathname)) return null

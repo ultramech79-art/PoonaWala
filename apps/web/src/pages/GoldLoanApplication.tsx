@@ -46,6 +46,7 @@ interface PoonawallaDeal {
 const POONAWALLA_MAX = loanParams.tenure_options.poonawalla_max_months
 const NBFC_MONTHS = loanParams.tenure_options.nbfc_variant_months as number[]
 const HEADLINE_LTV = loanParams.rbi_rules.headline_ltv_pct
+const CHATBOT_GIF_SRC = '/assets/tutorial/1d64f64e-dfe1-11ee-a390-a7bd47dd18d6%20(1).gif'
 
 function buildEvalDataFromAssessment(result: AssessmentResult, profile: UserProfile | null): EvalData {
   const states = (regionsData as any).states as Array<{ code: string; name: string }>
@@ -785,6 +786,21 @@ export function GoldLoanApplication() {
           </p>
         </div>
       </main>
+
+      <button
+        type="button"
+        onClick={() => navigate('/chatbot')}
+        className="absolute right-3 z-[35] flex h-20 w-20 items-center justify-center p-0 transition active:scale-95"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 8.9rem)' }}
+        aria-label="Open GoldEye chatbot"
+      >
+        <img
+          src={CHATBOT_GIF_SRC}
+          alt="GoldEye Assistant"
+          className="h-full w-full object-contain drop-shadow-[0_14px_18px_rgba(32,24,18,0.2)]"
+          draggable={false}
+        />
+      </button>
 
       {/* Sticky CTA, matching dashboard-home */}
       <div
