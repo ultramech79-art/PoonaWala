@@ -494,8 +494,10 @@ export function AudioEval() {
         {/* ANALYZING */}
         {phase === 'analyzing' && (
           <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in">
-            <AudioDemoControl onOutcomeSelect={(outcome, updatedAt) => { if (outcome !== 'off') showDemoResult(outcome, updatedAt) }} />
-            <img src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif" alt="Analysing…" className="w-44 h-44 object-contain" />
+            <div className="relative -mx-5 flex w-[calc(100%+2.5rem)] items-center justify-center">
+              <AudioDemoControl onOutcomeSelect={(outcome, updatedAt) => { if (outcome !== 'off') showDemoResult(outcome, updatedAt) }} />
+              <img src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif" alt="Analysing…" className="w-44 h-44 object-contain" />
+            </div>
             <div className="text-center mt-2">
               <p className="font-bold text-stone-900 text-base tracking-tight">Analysing acoustic signature</p>
               <p className="text-stone-400 text-sm mt-1">Measuring decay profile and resonance</p>
