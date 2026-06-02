@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../store/session'
-import { ChevronRight, Mic, AlertCircle, User } from 'lucide-react'
+import { ChevronRight, Mic, AlertCircle, CheckCircle, User } from 'lucide-react'
 import { clsx } from 'clsx'
 import { apiBase } from '../lib/api'
 import { speak } from '../lib/tts'
@@ -358,6 +358,10 @@ export function AudioEval() {
 
   const scoreColor = (s: number) => s >= 70 ? 'text-emerald-600' : s >= 45 ? 'text-amber-500' : 'text-red-500'
   const barColor   = (s: number) => s >= 70 ? 'bg-emerald-500' : s >= 45 ? 'bg-amber-400' : 'bg-red-400'
+  const confColor  = (c: string) =>
+    c === 'high' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+    c === 'medium' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+    'bg-red-100 text-red-700 border-red-200'
   const levelPct   = Math.min(100, Math.max(0, (levelDb + 60) / 60 * 100))
 
   return (
@@ -522,27 +526,148 @@ export function AudioEval() {
                 <button onClick={skipAudio} className="w-full btn-secondary text-sm">Skip</button>
               </div>
             ) : result ? (
-              <div className="space-y-3">
-                <div className="scan-panel rounded-3xl p-5 space-y-3">
-                  <p className="text-[10px] text-stone-400 uppercase tracking-widest font-semibold">Drop Test Result</p>
-                  <div className="flex items-end gap-3">
-                    <p className={clsx('text-5xl font-black', scoreColor(result.score))}>{result.score}</p>
-                    <p className="text-stone-400 text-sm mb-1">/ 100</p>
+              <div className="space-y-4">
+                <div className="overflow-hidden rounded-[2rem] border border-stone-200/80 bg-white/95 shadow-xl shadow-stone-900/8">
+                  <div className={clsx(
+                    'px-5 pb-5 pt-5',
+                    result.score >= 70 ? 'bg-gradient-to-r from-emerald-50 via-emerald-50/80 to-white' :
+                    result.score >= 45 ? 'bg-gradient-to-r from-amber-50 via-amber-50/80 to-white' :
+                    'bg-gradient-to-r from-red-50 via-red-50/80 to-white',
+                  )}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-400">Drop Test Result</p>
+                        <p className={clsx('mt-2 text-6xl font-black leading-none tracking-tight', scoreColor(result.score))}>
+                          {result.score}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-stone-400">out of 100</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        {result.demo_override && (
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-black text-blue-700">
+                            Demo override
+                          </span>
+                        )}
+                        <span className={clsx('rounded-full border px-3 py-1 text-[11px] font-black', confColor(result.confidence))}>
+                          {result.confidence} confidence
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 h-2.5 w-full rounded-full bg-stone-100">
+                      <div
+                        className={clsx('h-2.5 rounded-full transition-all', barColor(result.score))}
+                        style={{ width: `${Math.min(100, Math.max(0, result.score))}%` }}
+                      />
+                    </div>
+                    <p className="mt-4 text-base font-black leading-snug text-stone-800">
+                      {localizeAudioVerdict(result.verdict, t)}
+                    </p>
                   </div>
-                  <div className="w-full bg-stone-100 rounded-full h-2">
-                    <div className={clsx('h-2 rounded-full transition-all', barColor(result.score))} style={{ width: `${result.score}%` }} />
-                  </div>
-                  <p className="text-sm font-semibold text-stone-800">{localizeAudioVerdict(result.verdict, t)}</p>
-                  {result.explanation && <p className="text-xs text-stone-500 leading-relaxed">{result.explanation}</p>}
+
+                  {result.params && (
+                    <div className="border-t border-stone-100 px-5 py-5">
+                      <p className="mb-3 text-[11px] font-black uppercase tracking-[0.22em] text-stone-400">
+                        Measured Parameters
+                      </p>
+                      <div className="space-y-2">
+                        {[
+                          {
+                            label: 'Decay time',
+                            value: `${result.params.decay_time_ms.toFixed(0)} ms`,
+                            ref: 'Longer = more gold-like (low damping)',
+                            highlight: true,
+                          },
+                          {
+                            label: 'Decay quality R²',
+                            value: result.params.exp_decay_r2.toFixed(2),
+                            ref: '>0.85 = single pure material',
+                            highlight: true,
+                          },
+                          {
+                            label: 'Spectral centroid',
+                            value: `${result.params.spectral_centroid_hz.toFixed(0)} Hz`,
+                            ref: 'Warmer = more gold-like',
+                            highlight: false,
+                          },
+                          {
+                            label: 'Gold-band energy',
+                            value: `${(result.params.gold_band_ratio * 100).toFixed(0)}%`,
+                            ref: 'Higher = clearer dense-metal signature',
+                            highlight: false,
+                          },
+                          {
+                            label: 'High-freq ratio',
+                            value: `${(result.params.hf_ratio * 100).toFixed(0)}%`,
+                            ref: '<15% = not tinny (plated indicator)',
+                            highlight: false,
+                          },
+                          {
+                            label: 'Recording SNR',
+                            value: `${result.params.snr_db.toFixed(0)} dB`,
+                            ref: '>15 dB = usable',
+                            highlight: false,
+                          },
+                          {
+                            label: 'Drop impacts',
+                            value: `${result.params.tap_events}`,
+                            ref: 'exactly 1 drop',
+                            highlight: false,
+                          },
+                        ].map(({ label, value, ref, highlight }) => (
+                          <div
+                            key={label}
+                            className={clsx(
+                              'flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-xl px-3 py-2 text-sm',
+                              highlight && 'bg-blue-50',
+                            )}
+                          >
+                            <span className={clsx('font-semibold', highlight ? 'text-blue-700' : 'text-stone-500')}>
+                              {highlight && <span className="mr-1 text-blue-600">★</span>}
+                              {label}
+                            </span>
+                            <span className="min-w-0 text-right">
+                              <span className={clsx('font-black', highlight ? 'text-blue-800' : 'text-stone-900')}>
+                                {value}
+                              </span>
+                              <span className="ml-1 text-[11px] leading-snug text-stone-400">({ref})</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {result.explanation && (
+                    <div className="border-t border-stone-100 px-5 py-5">
+                      <p className="mb-3 text-[11px] font-black uppercase tracking-[0.22em] text-stone-400">Analysis</p>
+                      <p className="text-sm leading-relaxed text-stone-600">{result.explanation}</p>
+                    </div>
+                  )}
                 </div>
+
+                <div className="rounded-2xl border border-stone-200 bg-white/70 px-4 py-3">
+                  <p className="text-xs leading-relaxed text-stone-400">
+                    ⚠ {result.disclaimer || 'Acoustic screening only — not a guarantee of authenticity. Confirm with a jeweller before any purchase decision.'}
+                  </p>
+                </div>
+
                 {(result.low_confidence_flag || result.confidence === 'low') && (
-                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-                    <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700">Signal is ambiguous. Try again with one clean drop from 15 to 20 cm onto flat glass.</p>
+                  <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+                    <p className="text-xs text-amber-700">
+                      Signal is ambiguous. Try again with one clean drop from 15 to 20 cm onto flat glass.
+                    </p>
                   </div>
                 )}
-                <button onClick={() => navigate('/certificate-scan')} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 text-white font-semibold active:scale-[0.98]">
-                  Continue to Bill Scan <ChevronRight className="w-4 h-4" />
+
+                <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <CheckCircle className="h-5 w-5 flex-shrink-0 text-emerald-600" />
+                  <p className="text-sm font-black text-emerald-700">Acoustic test complete — next: Bill scan</p>
+                </div>
+
+                <button onClick={() => navigate('/certificate-scan')} className="w-full btn-primary">
+                  Continue to Bill Scan <ChevronRight className="w-5 h-5" />
                 </button>
                 <button onClick={returnToIntro} className="w-full btn-secondary text-sm">Try Again</button>
               </div>
