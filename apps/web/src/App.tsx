@@ -105,7 +105,7 @@ function App() {
           <Route path="/certificate-scan" element={<RequireRegistered><CertificateScan /></RequireRegistered>} />
           <Route path="/video-eval" element={<RequireRegistered><VideoEval /></RequireRegistered>} />
           <Route path="/audio-eval" element={<RequireRegistered><AudioEval /></RequireRegistered>} />
-          <Route path="/audio-remote" element={<RequireRegistered><AudioRemote /></RequireRegistered>} />
+          <Route path="/audio-remote" element={<AudioRemote />} />
           <Route path="/add-item" element={<RequireRegistered><AddItem /></RequireRegistered>} />
           <Route path="/weight" element={<RequireRegistered><WeightEntry /></RequireRegistered>} />
           <Route path="/processing" element={<RequireRegistered><Processing /></RequireRegistered>} />
