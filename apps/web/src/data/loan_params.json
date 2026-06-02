@@ -25,11 +25,11 @@
   "base_rates": {
     "repo_rate_pct": 5.25,
     "repo_rate_as_of": "Jun 2026",
-    "base_spread_pct": 6.75,
-    "starting_roi_pct": 11.0,
-    "roi_min_pct": 11.0,
-    "roi_max_pct": 28.0,
-    "formula_note": "Final ROI = current RBI repo + gold-loan base spread + cibil.spread_adj + location.roi_delta + tenure.roi_adj + ltv_risk_adj + ticket_size_adj. repo_rate_pct tracks the latest RBI MPC policy rate (5.25% as of Jun 2026); the gold-loan spread absorbs the rest of pricing so the best case (PRIME, metro, 3-mo, conservative LTV, large ticket) still bottoms near 11% p.a. Higher LTV adds a risk premium; larger tickets get a discount."
+    "base_spread_pct": 8.75,
+    "starting_roi_pct": 14.0,
+    "roi_min_pct": 14.0,
+    "roi_max_pct": 20.0,
+    "formula_note": "Final ROI = current RBI repo + gold-loan base spread + location.roi_delta + tenure.roi_adj + ltv_risk_adj + ticket_size_adj, clamped to a tight 14%-20% p.a. band so the offered rate stays unambiguous. repo_rate_pct tracks the latest RBI MPC policy rate (5.25% as of Jun 2026); the gold-loan spread absorbs the rest so a typical case sits ~15-16%."
   },
   "ltv_risk_adjusters": [
     { "up_to_ltv_pct": 65,  "roi_delta_pct": 0.00, "label": "Conservative LTV" },
