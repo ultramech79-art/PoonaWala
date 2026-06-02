@@ -137,10 +137,14 @@ export function GoldLoanApplication() {
     : []
 
   // ── User inputs ─────────────────────────────────────────────────────────────
-  const [loanAmount, setLoanAmount] = useState(() => suggestedLoan)
-  const [tenure, setTenure]         = useState(12)
+  const [loanAmount, setLoanAmount] = useState(() => (
+    state.loanAppData?.requestedLoanInr != null
+      ? clampLoanAmount(state.loanAppData.requestedLoanInr)
+      : suggestedLoan
+  ))
+  const [tenure, setTenure]         = useState(() => state.loanAppData?.tenureMonths ?? 12)
   // Default to interest_only — matches Poonawalla's actual product structure
-  const [repayType, setRepayType]   = useState<RepaymentType>('interest_only')
+  const [repayType, setRepayType]   = useState<RepaymentType>(() => state.loanAppData?.repaymentType ?? 'interest_only')
 
   useEffect(() => {
     setLoanAmount(prev => clampLoanAmount(prev))

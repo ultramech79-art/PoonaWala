@@ -93,9 +93,35 @@ export function AudioEval() {
 
   const ornament = 'ring'
   const mode     = 'drop'
-  const [phase, setPhase]         = useState<Phase>('intro')
+  const restoredResult: TapResult | null = state.tapTestResult
+    ? {
+        score: state.tapTestResult.score,
+        verdict: state.tapTestResult.label,
+        confidence: 'medium',
+        params: {
+          decay_time_ms: state.tapTestResult.decay_ms,
+          spectral_centroid_hz: 0,
+          dominant_freq_hz: state.tapTestResult.dominant_freq_hz,
+          gold_band_ratio: 0,
+          hf_ratio: 0,
+          exp_decay_r2: 0,
+          snr_db: 0,
+          tap_events: 0,
+          attack_ms: 0,
+          q_factor: 0,
+        },
+        explanation: state.tapTestResult.reasoning,
+        low_confidence_flag: false,
+        disclaimer: '',
+        valid: true,
+        reject_reason: null,
+        label: state.tapTestResult.label,
+        reasoning: state.tapTestResult.reasoning,
+      }
+    : null
+  const [phase, setPhase]         = useState<Phase>(() => restoredResult ? 'result' : 'intro')
   const [secondsLeft, setSeconds] = useState(0)
-  const [result, setResult]       = useState<TapResult | null>(null)
+  const [result, setResult]       = useState<TapResult | null>(restoredResult)
   const [error, setError]         = useState('')
   const [levelDb, setLevelDb]     = useState(-60)
   const [tapCount, setTapCount]   = useState(0)
