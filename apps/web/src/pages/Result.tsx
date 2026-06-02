@@ -236,7 +236,7 @@ export function Result() {
     REJECT:    { label: t('routing_reject_label'),    icon: AlertTriangle, action: t('routing_reject_action'),    desc: t('routing_reject_desc'),    tone: '#574D40' },
   }
 
-  const { state, reset, setResult } = useSessionStore()
+  const { state, resetAssessment, setResult } = useSessionStore()
   const [sheet, setSheet] = useState<null | 'why' | 'xai' | 'calc' | 'photos'>(null)
   const [generatedFocusUrls, setGeneratedFocusUrls] = useState<Partial<Record<CaptureType, string>>>({})
   const [focusLoading, setFocusLoading] = useState(false)
@@ -512,8 +512,8 @@ export function Result() {
     <div className="page no-scrollbar app-page-bg prequal-page-grid">
       {/* ── HEADER ─────────────────────────────────────────────── */}
       <header className="page-header sticky top-0 z-20">
-        <button id="result-home" onClick={() => { reset(); navigate('/') }}
-          className="btn-icon" aria-label="Home">
+        <button id="result-home" onClick={() => navigate('/dashboard-home')}
+          className="btn-icon" aria-label="Back to dashboard">
           <ChevronLeft className="w-5 h-5 text-stone-700" />
         </button>
         <span className="font-display font-semibold text-sm text-stone-700">{t('result_heading')}</span>
@@ -705,7 +705,7 @@ export function Result() {
           <button
             id="result-retry"
             type="button"
-            onClick={() => { reset(); navigate('/setup') }}
+            onClick={() => { resetAssessment(); navigate('/setup') }}
             className="prequal-retry-button"
           >
             <RefreshCcw className="w-4 h-4" /> {t('result_retry')}

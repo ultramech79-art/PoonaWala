@@ -109,6 +109,14 @@ export function Profile() {
     if (src) setLightbox(src)
   }
 
+  type ProfileLoanRow = {
+    requested_loan_inr?: number | null
+    eligible_loan_inr?: number | null
+    provisional_loan_inr?: number | null
+  }
+  const loanAmountForProfile = (item: ProfileLoanRow) =>
+    Number(item.requested_loan_inr ?? item.eligible_loan_inr ?? item.provisional_loan_inr) || 0
+
   const user = state.userProfile
   const predictionSessionIds = new Set(predictions.map(item => item.session_id))
   const localHistoryRows = state.assessedItems
@@ -117,6 +125,7 @@ export function Profile() {
         id: item.sessionId,
         session_id: item.sessionId,
         created_at: item.createdAt,
+        requested_loan_inr: item.sessionId === state.sessionId ? state.loanAppData?.requestedLoanInr ?? null : null,
         provisional_loan_inr: item.evalData?.provisionalLoanLowInr ?? item.result.loan_offer.band_low_inr,
         eligible_loan_inr: item.evalData?.maxLoanInr ?? item.result.loan_offer.band_high_inr,
         ltv_pct: item.evalData?.ltvFinalPct ?? item.result.loan_offer.ltv_applied_pct,
@@ -125,10 +134,8 @@ export function Profile() {
   const historyRows = [...predictions, ...localHistoryRows].sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   )
-  const cumulativeGoldValue = historyRows.reduce((sum, item) => sum + (Number(item.city_gold_value_inr) || 0), 0)
   const cumulativeLoan = historyRows.reduce((sum, item) => {
-    const loan = Number(item.eligible_loan_inr ?? item.provisional_loan_inr) || 0
-    return sum + loan
+    return sum + loanAmountForProfile(item)
   }, 0)
 
   // Group assets by session
@@ -208,14 +215,10 @@ export function Profile() {
               <div className="space-y-2">
                 <div className="rounded-2xl border border-brand-200 bg-brand-50/70 p-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brand-700">Cumulative portfolio</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="mt-2">
                     <div>
-                      <p className="text-[10px] font-semibold text-stone-500">Total loan cap</p>
+                      <p className="text-[10px] font-semibold text-stone-500">Total loan requested</p>
                       <p className="font-display text-lg font-black text-stone-950">Rs {cumulativeLoan.toLocaleString('en-IN')}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold text-stone-500">Total gold value</p>
-                      <p className="font-display text-lg font-black text-stone-950">Rs {cumulativeGoldValue.toLocaleString('en-IN')}</p>
                     </div>
                   </div>
                   <p className="mt-1 text-[11px] font-semibold text-stone-500">
@@ -229,7 +232,7 @@ export function Profile() {
                         {new Date(item.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </span>
                       <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-                        Rs {item.provisional_loan_inr?.toLocaleString('en-IN') || '--'}
+                        {loanAmountForProfile(item) > 0 ? `Rs ${loanAmountForProfile(item).toLocaleString('en-IN')}` : '--'}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-sm font-medium text-stone-700">

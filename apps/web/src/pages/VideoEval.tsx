@@ -57,14 +57,28 @@ export function VideoEval() {
   const { setLiveAuthResult, addCapture, skipCapture, setPageEvidence, state } = useSessionStore()
   const { t } = useTranslation()
   const lang = (localStorage.getItem('goldeye_lang') ?? 'en') as 'en' | 'hi'
+  const restoredResult: VideoResult | null = state.liveAuthResult
+    ? {
+        video_score: state.liveAuthResult.video_score,
+        verdict: state.liveAuthResult.verdict,
+        wear_score: state.liveAuthResult.video_score,
+        edge_substrate_score: state.liveAuthResult.video_score,
+        luster_score: state.liveAuthResult.video_score,
+        surface_originality_score: state.liveAuthResult.video_score,
+        hue_score: state.liveAuthResult.video_score,
+        video_signals: state.liveAuthResult.video_signals,
+        purity_estimate: state.liveAuthResult.purity_estimate,
+        guidance: '',
+      }
+    : null
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const framesRef = useRef<string[]>([])
 
-  const [phase, setPhase]             = useState<Phase>('intro')
+  const [phase, setPhase]             = useState<Phase>(() => restoredResult ? 'result' : 'intro')
   const [secondsLeft, setSecondsLeft] = useState(0)
-  const [result, setResult]           = useState<VideoResult | null>(null)
+  const [result, setResult]           = useState<VideoResult | null>(restoredResult)
   const [error, setError]             = useState('')
   const [showTutorial, setShowTutorial] = useState(true)
   const [recBtnActive, setRecBtnActive] = useState(false)

@@ -303,7 +303,6 @@ function buildConfidenceReasoning(
   else if (state.weightG) positives.push(`entered weight ${state.weightG}g was used`)
 
   if (evidence.billHuidMismatch) cautions.push('bill HUID did not match the item HUID')
-  if (evidence.sameItemMismatch) cautions.push('different-item signal was detected')
   if (evidence.hardMetalTrigger) cautions.push('visual metal warning was detected')
   if (evidence.audioPlated) cautions.push('the tap test hinted at possible plating (not conclusive) — manual agent verification is recommended')
   if (!evidence.photoHuidEvidence && !evidence.photoKaratEvidence && !evidence.huidVerified) {
@@ -566,6 +565,10 @@ export function Processing() {
   const facts = state.lang === 'hi' ? FACTS_HI : FACTS_EN
 
   useEffect(() => {
+    if (state.result && state.pendingAssessmentItems.length === 0) {
+      navigate('/result', { replace: true })
+      return
+    }
     if (started.current) return
     started.current = true
     STEPS.forEach(({ }, i) => setTimeout(() => setActiveStep(i), i * 450))

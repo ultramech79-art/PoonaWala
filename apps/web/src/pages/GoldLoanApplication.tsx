@@ -138,10 +138,14 @@ export function GoldLoanApplication() {
     : []
 
   // ── User inputs ─────────────────────────────────────────────────────────────
-  const [loanAmount, setLoanAmount] = useState(() => suggestedLoan)
-  const [tenure, setTenure]         = useState(12)
+  const [loanAmount, setLoanAmount] = useState(() => (
+    state.loanAppData?.requestedLoanInr != null
+      ? clampLoanAmount(state.loanAppData.requestedLoanInr)
+      : suggestedLoan
+  ))
+  const [tenure, setTenure]         = useState(() => state.loanAppData?.tenureMonths ?? 12)
   // Default to interest_only — matches Poonawalla's actual product structure
-  const [repayType, setRepayType]   = useState<RepaymentType>('interest_only')
+  const [repayType, setRepayType]   = useState<RepaymentType>(() => state.loanAppData?.repaymentType ?? 'interest_only')
 
   useEffect(() => {
     setLoanAmount(prev => clampLoanAmount(prev))
@@ -154,8 +158,11 @@ export function GoldLoanApplication() {
 
   // ── Engines ─────────────────────────────────────────────────────────────────
   const roiResult = useMemo(
-    () => computeROI(evalData.cibilTierKey, evalData.locationTier as any, tenure),
-    [evalData.cibilTierKey, evalData.locationTier, tenure],
+    () => computeROI(evalData.locationTier as any, tenure, {
+      loanAmountInr: loanAmount,
+      ltvPct: evalData.cityGoldValueInr > 0 ? (loanAmount / evalData.cityGoldValueInr) * 100 : undefined,
+    }),
+    [evalData.locationTier, tenure, loanAmount, evalData.cityGoldValueInr],
   )
 
   const emiResult = useMemo(
