@@ -153,8 +153,11 @@ export function GoldLoanApplication() {
 
   // ── Engines ─────────────────────────────────────────────────────────────────
   const roiResult = useMemo(
-    () => computeROI(evalData.cibilTierKey, evalData.locationTier as any, tenure),
-    [evalData.cibilTierKey, evalData.locationTier, tenure],
+    () => computeROI(evalData.cibilTierKey, evalData.locationTier as any, tenure, {
+      loanAmountInr: loanAmount,
+      ltvPct: evalData.cityGoldValueInr > 0 ? (loanAmount / evalData.cityGoldValueInr) * 100 : undefined,
+    }),
+    [evalData.cibilTierKey, evalData.locationTier, tenure, loanAmount, evalData.cityGoldValueInr],
   )
 
   const emiResult = useMemo(
