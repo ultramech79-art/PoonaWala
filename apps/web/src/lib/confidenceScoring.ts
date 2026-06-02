@@ -26,6 +26,7 @@ export interface FraudModifier {
 
 export interface ConfidenceEvidence {
   capturedTypes: string[]
+  onlyCoreStillCaptures: boolean
   skippedTypes: string[]
   stillCoverage: number
   has45deg: boolean
@@ -108,6 +109,9 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
   const capturedTypes = Object.keys(state.captures)
   const skippedTypes = Object.keys(state.skippedCaptures ?? {})
   const has = (type: CaptureType) => Boolean(state.captures[type])
+  const onlyCoreStillCaptures =
+    capturedTypes.length === 3 &&
+    (['top', '45deg', 'side'] as CaptureType[]).every(type => capturedTypes.includes(type))
   const stillViews = ['45deg', 'top', 'side', 'macro'] as const
   const stillCoverage = stillViews.filter(has).length / stillViews.length
 
@@ -238,6 +242,7 @@ export function buildConfidenceEvidence(result: AssessmentResult, state: Session
 
   return {
     capturedTypes,
+    onlyCoreStillCaptures,
     skippedTypes,
     stillCoverage,
     has45deg: has('45deg'),
@@ -494,6 +499,7 @@ export function computeEvidenceConfidence(result: AssessmentResult, state: Sessi
     { id: 'same_item_mismatch', kind: 'multiplier', active: evidence.sameItemMismatch, value: 0.30, detail: 'different jewellery detected across stages' },
     { id: 'bill_huid_mismatch', kind: 'multiplier', active: evidence.billHuidMismatch, value: 0.45, detail: 'bill HUID contradicts the entered / scanned HUID' },
     { id: 'audio_plated', kind: 'multiplier', active: evidence.audioPlated, value: 0.92, detail: 'tap/acoustic test hints at possible plating — NOT conclusive, so only a small ~8% caution reduction; routed to manual agent verification' },
+    { id: 'three_core_stills_only_ceiling', kind: 'ceiling', active: evidence.onlyCoreStillCaptures, value: 0.46, detail: 'only top / 45-degree / side photos captured — keep confidence below 47% until stronger evidence is added' },
     { id: 'no_hallmark_photo_ceiling', kind: 'ceiling', active: evidence.huidPresent && !evidence.hasMacro && !evidence.photoHuidEvidence && !evidence.huidVerified, value: noHallmarkPhotoCeiling, detail: 'unverified HUID with no hallmark photo — ceiling raised by corroboration; BIS verification removes this cap' },
     { id: 'no_identity_ceiling', kind: 'ceiling', active: noIdentity, value: 0.47, detail: 'no HUID / karat established — photos alone cannot exceed ~47%; routed to manual agent verification' },
   ]
