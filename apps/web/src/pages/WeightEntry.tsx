@@ -16,7 +16,7 @@ import {
   Volume2,
   User,
 } from 'lucide-react'
-import { assetImageDataUrlAPI, estimateWeightAPI, listMyAssetsAPI, urlToDataUrl, type GoldKarat, type JewelryType, type UserAsset, type WeightEstimateResult } from '../lib/api'
+import { estimateWeightAPI, urlToDataUrl, type GoldKarat, type JewelryType, type WeightEstimateResult } from '../lib/api'
 import { useSessionStore } from '../store/session'
 import { speak } from '../lib/tts'
 
@@ -45,12 +45,6 @@ const JEWELRY_TYPES: Array<{ value: JewelryType; label: string }> = [
 ]
 
 const KARATS: GoldKarat[] = [22, 24, 18]
-const SLOT_FRAME_TYPE = {
-  top: 'top',
-  angle: '45deg',
-  side: 'side',
-} as const
-
 const ANALYSING_MSG_KEYS = [
   'weight_analysing_coin',
   'weight_analysing_outline',
@@ -58,35 +52,7 @@ const ANALYSING_MSG_KEYS = [
   'weight_analysing_done',
 ]
 
-type WeightSlot = keyof typeof SLOT_FRAME_TYPE
-type WeightFrameType = (typeof SLOT_FRAME_TYPE)[WeightSlot]
-
-function normalizeJewelryType(value: unknown) {
-  const raw = String(value || '').trim().toLowerCase()
-  const aliases: Record<string, JewelryType | 'earring'> = {
-    bangles: 'bangle',
-    bangle: 'bangle',
-    rings: 'ring',
-    ring: 'ring',
-    necklaces: 'necklace',
-    necklace: 'necklace',
-    chains: 'chain',
-    chain: 'chain',
-    bracelets: 'bracelet',
-    bracelet: 'bracelet',
-    pendants: 'pendant',
-    pendant: 'pendant',
-    earrings: 'earring',
-    earring: 'earring',
-    other: 'irregular',
-    irregular: 'irregular',
-  }
-  return aliases[raw] || raw
-}
-
-function assetJewelryType(asset: UserAsset) {
-  return normalizeJewelryType(asset.metadata?.jewelry_type ?? asset.metadata?.jewellery_type)
-}
+type WeightSlot = 'top' | 'angle' | 'side'
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -184,9 +150,6 @@ export function WeightEntry() {
   const [error, setError] = useState('')
   const [result, setResult] = useState<WeightEstimateResult | null>(null)
   const [jewelryPoint, setJewelryPoint] = useState<{ x: number; y: number } | null>(null)
-  const [savedAssets, setSavedAssets] = useState<UserAsset[]>([])
-  const [savedAssetSrcs, setSavedAssetSrcs] = useState<Record<number, string>>({})
-  const [savedLoading, setSavedLoading] = useState(false)
 
   useEffect(() => {
     if (mode === 'manual') {
@@ -195,40 +158,6 @@ export function WeightEntry() {
       speak(t('weight_speak_ai'))
     }
   }, [mode, t])
-
-  useEffect(() => {
-    if (!state.authToken || state.authToken === 'guest') {
-      setSavedAssets([])
-      return
-    }
-    let cancelled = false
-    setSavedLoading(true)
-    listMyAssetsAPI(state.authToken)
-      .then(assets => {
-        if (cancelled) return
-        setSavedAssets(assets.filter(asset =>
-          (asset.asset_kind === 'verified_view' || asset.asset_kind === 'jewellery_capture') &&
-          Object.values(SLOT_FRAME_TYPE).includes(asset.frame_type as WeightFrameType)
-        ))
-      })
-      .catch(() => {
-        if (!cancelled) setSavedAssets([])
-      })
-      .finally(() => {
-        if (!cancelled) setSavedLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [state.authToken])
-
-  useEffect(() => {
-    if (!state.authToken || state.authToken === 'guest') return
-    savedAssets.forEach(asset => {
-      if (savedAssetSrcs[asset.id]) return
-      assetImageDataUrlAPI(state.authToken!, asset.id)
-        .then(src => setSavedAssetSrcs(prev => ({ ...prev, [asset.id]: src })))
-        .catch(() => {})
-    })
-  }, [savedAssets, savedAssetSrcs, state.authToken])
 
   // Auto-populate from CaptureFlow captures (top, 45deg, side)
   useEffect(() => {
@@ -306,43 +235,6 @@ export function WeightEntry() {
   }, [loading])
 
   const confidencePct = useMemo(() => Math.round((result?.confidence.score ?? 0) * 100), [result])
-
-  function savedForSlot(slot: WeightSlot) {
-    const expectedFrame = SLOT_FRAME_TYPE[slot]
-    const selectedType = normalizeJewelryType(jewelryType)
-    return savedAssets
-      .filter(asset => (
-        asset.frame_type === expectedFrame &&
-        (selectedType === 'auto' || assetJewelryType(asset) === selectedType)
-      ))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      .slice(0, 8)
-  }
-
-  async function applySavedAsset(slot: WeightSlot, asset: UserAsset) {
-    const expectedFrame = SLOT_FRAME_TYPE[slot]
-    if (asset.frame_type !== expectedFrame) {
-      setError(`That saved image is not a ${expectedFrame} view.`)
-      return
-    }
-    const selectedType = normalizeJewelryType(jewelryType)
-    if (selectedType !== 'auto' && assetJewelryType(asset) !== selectedType) {
-      setError(`That saved image is not a ${jewelryType} item.`)
-      return
-    }
-    setError('')
-    setResult(null)
-    if (slot === 'top') setJewelryPoint(null)
-    const imageUrl = savedAssetSrcs[asset.id] || (
-      state.authToken && state.authToken !== 'guest'
-        ? await assetImageDataUrlAPI(state.authToken, asset.id)
-        : await urlToDataUrl(asset.public_url || '')
-    )
-    setFileNames(current => ({ ...current, [slot]: `saved_${expectedFrame}.jpg` }))
-    if (slot === 'top') setTopImageDataUrl(imageUrl)
-    if (slot === 'angle') setAngleImageDataUrl(imageUrl)
-    if (slot === 'side') setSideImageDataUrl(imageUrl)
-  }
 
   async function loadFile(slot: WeightSlot, file: File | undefined) {
     if (!file) return
@@ -453,7 +345,6 @@ export function WeightEntry() {
     aspect?: string
   }) {
     const isTop = slot === 'top'
-    const saved = savedForSlot(slot)
     return (
       <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-white p-3 text-center">
         <div
@@ -491,33 +382,6 @@ export function WeightEntry() {
             <FileImage className="h-4 w-4 flex-shrink-0" />
             <span className="truncate">{fileName}</span>
           </div>
-        )}
-        {saved.length > 0 && (
-          <div className="mt-4 w-full text-left">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-stone-400">
-              Saved verified {title}
-            </p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {saved.map(asset => (
-                <button
-                  key={asset.id}
-                  type="button"
-                  onClick={() => applySavedAsset(slot, asset)}
-                  className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  title={`Use saved ${title}`}
-                >
-                  {savedAssetSrcs[asset.id] ? (
-                    <img src={savedAssetSrcs[asset.id]} alt={`Saved ${title}`} className="h-full w-full object-cover" />
-                  ) : (
-                    <FileImage className="m-auto h-5 w-5 text-stone-400" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {savedLoading && saved.length === 0 && (
-          <p className="mt-3 text-[10px] font-medium text-stone-400">Checking saved verified views...</p>
         )}
       </div>
     )

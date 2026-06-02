@@ -4,11 +4,11 @@ import { useTranslation } from 'react-i18next'
 import { useSessionStore, type CaptureType } from '../store/session'
 import { Camera } from '../components/Camera'
 import { TutorialOverlay } from '../components/TutorialOverlay'
-import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, ImageIcon, PlayCircle, User, X } from 'lucide-react'
+import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music, Video, Shield, Info, ChevronDown, PlayCircle, User, X } from 'lucide-react'
 import { speak, prefetchSpeech } from '../lib/tts'
 import { localizeFeedback } from '../lib/feedbackMessages'
 import { clsx } from 'clsx'
-import { assetImageDataUrlAPI, evaluateFrameAPI, listMyAssetsAPI, verifyHuidAPI, uploadUserAssetAPI, type FrameEvalResult, type HuidVerificationResult, type UserAsset } from '../lib/api'
+import { evaluateFrameAPI, verifyHuidAPI, type FrameEvalResult, type HuidVerificationResult } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
 import Lottie from 'lottie-react'
 import goldAnim from '../assets/gold-analysis.json'
@@ -44,39 +44,6 @@ interface StepEval {
   state: EvalState
   result?: FrameEvalResult
   dataUrl?: string
-}
-
-const WEIGHT_VIEW_TYPES = new Set<CaptureType>(['top', '45deg', 'side'])
-
-function isWeightView(type: CaptureType) {
-  return WEIGHT_VIEW_TYPES.has(type)
-}
-
-function normalizeJewelryType(value: unknown) {
-  const raw = String(value || '').trim().toLowerCase()
-  const aliases: Record<string, string> = {
-    bangles: 'bangle',
-    bangle: 'bangle',
-    rings: 'ring',
-    ring: 'ring',
-    necklaces: 'necklace',
-    necklace: 'necklace',
-    chains: 'chain',
-    chain: 'chain',
-    bracelets: 'bracelet',
-    bracelet: 'bracelet',
-    pendants: 'pendant',
-    pendant: 'pendant',
-    earrings: 'earring',
-    earring: 'earring',
-    other: 'irregular',
-    irregular: 'irregular',
-  }
-  return aliases[raw] || raw
-}
-
-function assetJewelryType(asset: UserAsset) {
-  return normalizeJewelryType(asset.metadata?.jewelry_type ?? asset.metadata?.jewellery_type)
 }
 
 /**
@@ -203,48 +170,7 @@ export function CaptureFlow() {
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const spokenStep = useRef(-1)
-  const [previousAssets, setPreviousAssets] = useState<UserAsset[]>([])
-  const [previousAssetSrcs, setPreviousAssetSrcs] = useState<Record<number, string>>({})
-  // Loading state kept for async asset fetch (even if value not visually used)
-  const [, setLoadingPrevious] = useState(false)
   const step = STEPS[stepIdx]
-  const selectedJewelryType = normalizeJewelryType((state.pageEvidence.capture as { jewelryType?: unknown; jewelleryType?: unknown } | undefined)?.jewelryType ?? (state.pageEvidence.capture as { jewelleryType?: unknown } | undefined)?.jewelleryType)
-
-  // Fetch previously uploaded images from user's profile
-  useEffect(() => {
-    if (!state.authToken) return
-    let cancelled = false
-    setLoadingPrevious(true)
-    listMyAssetsAPI(state.authToken)
-      .then(assets => {
-        if (!cancelled) {
-          setPreviousAssets(assets.filter(a =>
-            a.frame_type &&
-            isWeightView(a.frame_type as CaptureType) &&
-            (a.asset_kind === 'verified_view' || a.asset_kind === 'jewellery_capture') &&
-            (!selectedJewelryType || assetJewelryType(a) === selectedJewelryType)
-          ))
-        }
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoadingPrevious(false) })
-    return () => { cancelled = true }
-  }, [state.authToken, selectedJewelryType])
-
-  useEffect(() => {
-    if (!state.authToken || state.authToken === 'guest') return
-    previousAssets.forEach(asset => {
-      if (previousAssetSrcs[asset.id]) return
-      assetImageDataUrlAPI(state.authToken!, asset.id)
-        .then(src => setPreviousAssetSrcs(prev => ({ ...prev, [asset.id]: src })))
-        .catch(() => {})
-    })
-  }, [previousAssets, previousAssetSrcs, state.authToken])
-
-  const previousForStep = previousAssets
-    .filter(a => a.frame_type === step.type)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 12)
 
   const currentEval = evals[stepIdx]
   const evalState = currentEval?.state ?? 'idle'
@@ -375,16 +301,6 @@ export function CaptureFlow() {
         setCaptured(prev => new Set([...prev, currentStep]))
       }
 
-      if (result.approved && state.authToken && state.authToken !== 'guest' && !isDemo && isWeightView(currentStepConfig.type)) {
-        uploadUserAssetAPI(state.authToken, blob, 'verified_view', sessionId, currentStepConfig.type, {
-          jewelry_type: selectedJewelryType || null,
-          jewellery_type: selectedJewelryType || null,
-        })
-          .then(asset => {
-            setPreviousAssets(prev => [asset, ...prev.filter(item => item.id !== asset.id)])
-          })
-          .catch(err => console.error('[CaptureFlow] Verified view upload failed:', err))
-      }
     } catch (err) {
       console.error('[CaptureFlow] Evaluation attempt failed:', err)
       const fallback = t('speak_image_accepted')
@@ -403,7 +319,7 @@ export function CaptureFlow() {
       })
       speak(fallback)
     }
-  }, [stepIdx, addCapture, setPageEvidence, setHuid, setScannedKarat, state.sessionId, state.authToken, state.captures, state.skippedCaptures, initSession, t, selectedJewelryType])
+  }, [stepIdx, addCapture, setPageEvidence, setHuid, setScannedKarat, state.sessionId, state.captures, state.skippedCaptures, initSession, t])
 
   const handleRetake = () => {
     speak(t('speak_retake') + ' ' + step.voiceGuide)
@@ -479,40 +395,6 @@ export function CaptureFlow() {
     }
   }, [step.demoUrl, handleCapture])
 
-  const handleUsePreviousUpload = useCallback(async (asset: UserAsset) => {
-    if (asset.frame_type !== step.type || !isWeightView(step.type)) {
-      speak(t('speak_wrong_view'))
-      return
-    }
-    if (selectedJewelryType && assetJewelryType(asset) !== selectedJewelryType) {
-      speak(t('speak_wrong_type'))
-      return
-    }
-    if (!state.authToken || state.authToken === 'guest') return
-    speak(t('speak_analysing'))
-    setEvals(prev => ({ ...prev, [stepIdx]: { state: 'evaluating', dataUrl: undefined } }))
-    try {
-      const dataUrl = previousAssetSrcs[asset.id] || await assetImageDataUrlAPI(state.authToken, asset.id)
-      const res = await fetch(dataUrl)
-      const blob = await res.blob()
-      addCapture({ type: step.type, blob, dataUrl, timestamp: Date.now() })
-      setCaptured(prev => new Set([...prev, stepIdx]))
-      // Mark as approved directly — these were already approved in a prior session
-      setEvals(prev => ({
-        ...prev,
-        [stepIdx]: {
-          state: 'approved',
-          dataUrl,
-          result: { approved: true, quality_score: 0.95, feedback: 'Using previously approved image.', issues: [], detected: {} },
-        },
-      }))
-      speak(t('speak_prev_loaded'))
-    } catch (err) {
-      console.error('[CaptureFlow] Failed to load previous upload:', err)
-      setEvals(prev => ({ ...prev, [stepIdx]: { state: 'idle', dataUrl: undefined } }))
-      speak(t('speak_prev_failed'))
-    }
-  }, [step.type, stepIdx, addCapture, t, selectedJewelryType, previousAssetSrcs, state.authToken])
 
   const next = () => {
     if (stepIdx < STEPS.length - 1) {
@@ -647,44 +529,16 @@ export function CaptureFlow() {
           </div>
         </div>
 
-        {/* Demo / Previous Upload Buttons */}
-        {previousForStep.length > 0 && (
-          <div className="px-5 pb-2 space-y-2">
-            <div className="flex gap-2">
-            {previousForStep.length > 0 && step.type !== 'macro' && step.type !== 'selfie' && (
-              <span className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-700 font-semibold shadow-xs">
-                <ImageIcon className="w-4 h-4" />
-                {previousForStep.length} saved {step.type} view{previousForStep.length === 1 ? '' : 's'}
-              </span>
-            )}
-            </div>
-            {previousForStep.length > 0 && step.type !== 'macro' && step.type !== 'selfie' && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {previousForStep.map((asset, index) => {
-                  const src = previousAssetSrcs[asset.id]
-                  return (
-                    <button
-                      key={asset.id}
-                      onClick={() => handleUsePreviousUpload(asset)}
-                      disabled={evalState === 'evaluating'}
-                      className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 disabled:opacity-50"
-                      title={`Use saved ${step.type} view`}
-                    >
-                      {src ? (
-                        <img src={src} className="h-full w-full object-cover" alt="" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <ImageIcon className="h-5 w-5 text-emerald-600" />
-                        </div>
-                      )}
-                      <span className="absolute bottom-0 inset-x-0 bg-black/50 px-1 py-0.5 text-[9px] font-bold text-white">
-                        {index === 0 ? 'Latest' : `#${index + 1}`}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+        {/* Demo Button */}
+        {step.demoUrl && (
+          <div className="px-5 pb-2">
+            <button
+              onClick={() => setShowDemo(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-[10px] text-brand-600 hover:bg-brand-100 transition-colors font-medium"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
+              Enter Example Demo
+            </button>
           </div>
         )}
 
