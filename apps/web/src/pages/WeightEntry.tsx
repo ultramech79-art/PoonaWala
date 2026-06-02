@@ -317,18 +317,6 @@ export function WeightEntry() {
     navigate('/add-item')
   }
 
-  function skipWeightEstimate() {
-    setWeight(null)
-    setPageEvidence('weight', {
-      skipped: true,
-      source: 'skipped',
-      estimatedG: null,
-      confidence: null,
-    })
-    savePendingAssessmentItem()
-    navigate('/add-item')
-  }
-
   function UploadSlot({
     slot,
     title,
@@ -471,9 +459,6 @@ export function WeightEntry() {
         <div className="space-y-3 border-t border-stone-200 px-5 pb-6 pt-4">
           <button onClick={continueWithManual} disabled={!manualValid} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-stone-950 text-white font-semibold transition-colors active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed">
             {t('continue')} <ArrowRight className="h-4 w-4" />
-          </button>
-          <button onClick={skipWeightEstimate} disabled={loading} className="w-full py-2 text-sm font-medium text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-30">
-            {t('weight_skip_btn')}
           </button>
         </div>
       </div>
@@ -688,9 +673,6 @@ export function WeightEntry() {
         </button>
         <button onClick={continueFlow} disabled={!result} className="btn-secondary w-full text-sm disabled:opacity-40">
           {t('weight_continue_estimate')} <ArrowRight className="h-4 w-4" />
-        </button>
-        <button onClick={skipWeightEstimate} disabled={loading} className="w-full py-2 text-sm font-medium text-stone-400 hover:text-stone-600 transition-colors disabled:opacity-30">
-          {t('weight_skip_btn')}
         </button>
       </div>
     </div>
