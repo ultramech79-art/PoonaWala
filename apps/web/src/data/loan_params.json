@@ -23,11 +23,24 @@
     "circular_reference": "RBI Lending Against Gold & Silver Collateral Directions, 2025 (effective 1 Apr 2026)"
   },
   "base_rates": {
-    "repo_rate_pct": 6.50,
-    "base_spread_pct": 5.50,
+    "repo_rate_pct": 5.25,
+    "repo_rate_as_of": "Jun 2026",
+    "base_spread_pct": 6.75,
     "starting_roi_pct": 11.0,
-    "formula_note": "Final ROI = repo_rate_pct + base_spread_pct + cibil.spread_adj + location.roi_delta + tenure.roi_adj. Best case (PRIME, metro, 3-mo) bottoms at Poonawalla's advertised 11% p.a."
+    "roi_min_pct": 11.0,
+    "roi_max_pct": 28.0,
+    "formula_note": "Final ROI = current RBI repo + gold-loan base spread + cibil.spread_adj + location.roi_delta + tenure.roi_adj + ltv_risk_adj + ticket_size_adj. repo_rate_pct tracks the latest RBI MPC policy rate (5.25% as of Jun 2026); the gold-loan spread absorbs the rest of pricing so the best case (PRIME, metro, 3-mo, conservative LTV, large ticket) still bottoms near 11% p.a. Higher LTV adds a risk premium; larger tickets get a discount."
   },
+  "ltv_risk_adjusters": [
+    { "up_to_ltv_pct": 65,  "roi_delta_pct": 0.00, "label": "Conservative LTV" },
+    { "up_to_ltv_pct": 75,  "roi_delta_pct": 0.25, "label": "Standard LTV" },
+    { "up_to_ltv_pct": 100, "roi_delta_pct": 0.50, "label": "High LTV" }
+  ],
+  "ticket_size_adjusters": [
+    { "min_inr": 500000, "roi_delta_pct": -0.25, "label": "Large-ticket discount" },
+    { "min_inr": 100000, "roi_delta_pct": 0.00,  "label": "Standard ticket" },
+    { "min_inr": 0,      "roi_delta_pct": 0.25,  "label": "Small-ticket premium" }
+  ],
   "collateral_model": {
     "note": "LTV follows the RBI 2025 tiered ceiling (85% ≤₹2.5L, 80% ≤₹5L, 75% above) and is offered against the assessment CONFIDENCE SCORE. The provisional (offered-now) LTV scales from a 60% floor at the 0.47 acceptance cutoff up to the full tier ceiling at the 0.90 full-trust anchor; the final LTV (post agent/branch physical verification) is always the full tier ceiling. Purity affects gold VALUE through the 24K/22K/18K rate, not through an LTV haircut. CIBIL does NOT affect LTV. Location does NOT affect LTV. The confidence score already encodes HUID, hallmark, photo, purity, weight, bill and video evidence — LTV does not re-penalise those.",
     "ltv_factors": ["rbi_tier_ceiling", "assessment_confidence", "gold_type"],
