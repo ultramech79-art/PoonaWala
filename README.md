@@ -551,6 +551,6 @@ goldeye/
 
 **GoldEye — Turning every smartphone into a gold loan branch.**
 
-Built for Poonawala Fincorp &nbsp;·&nbsp; Proprietary — All rights reserved.
+Built for Poonawala Fincorp &nbsp;·&nbsp; Proprietary — All rights reserved. Presented on TenzorX hackahton on 2nd June,2026.
 
 </div>
