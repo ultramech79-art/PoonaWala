@@ -169,12 +169,11 @@ def _invalid_response(reason: str, mode: str = "tap") -> AudioEvalResponse:
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
-# Weighted result = physics signal-processing + Gemini perceptual audio judgment.
-# Both look at the same thing (resonant ring vs dead thud) from different angles;
-# blending them is more robust than either alone, especially for light rings where
-# the physics decay is weak but Gemini can still hear a clear ringing tone.
-PHYS_WEIGHT   = 0.5
-GEMINI_WEIGHT = 0.5
+# Scoring is PHYSICS-ONLY: the deterministic _physics_score (resonant ring-down
+# decay + tonality) is the single source of truth for the number. Gemini LISTENS to
+# the clip only to write the human-readable explanation and flag signal-quality
+# problems — it NEVER edits the score. This restores the original transparent physics
+# rule we shipped earlier (no LLM weighting in the number).
 
 _ORNAMENT_RANGES = {
     "ring":     {"decay_lo": 60,  "decay_hi": 300, "centroid_lo": 400, "centroid_hi": 1000},
@@ -507,19 +506,17 @@ async def audio_eval(req: AudioEvalRequest):
     phys_score, reasons = _physics_score(physics, item_type, mode)
     physics["_reasons"] = reasons
 
-    # ── Gemini LISTENS to the clip and rates gold likelihood (0-100) ───────────
-    explanation, low_conf, gemini_score = await _gemini_audio_eval(
+    # ── Gemini LISTENS to the clip only to EXPLAIN (never edits the score) ─────
+    explanation, low_conf, _gemini_score = await _gemini_audio_eval(
         arr, sr, physics, phys_score, item_type, mode, lang
     )
 
-    # ── Weighted result: physics signal-processing + Gemini perceptual judgment ─
-    if gemini_score is not None:
-        final_score = int(round(PHYS_WEIGHT * phys_score + GEMINI_WEIGHT * gemini_score))
-        score_source = f"weighted(phys={phys_score}*{PHYS_WEIGHT:g}+gemini={gemini_score}*{GEMINI_WEIGHT:g})"
-    else:
-        final_score = phys_score
-        score_source = f"physics_only(phys={phys_score}; gemini_unavailable)"
-    final_score = max(3, min(97, final_score))
+    # ── Score is PHYSICS-ONLY ──────────────────────────────────────────────────
+    # The deterministic _physics_score is the single source of truth. Gemini's
+    # gold_score is intentionally IGNORED for scoring (it only feeds the explanation
+    # + low-confidence flag), so the same recording always yields the same number.
+    final_score = max(3, min(97, phys_score))
+    score_source = "physics_only"
 
     logger.info(
         f"audio_eval [{item_type}/{mode}] source={score_source} score={final_score} "
