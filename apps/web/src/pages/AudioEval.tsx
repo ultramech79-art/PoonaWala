@@ -20,13 +20,6 @@ import { speak } from '../lib/tts'
 import { localizeAudioVerdict } from '../lib/feedbackMessages'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { useTranslation } from 'react-i18next'
-import { AudioDemoControl } from '../components/AudioDemoControl'
-import {
-  REMOTE_AUDIO_DEMO_CHANNEL,
-  buildAudioDemoResult,
-  consumeRemoteAudioDemoCommand,
-  type AudioDemoOutcome,
-} from '../lib/audioDemoOverride'
 
 const AUDIO_DURATION_MS = 5_000   // 5 s: one drop from 15–20 cm on glass
 
@@ -130,42 +123,12 @@ export function AudioEval() {
   const lastTapRef  = useRef(0)
   const audioAttemptRef = useRef(0)
   const analysisRunRef = useRef(0)
-  const demoResultSelectedRef = useRef(false)
 
   // Speak voice guide on intro
   useEffect(() => {
     const timer = setTimeout(() => speak(t('voice_audio')), 500)
     return () => clearTimeout(timer)
   }, [t])
-
-  useEffect(() => {
-    if (phase === 'result') return
-
-    let cancelled = false
-    let inFlight = false
-
-    const pollRemoteCommand = async () => {
-      if (cancelled || inFlight || demoResultSelectedRef.current) return
-      inFlight = true
-      try {
-        const command = await consumeRemoteAudioDemoCommand(REMOTE_AUDIO_DEMO_CHANNEL)
-        if (!cancelled && command.outcome && !demoResultSelectedRef.current) {
-          showDemoResult(command.outcome, Date.now())
-        }
-      } catch (error) {
-        console.warn('[AudioDemoRemote] poll failed:', error)
-      } finally {
-        inFlight = false
-      }
-    }
-
-    pollRemoteCommand()
-    const pollTimer = window.setInterval(pollRemoteCommand, 350)
-    return () => {
-      cancelled = true
-      window.clearInterval(pollTimer)
-    }
-  }, [phase, mode, ornament])
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach(t => t.stop())
@@ -196,7 +159,6 @@ export function AudioEval() {
   async function openMic() {
     setError('')
     setTapCount(0)
-    demoResultSelectedRef.current = false
     tapCountRef.current = 0
     peakDbRef.current = -60
     chunksRef.current = []
@@ -227,7 +189,7 @@ export function AudioEval() {
     const attemptId = audioAttemptRef.current + 1
     audioAttemptRef.current = attemptId
     const shouldContinueAttempt = () =>
-      audioAttemptRef.current === attemptId && !demoResultSelectedRef.current
+      audioAttemptRef.current === attemptId
 
     chunksRef.current = []
     lastTapRef.current = 0
@@ -271,7 +233,7 @@ export function AudioEval() {
     const runId = analysisRunRef.current + 1
     analysisRunRef.current = runId
     const shouldApplyAnalysis = () =>
-      analysisRunRef.current === runId && !demoResultSelectedRef.current
+      analysisRunRef.current === runId
 
     try {
       const total = chunksRef.current.reduce((n, c) => n + c.length, 0)
@@ -327,40 +289,8 @@ export function AudioEval() {
     if (shouldApplyAnalysis()) setPhase('result')
   }
 
-  function showDemoResult(outcome: Exclude<AudioDemoOutcome, 'off'>, updatedAt: number) {
-    audioAttemptRef.current += 1
-    demoResultSelectedRef.current = true
-    analysisRunRef.current += 1
-    cancelAnimationFrame(levelRafRef.current)
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    streamRef.current = null
-    audioCtxRef.current?.close().catch(() => {})
-    audioCtxRef.current = null
-    const data = buildAudioDemoResult({ outcome, mode, ornament, updatedAt }) as TapResult
-    setError('')
-    setShowTutorial(false)
-    setResult(data)
-    setTapTestResult(data as any)
-    setPageEvidence('audio', {
-      skipped: false,
-      captured: true,
-      analysed: true,
-      ignoredForConfidence: true,
-      score: data.score,
-      valid: data.valid,
-      confidence: data.confidence,
-      verdict: data.verdict,
-      mode,
-      ornament,
-      demoOverride: true,
-      demoOutcome: outcome,
-    })
-    setPhase('result')
-  }
-
   function returnToIntro() {
     audioAttemptRef.current += 1
-    demoResultSelectedRef.current = false
     cancelAnimationFrame(levelRafRef.current)
     streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null
     audioCtxRef.current?.close().catch(() => {}); audioCtxRef.current = null
@@ -524,10 +454,8 @@ export function AudioEval() {
         {/* ANALYZING */}
         {phase === 'analyzing' && (
           <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in">
-            <div className="relative -mx-5 flex w-[calc(100%+2.5rem)] items-center justify-center">
-              <AudioDemoControl onOutcomeSelect={(outcome, updatedAt) => { if (outcome !== 'off') showDemoResult(outcome, updatedAt) }} />
-              <img src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif" alt="Analysing…" className="w-44 h-44 object-contain" />
-            </div>
+            <img src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif" alt="Analysing…" className="w-44 h-44 object-contain" />
+
             <div className="text-center mt-2">
               <p className="font-bold text-stone-900 text-base tracking-tight">Analysing acoustic signature</p>
               <p className="text-stone-400 text-sm mt-1">Measuring decay profile and resonance</p>
