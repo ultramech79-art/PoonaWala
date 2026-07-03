@@ -98,6 +98,7 @@ async def estimate_weight(req: WeightEstimateRequest):
             "side_vlm_roi": side_vlm_roi,
         }
     except WeightEstimationError as exc:
+        logger.warning("Weight estimation rejected: code=%s message=%s", exc.code, exc.message)
         raise HTTPException(
             status_code=422,
             detail={

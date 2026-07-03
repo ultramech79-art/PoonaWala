@@ -427,6 +427,13 @@ export function AudioEval() {
         </div>
       </div>
 
+      {/* Hidden demo pass/fail overrides — mounted across the active capture phases
+          (ready → recording → analyzing) so a tap reliably lands instead of only
+          during the brief analyzing window. */}
+      {(phase === 'ready' || phase === 'recording' || phase === 'analyzing') && (
+        <AudioDemoControl onOutcomeSelect={(outcome, updatedAt) => { if (outcome !== 'off') showDemoResult(outcome, updatedAt) }} />
+      )}
+
       <div className="px-5 py-5 space-y-4">
 
         {/* INTRO */}
@@ -525,7 +532,6 @@ export function AudioEval() {
         {phase === 'analyzing' && (
           <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in">
             <div className="relative -mx-5 flex w-[calc(100%+2.5rem)] items-center justify-center">
-              <AudioDemoControl onOutcomeSelect={(outcome, updatedAt) => { if (outcome !== 'off') showDemoResult(outcome, updatedAt) }} />
               <img src="/assets/4aee05b8-1171-11ee-aebc-033b1299bb801-ezgif.com-gif-maker.gif" alt="Analysing…" className="w-44 h-44 object-contain" />
             </div>
             <div className="text-center mt-2">

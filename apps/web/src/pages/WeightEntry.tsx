@@ -134,7 +134,9 @@ export function WeightEntry() {
   const [sideImageDataUrl, setSideImageDataUrl] = useState<string | null>(null)
   const [fileNames, setFileNames] = useState({ top: '', angle: '', side: '' })
   const [jewelryType, setJewelryType] = useState<JewelryType>('auto')
-  const [karat, setKarat] = useState<GoldKarat>((state.scannedKarat as GoldKarat) || 22)
+  const [karat, setKarat] = useState<GoldKarat>(
+    KARATS.includes(state.scannedKarat as GoldKarat) ? (state.scannedKarat as GoldKarat) : 22,
+  )
   // Step 1 = manual weight entry, Step 2 = AI photo estimate.
   const [mode, setMode] = useState<'manual' | 'ai'>('manual')
   // The bill/certificate weight is ground truth — prefill the manual entry with it.
