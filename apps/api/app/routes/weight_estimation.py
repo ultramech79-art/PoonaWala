@@ -39,6 +39,7 @@ async def estimate_weight(req: WeightEstimateRequest):
         angle_jewelry_bbox = None
         side_jewelry_point = None
         side_jewelry_bbox = None
+        coin_hint = None
         vlm_validated = False
         jewelry_type = req.jewelry_type
         if req.use_vlm_roi:
@@ -53,6 +54,7 @@ async def estimate_weight(req: WeightEstimateRequest):
             if jewelry_point is None:
                 jewelry_point = vlm_roi["jewellery_point"]
             jewelry_bbox = vlm_roi["jewellery_bbox"]
+            coin_hint = vlm_roi.get("coin_point")
             angle_jewelry_point = angle_vlm_roi["jewellery_point"]
             angle_jewelry_bbox = angle_vlm_roi["jewellery_bbox"]
             side_jewelry_point = side_vlm_roi["jewellery_point"]
@@ -85,6 +87,7 @@ async def estimate_weight(req: WeightEstimateRequest):
             angle_jewelry_bbox=angle_jewelry_bbox,
             side_jewelry_point=side_jewelry_point,
             side_jewelry_bbox=side_jewelry_bbox,
+            coin_hint=coin_hint,
             vlm_validated=vlm_validated,
         )
         logger.info(
