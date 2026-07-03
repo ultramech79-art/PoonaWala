@@ -140,7 +140,7 @@ def _validate_quality(q: ImageQuality) -> list[str]:
     return issues
 
 
-def _detect_rs10_coin(img: np.ndarray) -> CoinDetection:
+def _detect_rs10_coin(img: np.ndarray, coin_hint: Optional[dict[str, float]] = None) -> CoinDetection:
     h0, w0 = img.shape[:2]
     detect_scale = min(1.0, 640.0 / float(max(h0, w0)))
     work = img if detect_scale >= 0.999 else cv2.resize(
@@ -175,6 +175,17 @@ def _detect_rs10_coin(img: np.ndarray) -> CoinDetection:
             "Place a Rs 10 coin in the image. The reference object is mandatory for scale.",
         )
 
+    # VLM coin-location hint (normalized 0-1 in full image) -> work-image pixels.
+    # A gold ring is round and similar in size to the coin, so the geometric/colour
+    # scores alone can lock onto the ring. When the VLM tells us where the coin is,
+    # we strongly favour the Hough candidate nearest that location.
+    hint_px: Optional[tuple[float, float]] = None
+    if coin_hint and coin_hint.get("x") is not None and coin_hint.get("y") is not None:
+        try:
+            hint_px = (float(coin_hint["x"]) * w, float(coin_hint["y"]) * h)
+        except (TypeError, ValueError):
+            hint_px = None
+
     candidates = found
     best: Optional[CoinDetection] = None
     best_score = -1.0
@@ -194,6 +205,12 @@ def _detect_rs10_coin(img: np.ndarray) -> CoinDetection:
         neutral_metal = max(0.0, min(1.0, 1.0 - float(np.mean(sat_inside)) / 95.0))
         size_prior = 1.0 - min(1.0, abs((2 * radius / min_side) - 0.14) / 0.22)
         score = 0.34 * edge_support + 0.22 * texture + 0.22 * size_prior + 0.22 * neutral_metal
+        if hint_px is not None:
+            dist_to_hint = float(np.hypot(cx - hint_px[0], cy - hint_px[1]))
+            proximity = float(np.exp(-((dist_to_hint / (0.16 * min_side)) ** 2)))
+            # Dominant term: the candidate on the VLM-identified coin wins decisively,
+            # while the base score still breaks ties among nearby candidates.
+            score += 1.5 * proximity
         if score > best_score:
             if detect_scale < 0.999:
                 inv = 1.0 / detect_scale
@@ -1402,6 +1419,7 @@ def estimate_weight_from_image(
     angle_jewelry_bbox: Optional[dict[str, float]] = None,
     side_jewelry_point: Optional[dict[str, float]] = None,
     side_jewelry_bbox: Optional[dict[str, float]] = None,
+    coin_hint: Optional[dict[str, float]] = None,
     vlm_validated: bool = False,
 ) -> dict[str, Any]:
     started = time.perf_counter()
@@ -1413,7 +1431,7 @@ def estimate_weight_from_image(
     quality_issues = _validate_quality(quality)
     logger.info("Weight stage decode_quality complete in %.2fs", time.perf_counter() - started)
 
-    coin = _detect_rs10_coin(img)
+    coin = _detect_rs10_coin(img, coin_hint=coin_hint)
     ref = cfg["reference_objects"]["rs10_coin"]
     mm_per_pixel = float(ref["diameter_mm"]) / coin.diameter_px
     logger.info(

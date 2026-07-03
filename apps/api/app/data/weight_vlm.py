@@ -47,17 +47,23 @@ Task:
 - Note whether an Indian Rs 10 reference coin is visible (a hint only — downstream CV verifies the coin itself).
 - Identify the jewellery item, NOT the coin, not paper, not shadows, not text.
 - Return a point at the center of the visible jewellery and a tight bounding box around the jewellery.
+- ALSO locate the Rs 10 reference coin separately: return a point at the center of the coin and a tight
+  bounding box around ONLY the coin. This is used to calibrate scale, so it must point at the coin, not the ring.
 
 Rules:
 - Do not estimate weight.
-- Do not include the coin in the jewellery bbox.
+- Do not include the coin in the jewellery bbox, and do not include the jewellery in the coin bbox.
+- The Rs 10 coin is round and bimetallic (a lighter/greenish inner disc inside a golden outer ring) with the
+  numeral "10". A gold ring is also round — do NOT confuse them: the coin is flat with printed markings, the
+  jewellery is a raised metal piece (often with a stone/pearl). coin_point/coin_bbox must be on the COIN.
 - Do not select the printed black/white calibration square, writing, paper folds, shadows, or background.
 - The jewellery bbox should tightly enclose only the visible metal jewellery pixels, with as little background as possible.
 - For a ring, the bbox should surround the ring outline, not the empty paper area around it.
 - If any physical gold jewellery is visible, set valid_image=true AND jewellery_present=true — even if a coin
   or other objects are also in the frame.
 - Only set valid_image=false / jewellery_present=false when there is genuinely NO physical jewellery at all.
-- If you see a coin-like circular reference object, set coin_present=true; otherwise set coin_present=false.
+- If you see a coin-like circular reference object, set coin_present=true and fill coin_point/coin_bbox;
+  otherwise set coin_present=false and leave coin_point/coin_bbox as null.
 - "confidence" must reflect how sure you are that you located the jewellery (0.0-1.0). If a clear jewellery
   item is visible, this should be high (>= 0.7). Always include a numeric confidence.
 - Coordinates must be normalized 0.0 to 1.0 relative to the full image.
@@ -71,6 +77,8 @@ JSON schema:
   "item_type": "ring",
   "jewellery_point": {"x": 0.72, "y": 0.45},
   "jewellery_bbox": {"x": 0.62, "y": 0.36, "width": 0.18, "height": 0.16},
+  "coin_point": {"x": 0.20, "y": 0.48},
+  "coin_bbox": {"x": 0.11, "y": 0.39, "width": 0.18, "height": 0.18},
   "confidence": 0.0,
   "issues": []
 }"""
@@ -128,10 +136,42 @@ JSON schema:
         return None
 
 
+def _normalize_point(raw: Any) -> Optional[dict[str, float]]:
+    if not isinstance(raw, dict):
+        return None
+    if raw.get("x") is None or raw.get("y") is None:
+        return None
+    return {"x": _clamp01(raw.get("x")), "y": _clamp01(raw.get("y"))}
+
+
+def _normalize_bbox(raw: Any) -> Optional[dict[str, float]]:
+    if not isinstance(raw, dict):
+        return None
+    width = _clamp01(raw.get("width"), 0.0)
+    height = _clamp01(raw.get("height"), 0.0)
+    if width <= 0.0 or height <= 0.0:
+        return None
+    return {
+        "x": _clamp01(raw.get("x"), 0.0),
+        "y": _clamp01(raw.get("y"), 0.0),
+        "width": width,
+        "height": height,
+    }
+
+
 def _normalize_roi_response(result: dict[str, Any], provider: str, model: str) -> dict[str, Any]:
     point = result.get("jewellery_point") or {}
     bbox = result.get("jewellery_bbox") or {}
     jewellery_present = bool(result.get("jewellery_present", False))
+    coin_present = bool(result.get("coin_present", False))
+    coin_point = _normalize_point(result.get("coin_point")) if coin_present else None
+    coin_bbox = _normalize_bbox(result.get("coin_bbox")) if coin_present else None
+    # If the model gave only one of the two, derive the other so downstream CV always has a center hint.
+    if coin_point is None and coin_bbox is not None:
+        coin_point = {
+            "x": _clamp01(coin_bbox["x"] + coin_bbox["width"] / 2.0),
+            "y": _clamp01(coin_bbox["y"] + coin_bbox["height"] / 2.0),
+        }
     # When the model confirms jewellery but omits/garbles "confidence", default to a
     # passing value rather than 0.0 — otherwise a perfectly valid, already-approved
     # photo gets falsely rejected for "low confidence" at the weight stage.
@@ -139,7 +179,7 @@ def _normalize_roi_response(result: dict[str, Any], provider: str, model: str) -
     normalized = {
         "valid_image": bool(result.get("valid_image", False)),
         "jewellery_present": jewellery_present,
-        "coin_present": bool(result.get("coin_present", False)),
+        "coin_present": coin_present,
         "item_type": str(result.get("item_type", "unknown")).lower(),
         "jewellery_point": {
             "x": _clamp01(point.get("x")),
@@ -151,13 +191,15 @@ def _normalize_roi_response(result: dict[str, Any], provider: str, model: str) -
             "width": _clamp01(bbox.get("width"), 0.0),
             "height": _clamp01(bbox.get("height"), 0.0),
         },
+        "coin_point": coin_point,
+        "coin_bbox": coin_bbox,
         "confidence": confidence,
         "issues": result.get("issues") if isinstance(result.get("issues"), list) else [],
         "provider": provider,
         "model": model,
     }
     logger.info(
-        "VLM ROI: provider=%s valid=%s jewellery=%s coin=%s type=%s conf=%.2f point=%s",
+        "VLM ROI: provider=%s valid=%s jewellery=%s coin=%s type=%s conf=%.2f point=%s coin_point=%s",
         provider,
         normalized["valid_image"],
         normalized["jewellery_present"],
@@ -165,5 +207,6 @@ def _normalize_roi_response(result: dict[str, Any], provider: str, model: str) -
         normalized["item_type"],
         normalized["confidence"],
         normalized["jewellery_point"],
+        normalized["coin_point"],
     )
     return normalized
