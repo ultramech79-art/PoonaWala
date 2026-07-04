@@ -25,7 +25,6 @@ import { FieldAgent } from './pages/FieldAgent'
 import { Confirmation } from './pages/Confirmation'
 import { VideoEval } from './pages/VideoEval'
 import { AudioEval } from './pages/AudioEval'
-import { AudioRemote } from './pages/AudioRemote'
 import { AddItem } from './pages/AddItem'
 import { useSessionStore } from './store/session'
 import { FloatingAssistant } from './components/FloatingAssistant'
@@ -105,7 +104,6 @@ function App() {
           <Route path="/certificate-scan" element={<RequireRegistered><CertificateScan /></RequireRegistered>} />
           <Route path="/video-eval" element={<RequireRegistered><VideoEval /></RequireRegistered>} />
           <Route path="/audio-eval" element={<RequireRegistered><AudioEval /></RequireRegistered>} />
-          <Route path="/audio-remote" element={<AudioRemote />} />
           <Route path="/add-item" element={<RequireRegistered><AddItem /></RequireRegistered>} />
           <Route path="/weight" element={<RequireRegistered><WeightEntry /></RequireRegistered>} />
           <Route path="/processing" element={<RequireRegistered><Processing /></RequireRegistered>} />

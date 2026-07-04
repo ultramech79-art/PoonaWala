@@ -2,6 +2,7 @@ import logging
 from typing import Any, Optional
 
 from app.data.gemini import (
+    GEMINI_AUDIO_VIDEO_API_KEYS,
     GEMINI_GUIDANCE_FALLBACK_API_KEYS,
     GROQ_GUIDANCE_API_KEYS,
     _gemini_request,
@@ -133,6 +134,98 @@ JSON schema:
         return _normalize_roi_response(parse_json_response(extract_gemini_text(data)), "gemini", "gemini_guidance_fallback")
     except Exception as exc:
         logger.warning("VLM ROI Gemini exception: %s", exc)
+        return None
+
+
+# Standard jewellery-alloy densities (g/cm³). Physical constants, not tunables.
+_DENSITY_BY_KARAT = {24: 19.3, 22: 17.7, 18: 15.6}
+
+
+async def estimate_weight_vlm(
+    top_data_url: str,
+    angle_data_url: str,
+    side_data_url: str,
+    jewelry_type: str,
+    karat: int,
+) -> Optional[dict[str, Any]]:
+    """
+    Independent VLM weight estimate from the three views.
+
+    Cross-check for the deterministic CV pipeline (mass = density × volume from
+    coin-scaled geometry). The two are fused confidence-weighted by the route; if
+    a CV stage fails on a validated jewellery photo, this estimate is the honest
+    fallback. Returns None on any failure so CV always remains usable alone.
+    """
+    density = _DENSITY_BY_KARAT.get(int(karat), 17.7)
+    prompt = f"""You are an expert Indian gold jewellery appraiser estimating the weight of ONE piece from three photos (top view, 45-degree view, side view).
+
+SCALE REFERENCE: an Indian Rs 10 coin (27 mm diameter, bimetallic) is placed beside the jewellery. Use it to judge real dimensions. The coin is NOT the jewellery — never weigh the coin.
+
+Item type hint: {jewelry_type}. Declared purity: {karat}K (alloy density {density} g/cm3).
+
+Method — reason step by step, then answer:
+1. From the coin scale, estimate the jewellery's real width, height (top view) and thickness (side/45 views) in mm.
+2. Judge the construction: solid vs hollow/tubular, band width for rings, wire gauge for chains, stones present (exclude stone weight).
+3. Estimate metal volume in cm3 from those dimensions and the shape, then mass = volume x {density}.
+4. Sanity-check against typical Indian pieces: ladies' ring 2-6 g, gents' ring 4-10 g, thin chain 5-15 g, bangle 8-30 g, pendant 2-10 g, necklace 15-60 g.
+
+Return ONLY JSON:
+{{
+  "weight_g": <number, best estimate in grams>,
+  "low_g": <number, plausible lower bound>,
+  "high_g": <number, plausible upper bound>,
+  "width_mm": <number>, "height_mm": <number>, "thickness_mm": <number>,
+  "hollow": <true/false>,
+  "confidence": <0.0-1.0, how well the coin scale and views constrain the estimate>,
+  "reasoning": "<2 sentences>"
+}}"""
+
+    parts: list[dict[str, Any]] = [{"text": prompt}]
+    for data_url in (top_data_url, angle_data_url, side_data_url):
+        parts.append({"inlineData": {"mimeType": "image/jpeg", "data": _extract_b64(data_url)}})
+
+    keys = GEMINI_GUIDANCE_FALLBACK_API_KEYS or GEMINI_AUDIO_VIDEO_API_KEYS
+    if not keys:
+        return None
+    try:
+        payload = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {
+                "temperature": 0.1,
+                "responseMimeType": "application/json",
+            },
+        }
+        data, success = await _gemini_request(payload, timeout=40, api_keys=keys, max_retries=2)
+        if not success:
+            logger.warning("VLM weight estimate failed: %s", data.get("error", "unknown"))
+            return None
+        raw = parse_json_response(extract_gemini_text(data))
+        weight = float(raw.get("weight_g"))
+        if not 0.2 <= weight <= 500.0:
+            logger.warning("VLM weight estimate out of range: %.2f g", weight)
+            return None
+        low = float(raw.get("low_g", weight * 0.8))
+        high = float(raw.get("high_g", weight * 1.2))
+        low, high = min(low, weight), max(high, weight)
+        result = {
+            "weight_g": round(weight, 2),
+            "low_g": round(max(0.1, low), 2),
+            "high_g": round(high, 2),
+            "width_mm": round(float(raw.get("width_mm", 0.0)), 1),
+            "height_mm": round(float(raw.get("height_mm", 0.0)), 1),
+            "thickness_mm": round(float(raw.get("thickness_mm", 0.0)), 1),
+            "hollow": bool(raw.get("hollow", False)),
+            "confidence": _clamp01(raw.get("confidence"), 0.4),
+            "reasoning": str(raw.get("reasoning", "")).strip(),
+        }
+        logger.info(
+            "VLM weight estimate: %.2f g [%.2f-%.2f] conf=%.2f hollow=%s",
+            result["weight_g"], result["low_g"], result["high_g"],
+            result["confidence"], result["hollow"],
+        )
+        return result
+    except Exception as exc:
+        logger.warning("VLM weight estimate exception: %s", exc)
         return None
 
 

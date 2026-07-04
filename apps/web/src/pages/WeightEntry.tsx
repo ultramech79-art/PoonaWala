@@ -151,7 +151,6 @@ export function WeightEntry() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<WeightEstimateResult | null>(null)
-  const [jewelryPoint, setJewelryPoint] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (mode === 'manual') {
@@ -246,7 +245,6 @@ export function WeightEntry() {
     }
     setError('')
     setResult(null)
-    if (slot === 'top') setJewelryPoint(null)
     setFileNames((current) => ({ ...current, [slot]: file.name }))
     const dataUrl = await compressImageFile(file)
     if (slot === 'top') setTopImageDataUrl(dataUrl)
@@ -262,7 +260,7 @@ export function WeightEntry() {
     setLoading(true)
     setError('')
     try {
-      const estimate = await estimateWeightAPI(topImageDataUrl, angleImageDataUrl, sideImageDataUrl, jewelryType, karat, jewelryPoint)
+      const estimate = await estimateWeightAPI(topImageDataUrl, angleImageDataUrl, sideImageDataUrl, jewelryType, karat)
       setResult(estimate)
       setWeight(estimate.weight.estimated_g)
       setPageEvidence('weight', {
@@ -334,30 +332,14 @@ export function WeightEntry() {
     fileName: string
     aspect?: string
   }) {
-    const isTop = slot === 'top'
     return (
       <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-white p-3 text-center">
         <div
-          className={`relative w-full overflow-hidden rounded-xl ${aspect} ${src ? 'bg-stone-100' : 'flex flex-col items-center justify-center bg-stone-50/60'} ${isTop && src ? 'cursor-crosshair' : ''}`}
-          onClick={(event) => {
-            if (!isTop || !src) return
-            const rect = event.currentTarget.getBoundingClientRect()
-            setJewelryPoint({
-              x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
-              y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
-            })
-            setResult(null)
-          }}
+          className={`relative w-full overflow-hidden rounded-xl ${aspect} ${src ? 'bg-stone-100' : 'flex flex-col items-center justify-center bg-stone-50/60'}`}
         >
           {src ? (
             <>
               <img src={src} alt={`${title} preview`} className="absolute inset-0 h-full w-full object-cover" />
-              {isTop && jewelryPoint && (
-                <div
-                  className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-brand-600 shadow-lg ring-2 ring-brand-600/30"
-                  style={{ left: `${jewelryPoint.x * 100}%`, top: `${jewelryPoint.y * 100}%` }}
-                />
-              )}
             </>
           ) : (
             <>

@@ -51,7 +51,7 @@ from pydantic import BaseModel
 
 from app.data.gemini import (
     GEMINI_AUDIO_VIDEO_API_KEYS,
-    GEMINI_MODEL,
+    GEMINI_VIDEO_MODEL,
     GROQ_AUDIO_VIDEO_FALLBACK_API_KEYS,
     _gemini_request,
     extract_gemini_text,
@@ -193,7 +193,10 @@ Return ONLY valid JSON:
         "contents": [{"parts": parts}],
         "generationConfig": {
             "temperature": 0.10,
-            "maxOutputTokens": 1600,
+            # NO maxOutputTokens cap on purpose: gemini-3.x flash spends tokens
+            # THINKING before the answer; a cap gets consumed by thinking → empty
+            # reply (finishReason=MAX_TOKENS). Same fix as the audio eval call.
+            "thinkingConfig": {"thinkingLevel": "low"},
             "responseMimeType": "application/json",
             "responseSchema": {
                 "type": "OBJECT",
@@ -225,14 +228,16 @@ Return ONLY valid JSON:
     }
 
     try:
-        data, success = await _gemini_request(payload, timeout=60, api_keys=GEMINI_AUDIO_VIDEO_API_KEYS)
+        data, success = await _gemini_request(
+            payload, timeout=60, api_keys=GEMINI_AUDIO_VIDEO_API_KEYS, model=GEMINI_VIDEO_MODEL
+        )
         if not success:
             raise ValueError(data.get("error", "api_failed"))
         raw = extract_gemini_text(data)
         res = parse_json_response(raw)
     except Exception as e:
         logger.warning(
-            f"video_eval Gemini failed using {GEMINI_MODEL}: {e}. "
+            f"video_eval Gemini failed using {GEMINI_VIDEO_MODEL}: {e}. "
             f"Raw response: {raw if 'raw' in locals() else 'None'}"
         )
         try:

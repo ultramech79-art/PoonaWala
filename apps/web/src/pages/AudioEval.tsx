@@ -20,13 +20,6 @@ import { speak } from '../lib/tts'
 import { localizeAudioVerdict } from '../lib/feedbackMessages'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { useTranslation } from 'react-i18next'
-import { AudioDemoControl } from '../components/AudioDemoControl'
-import {
-  REMOTE_AUDIO_DEMO_CHANNEL,
-  buildAudioDemoResult,
-  consumeRemoteAudioDemoCommand,
-  type AudioDemoOutcome,
-} from '../lib/audioDemoOverride'
 
 const AUDIO_DURATION_MS = 5_000   // 5 s: one drop from 15–20 cm on glass
 
@@ -65,7 +58,6 @@ interface TapResult {
   reject_reason:       string | null
   label:               string
   reasoning:           string
-  demo_override?:      boolean
   decay_ms?:           number
   dominant_freq_hz?:   number
 }
@@ -130,42 +122,12 @@ export function AudioEval() {
   const lastTapRef  = useRef(0)
   const audioAttemptRef = useRef(0)
   const analysisRunRef = useRef(0)
-  const demoResultSelectedRef = useRef(false)
 
   // Speak voice guide on intro
   useEffect(() => {
     const timer = setTimeout(() => speak(t('voice_audio')), 500)
     return () => clearTimeout(timer)
   }, [t])
-
-  useEffect(() => {
-    if (phase === 'result') return
-
-    let cancelled = false
-    let inFlight = false
-
-    const pollRemoteCommand = async () => {
-      if (cancelled || inFlight || demoResultSelectedRef.current) return
-      inFlight = true
-      try {
-        const command = await consumeRemoteAudioDemoCommand(REMOTE_AUDIO_DEMO_CHANNEL)
-        if (!cancelled && command.outcome && !demoResultSelectedRef.current) {
-          showDemoResult(command.outcome, Date.now())
-        }
-      } catch (error) {
-        console.warn('[AudioDemoRemote] poll failed:', error)
-      } finally {
-        inFlight = false
-      }
-    }
-
-    pollRemoteCommand()
-    const pollTimer = window.setInterval(pollRemoteCommand, 350)
-    return () => {
-      cancelled = true
-      window.clearInterval(pollTimer)
-    }
-  }, [phase, mode, ornament])
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach(t => t.stop())
@@ -196,7 +158,6 @@ export function AudioEval() {
   async function openMic() {
     setError('')
     setTapCount(0)
-    demoResultSelectedRef.current = false
     tapCountRef.current = 0
     peakDbRef.current = -60
     chunksRef.current = []
@@ -226,8 +187,7 @@ export function AudioEval() {
     if (!streamRef.current || !audioCtxRef.current) return
     const attemptId = audioAttemptRef.current + 1
     audioAttemptRef.current = attemptId
-    const shouldContinueAttempt = () =>
-      audioAttemptRef.current === attemptId && !demoResultSelectedRef.current
+    const shouldContinueAttempt = () => audioAttemptRef.current === attemptId
 
     chunksRef.current = []
     lastTapRef.current = 0
@@ -270,8 +230,7 @@ export function AudioEval() {
   async function runAnalysis() {
     const runId = analysisRunRef.current + 1
     analysisRunRef.current = runId
-    const shouldApplyAnalysis = () =>
-      analysisRunRef.current === runId && !demoResultSelectedRef.current
+    const shouldApplyAnalysis = () => analysisRunRef.current === runId
 
     try {
       const total = chunksRef.current.reduce((n, c) => n + c.length, 0)
@@ -327,40 +286,8 @@ export function AudioEval() {
     if (shouldApplyAnalysis()) setPhase('result')
   }
 
-  function showDemoResult(outcome: Exclude<AudioDemoOutcome, 'off'>, updatedAt: number) {
-    audioAttemptRef.current += 1
-    demoResultSelectedRef.current = true
-    analysisRunRef.current += 1
-    cancelAnimationFrame(levelRafRef.current)
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    streamRef.current = null
-    audioCtxRef.current?.close().catch(() => {})
-    audioCtxRef.current = null
-    const data = buildAudioDemoResult({ outcome, mode, ornament, updatedAt }) as TapResult
-    setError('')
-    setShowTutorial(false)
-    setResult(data)
-    setTapTestResult(data as any)
-    setPageEvidence('audio', {
-      skipped: false,
-      captured: true,
-      analysed: true,
-      ignoredForConfidence: true,
-      score: data.score,
-      valid: data.valid,
-      confidence: data.confidence,
-      verdict: data.verdict,
-      mode,
-      ornament,
-      demoOverride: true,
-      demoOutcome: outcome,
-    })
-    setPhase('result')
-  }
-
   function returnToIntro() {
     audioAttemptRef.current += 1
-    demoResultSelectedRef.current = false
     cancelAnimationFrame(levelRafRef.current)
     streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null
     audioCtxRef.current?.close().catch(() => {}); audioCtxRef.current = null
@@ -426,13 +353,6 @@ export function AudioEval() {
           </button>
         </div>
       </div>
-
-      {/* Hidden demo pass/fail overrides — mounted across the active capture phases
-          (ready → recording → analyzing) so a tap reliably lands instead of only
-          during the brief analyzing window. */}
-      {(phase === 'ready' || phase === 'recording' || phase === 'analyzing') && (
-        <AudioDemoControl onOutcomeSelect={(outcome, updatedAt) => { if (outcome !== 'off') showDemoResult(outcome, updatedAt) }} />
-      )}
 
       <div className="px-5 py-5 space-y-4">
 
@@ -673,13 +593,11 @@ export function AudioEval() {
                   )}
                 </div>
 
-                {!result.demo_override && (
-                  <div className="rounded-2xl border border-stone-200 bg-white/70 px-4 py-3">
-                    <p className="text-xs leading-relaxed text-stone-400">
-                      ⚠ {result.disclaimer || 'Acoustic screening only — not a guarantee of authenticity. Confirm with a jeweller before any purchase decision.'}
-                    </p>
-                  </div>
-                )}
+                <div className="rounded-2xl border border-stone-200 bg-white/70 px-4 py-3">
+                  <p className="text-xs leading-relaxed text-stone-400">
+                    ⚠ {result.disclaimer || 'Acoustic screening only — not a guarantee of authenticity. Confirm with a jeweller before any purchase decision.'}
+                  </p>
+                </div>
 
                 {(result.low_confidence_flag || result.confidence === 'low') && (
                   <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
