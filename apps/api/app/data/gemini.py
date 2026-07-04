@@ -47,6 +47,10 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-
 # thinking tokens don't starve the JSON answer. Env-overridable.
 # (Verified: "*-live" model IDs are Live-streaming-API only and 404 on generateContent.)
 GEMINI_AUDIO_MODEL = os.getenv("GEMINI_AUDIO_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+# Model for VIDEO frame analysis (rotation authenticity check). Same generation as
+# the audio model; like audio, the video call sends NO maxOutputTokens cap so
+# thinking tokens don't starve the JSON answer. Env-overridable.
+GEMINI_VIDEO_MODEL = os.getenv("GEMINI_VIDEO_MODEL", GEMINI_AUDIO_MODEL).strip() or GEMINI_AUDIO_MODEL
 GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1beta").strip() or "v1beta"
 GEMINI_THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "minimal").strip() or "minimal"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"

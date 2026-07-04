@@ -14,7 +14,7 @@ Architecture:
 
 Hard constraints:
   - Groq is NOT used here. Groq = speech-to-text (Whisper); useless on metallic taps.
-  - Gemini model name: gemini-2.5-flash (set via GEMINI_MODEL env var).
+  - Gemini audio model set via GEMINI_AUDIO_MODEL env var (default gemini-3.5-flash).
   - Score = classifier probability × 100 (or heuristic). LLM never edits it.
   - Drop mode → longer clean decay = primary discriminator for real gold.
   - Tap mode → spectral features (centroid, gold band) matter more.
@@ -22,7 +22,6 @@ Hard constraints:
 import base64
 import io
 import logging
-import os
 import struct
 from typing import Optional
 
@@ -31,15 +30,12 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.data.audio_features import (
-    build_model_vector,
     extract_physics_features,
     validate_recording,
     preprocess,
-    PHYSICS_KEYS,
 )
 from app.data.gemini import (
     GEMINI_AUDIO_VIDEO_API_KEYS,
-    GEMINI_MODEL,
     GEMINI_AUDIO_MODEL,
     _gemini_request,
     extract_gemini_text,
@@ -53,27 +49,6 @@ DISCLAIMER = (
     "Acoustic screening only — not a guarantee of authenticity. "
     "Confirm with a jeweller (XRF/acid/density) before any purchase decision."
 )
-
-# ── Load classifier at startup (once). Falls back to None if not trained yet. ──
-_MODEL  = None
-_SCALER = None
-
-def _load_model():
-    global _MODEL, _SCALER
-    _dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "audio_gold")
-    mp = os.path.join(_dir, "model.joblib")
-    sp = os.path.join(_dir, "feature_scaler.joblib")
-    if os.path.exists(mp) and os.path.exists(sp):
-        try:
-            import joblib
-            _MODEL  = joblib.load(mp)
-            _SCALER = joblib.load(sp)
-            logger.info("Audio classifier loaded from %s", mp)
-        except Exception as e:
-            logger.warning("Could not load audio classifier: %s", e)
-
-_load_model()
-
 
 # ── Request / Response models ─────────────────────────────────────────────────
 
@@ -176,16 +151,6 @@ def _invalid_response(reason: str, mode: str = "tap") -> AudioEvalResponse:
 PHYS_WEIGHT   = 0.5
 GEMINI_WEIGHT = 0.5
 
-_ORNAMENT_RANGES = {
-    "ring":     {"decay_lo": 60,  "decay_hi": 300, "centroid_lo": 400, "centroid_hi": 1000},
-    "bangle":   {"decay_lo": 100, "decay_hi": 600, "centroid_lo": 200, "centroid_hi": 600},
-    "necklace": {"decay_lo": 45,  "decay_hi": 360, "centroid_lo": 180, "centroid_hi": 900},
-    "pendant":  {"decay_lo": 60,  "decay_hi": 300, "centroid_lo": 350, "centroid_hi": 1200},
-    "earring":  {"decay_lo": 30,  "decay_hi": 200, "centroid_lo": 400, "centroid_hi": 1600},
-    "coin":     {"decay_lo": 150, "decay_hi": 700, "centroid_lo": 250, "centroid_hi": 650},
-}
-_DEFAULT_RANGE = {"decay_lo": 60, "decay_hi": 450, "centroid_lo": 250, "centroid_hi": 1000}
-
 
 def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[str]]:
     """
@@ -247,42 +212,6 @@ def _physics_score(physics: dict, item_type: str, mode: str) -> tuple[int, list[
         reasons.append(f"Low SNR {snr_db:.0f}dB — recording quality reduces certainty")
 
     return max(5, min(97, score)), reasons
-
-
-# Confidence-sharpening gain (logit temperature scaling, T = 1/gain < 1).
-# Spreads the final score toward the extremes IN PROPORTION to the model's own
-# confidence: a confident "gold" reads high, a confident "fake" reads low, while
-# genuinely-borderline clips stay near 50 ("inconclusive"). Monotonic and centred
-# on P=0.5, so it never flips a decision — it only increases display contrast.
-# Tuned on the dataset: real golds → 90s, clear fakes → single digits, gap 20→32.
-_SCORE_GAIN = 2.2
-
-def _sharpen(prob: float) -> float:
-    p = min(max(prob, 1e-4), 1.0 - 1e-4)
-    logit = np.log(p / (1.0 - p))
-    return float(1.0 / (1.0 + np.exp(-_SCORE_GAIN * logit)))
-
-
-def _classifier_score(physics: dict, mode: str) -> Optional[int]:
-    """
-    Return calibrated classifier score (0–100) or None if model not loaded.
-
-    The model is trained on the compact physics-only MODEL_FEATURES (decay, R²,
-    Q, gold-band) + mode bit — NOT the 134-dim vector. MFCCs and SNR were dropped
-    because they overfit / are recording artifacts; see audio_features.MODEL_FEATURES.
-    The calibrated P(real) is sharpened (see _sharpen) so confident verdicts read
-    decisively high/low rather than clustering near the middle.
-    """
-    if _MODEL is None or _SCALER is None:
-        return None
-    try:
-        vec = build_model_vector(physics, mode)
-        x = _SCALER.transform(vec.reshape(1, -1))
-        prob = float(_MODEL.predict_proba(x)[0][1])  # P(real)
-        return max(3, min(97, round(_sharpen(prob) * 100)))
-    except Exception as e:
-        logger.warning("Classifier predict failed: %s", e)
-        return None
 
 
 _CONF_RANK = {"low": 0, "medium": 1, "high": 2}
