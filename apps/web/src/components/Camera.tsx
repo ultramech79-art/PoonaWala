@@ -354,7 +354,7 @@ export function Camera({ type, onCapture, onError, facingMode: initialFacing = '
       top: '/assets/demo/top.jpg', side: '/assets/demo/side.jpg',
       '45deg': '/assets/demo/45deg.jpg', macro: '/assets/demo/macro.jpg',
       selfie: '/assets/demo/selfie.jpg', video: '/assets/demo/video.mp4',
-      audio: '/assets/demo/audio.mp3',
+      audio: '/assets/demo/audio.mp3', certificate: '/assets/demo/bill.jpeg',
     }
     const url = demoMap[type as string] || demoMap.top
     try {
