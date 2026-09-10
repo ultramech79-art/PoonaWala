@@ -273,7 +273,7 @@ All primary models are trained on real jewelry product data, not generic image d
 |---|---|---|
 | LightGBM Fusion | Empirical coverage (90% target) | **90.2%** |
 | LightGBM Fusion | MAE karat | **0.875K** |
-| ConvNeXt-V2 | Solid/plated AUC | **> 0.95** |
+| ConvNeXt-V2 | Solid/plated AUC | **> 0.75** |
 | Audio CNN | Ring/dull AUC | **> 0.85** |
 
 ---
