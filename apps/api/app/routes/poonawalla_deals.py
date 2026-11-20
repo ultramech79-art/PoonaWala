@@ -1,7 +1,7 @@
 """
 GET /api/poonawalla-deals
 
-Scrapes live Poonawalla Fincorp gold loan schemes using:
+Scrapes live GoldEye gold loan schemes using:
   1. Direct fetch of poonawallafincorp.com/gold-loan
   2. SerpAPI fallback if direct fetch fails
   3. Groq (llama-3.3-70b-versatile) to extract structured scheme data from HTML
@@ -40,8 +40,8 @@ DIRECT_URLS = [
 ]
 
 SERP_QUERIES = [
-    "Poonawalla Fincorp gold loan interest rate scheme 2024 site:poonawallafincorp.com",
-    "Poonawalla Fincorp gold loan ROI LTV scheme",
+    "GoldEye gold loan interest rate scheme 2024 site:poonawallafincorp.com",
+    "GoldEye gold loan ROI LTV scheme",
 ]
 
 # In-memory cache
@@ -186,7 +186,7 @@ def _deduplicate(schemes: list[dict]) -> list[dict]:
 
 @router.get("/poonawalla-deals")
 async def get_poonawalla_deals():
-    """Return cached Poonawalla Fincorp gold loan schemes, refreshing every hour."""
+    """Return cached GoldEye gold loan schemes, refreshing every hour."""
     global _cache_schemes, _cache_ts, _cache_source_urls
 
     if _cache_schemes and (time.time() - _cache_ts) < CACHE_TTL_SECONDS:
@@ -200,7 +200,7 @@ async def get_poonawalla_deals():
     all_schemes: list[dict] = []
     source_urls: list[str] = []
 
-    # 1. Try direct fetch of Poonawalla gold loan page
+    # 1. Try direct fetch of GoldEye gold loan page
     for url in DIRECT_URLS:
         text = await _fetch_page(url)
         if text:

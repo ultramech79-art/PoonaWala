@@ -202,7 +202,7 @@ function apiSessionToEvaluation(session: ApiSessionSummary): EvaluationItem {
     status,
     statusLabel: statusLabel(status),
     confidence: session.confidence_score == null ? null : Math.round(session.confidence_score * 100),
-    branch: 'Poonawalla Fincorp',
+    branch: 'GoldEye',
     phone: session.phone,
   }
 }
@@ -479,7 +479,7 @@ export function MyEvaluations() {
           <a
             href={POONAWALLA_GOLD_LOAN_URL}
             className="evaluation-action-tile"
-            aria-label="Open Poonawalla Fincorp gold loan eligibility website"
+            aria-label="Open GoldEye gold loan eligibility website"
           >
             <ArrowUpRight className="h-5 w-5" aria-hidden />
             <span>Loan Eligibility</span>

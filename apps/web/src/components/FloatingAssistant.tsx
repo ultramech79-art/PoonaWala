@@ -375,7 +375,7 @@ export function FloatingAssistant() {
               <span className="goldeye-chat-mini-badge">PF</span>
             </div>
             <p className="mt-2 text-xs font-medium leading-relaxed text-stone-500">
-              Ask about eligibility, scan steps, documents, or how Poonawalla branch verification works.
+              Ask about eligibility, scan steps, documents, or how GoldEye branch verification works.
             </p>
             <div className="goldeye-chat-prompt-grid">
               {starterPrompts.map((prompt) => (

@@ -282,7 +282,7 @@ All primary models are trained on real jewelry product data, not generic image d
 
 **Frontend**
 - React 18 + TypeScript + Vite
-- TailwindCSS (dark theme, Poonawala red/gold palette)
+- TailwindCSS (dark theme, red/gold palette)
 - vite-plugin-pwa — service worker, offline cache, installable PWA
 - react-router-dom v6, react-i18next (English + Hindi)
 - Web Speech API — voice guidance during 7-step capture
@@ -551,6 +551,6 @@ goldeye/
 
 **GoldEye — Turning every smartphone into a gold loan branch.**
 
-Built for Poonawala Fincorp &nbsp;·&nbsp; Proprietary — All rights reserved.
+Built for GoldEye &nbsp;·&nbsp; Proprietary — All rights reserved.
 
 </div>

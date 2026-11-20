@@ -518,7 +518,7 @@ export function Result() {
         </button>
         <span className="font-display font-semibold text-sm text-stone-700">{t('result_heading')}</span>
         <button id="result-share"
-          onClick={() => navigator.share?.({ title: 'Poonawalla Result', text: 'My gold loan pre-qualification' })}
+          onClick={() => navigator.share?.({ title: 'GoldEye Result', text: 'My gold loan pre-qualification' })}
           className="btn-icon" aria-label="Share">
           <Share2 className="w-[18px] h-[18px] text-stone-700" />
         </button>

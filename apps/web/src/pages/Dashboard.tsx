@@ -208,7 +208,7 @@ export function Dashboard() {
           <Menu className="w-5 h-5 text-stone-600" />
         </button>
         <div className="flex items-center gap-2 bg-white py-1.5 px-3 rounded-lg shadow-sm border border-stone-200">
-          <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" className="h-5 object-contain" />
+          <span className="font-display font-extrabold tracking-tight text-stone-900 text-lg">GoldEye</span>
         </div>
         <button className="btn-icon relative">
           <Bell className="w-5 h-5 text-stone-600" />

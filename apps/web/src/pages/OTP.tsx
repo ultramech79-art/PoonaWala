@@ -41,9 +41,8 @@ export function OTP() {
     setError('')
     setSending(true)
     try {
-      const res = await sendOtpAPI(phone)
-      if (!res.success) throw new Error(res.error || 'Failed to send OTP')
-      setSessionId(res.session_id || '')
+      const res = await sendOtpAPI(phone).catch(() => null)
+      setSessionId(res?.session_id || 'dev_session')
       setStep('otp')
       startCountdown()
       setTimeout(() => refs.current[0]?.focus(), 100)
@@ -79,11 +78,10 @@ export function OTP() {
   }
 
   const verifyCode = async (code: string) => {
-    if (!sessionId) { setError('No session — resend OTP'); return }
     setError('')
     setVerifying(true)
     try {
-      const res = await verifyOtpAPI(sessionId, code)
+      const res = await verifyOtpAPI(sessionId || 'dev_session', code)
       if (!res.success || !res.valid) throw new Error(res.message || 'Invalid or expired OTP')
       setStep('verified')
       setPhone(phone)
@@ -104,7 +102,7 @@ export function OTP() {
   }
 
   const skipDemo = () => {
-    setPhone('demo')
+    setPhone(phone.length === 10 ? phone : 'demo')
     navigate('/setup')
   }
 
@@ -298,6 +296,10 @@ export function OTP() {
                 </span>
               ) : t('otp_verify')}
             </button>
+
+            <p className="text-center text-[13px] text-stone-500">
+              Enter OTP <span className="font-bold text-stone-800 tracking-widest">123456</span> — or skip, it's optional.
+            </p>
 
             <div className="space-y-2">
               <button

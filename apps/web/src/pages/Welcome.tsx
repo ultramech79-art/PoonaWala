@@ -106,7 +106,7 @@ export function Welcome() {
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 pt-6 pb-4 bg-white/75 backdrop-blur-xl border-b border-stone-200/70">
         <div className="flex items-center gap-2.5 bg-white/70 py-3 px-4 rounded-2xl shadow-xs border border-stone-200/80 hover:bg-white transition-colors">
-          <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" className="h-10 object-contain" />
+          <span className="font-display font-extrabold tracking-tight text-stone-900 text-lg">GoldEye</span>
         </div>
         <button
           id="change-language"

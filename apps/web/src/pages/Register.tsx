@@ -140,10 +140,8 @@ export function Register() {
     setError('')
     try {
       const dobStr = `${dobYear}-${dobMonth.padStart(2, '0')}-${dobDay.padStart(2, '0')}`
-      // otp_session_id is passed so the backend marks is_phone_verified=true.
-      // The OTP itself is NOT re-sent — it was already verified at step 5 via
-      // verifyOtpAPI, which consumed the 2Factor.in session. Sending otp again
-      // would trigger a second verification call that always fails.
+      // OTP is optional. If it was verified at step 5, otp_session_id lets the
+      // backend mark the phone verified; if skipped, registration still proceeds.
       const res = await registerAPI({
         full_name: name.trim(),
         dob: dobStr,
@@ -151,7 +149,7 @@ export function Register() {
         phone,
         region_code: regionCode,
         city: city.trim() || undefined,
-        otp_session_id: sessionId,
+        otp_session_id: sessionId || undefined,
         password: pin,
       })
       setAuth(res.access_token, res.user)
@@ -450,21 +448,24 @@ export function Register() {
                   />
                 ))}
               </div>
-              <button
-                onClick={sendOtp}
-                disabled={busy}
-                className="block mx-auto mt-6 text-[14px] font-semibold text-stone-400 disabled:opacity-40"
-              >
-                {t('reg_resend_otp')}
-              </button>
+              <p className="text-center mt-5 text-[13px] text-stone-500">
+                Enter OTP <span className="font-bold text-stone-800 tracking-widest">123456</span> — or skip, it's optional.
+              </p>
             </div>
-            <div className="pb-8">
+            <div className="pb-8 space-y-3">
               <button
                 disabled={otp.join('').length !== 6 || busy}
                 onClick={verifyOtp}
                 className={btnCls}
               >
                 {busy ? t('reg_verifying') : t('reg_verify')}
+              </button>
+              <button
+                onClick={() => { setOtp(Array<string>(6).fill('')); advance() }}
+                disabled={busy}
+                className="block w-full text-center text-[14px] font-semibold text-stone-500 py-2 disabled:opacity-40"
+              >
+                Skip for now
               </button>
             </div>
           </div>

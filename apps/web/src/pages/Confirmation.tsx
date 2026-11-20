@@ -47,7 +47,7 @@ export function Confirmation() {
       {/* Branding */}
       <div className="flex justify-center pt-8 pb-2">
         <div className="bg-white py-3 px-5 rounded-2xl shadow-sm border border-stone-100">
-          <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" className="h-8 object-contain" />
+          <span className="font-display font-extrabold tracking-tight text-stone-900 text-lg">GoldEye</span>
         </div>
       </div>
 
@@ -62,7 +62,7 @@ export function Confirmation() {
             Your gold loan application has been securely submitted.
             {evalD.serviceable
               ? ' An agent will call you within 2 hours to schedule home gold pickup.'
-              : ' Please visit your nearest Poonawalla Fincorp branch to submit your gold.'}
+              : ' Please visit your nearest GoldEye branch to submit your gold.'}
           </p>
         </div>
 

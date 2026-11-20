@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
-// ─── Gold loan guidelines from Poonawalla Fincorp ─────────────────────────────
+// ─── Gold loan guidelines from GoldEye ─────────────────────────────
 
 const GUIDELINES = [
   {
@@ -21,7 +21,7 @@ const GUIDELINES = [
     title: 'Loan Amount',
     summary: '₹25,000 – ₹50 Lakh',
     detail:
-      'Poonawalla Fincorp advertises gold loans up to ₹50 Lakh, subject to branch verification, purity, weight, KYC, and policy checks. GoldEye keeps the pre-check ready before the branch handoff.',
+      'GoldEye advertises gold loans up to ₹50 Lakh, subject to branch verification, purity, weight, KYC, and policy checks. GoldEye keeps the pre-check ready before the branch handoff.',
     badge: 'Flexible',
     badgeClass: 'bg-brand-50 text-brand-600 border-brand-200',
   },
@@ -41,7 +41,7 @@ const GUIDELINES = [
     title: 'Eligible Gold Purity',
     summary: '18K to 22K BIS Hallmarked gold',
     detail:
-      'Poonawalla Fincorp eligibility mentions 18K to 22K gold. BIS Hallmarked ornaments with a valid HUID make the verification trail cleaner and faster for final branch assessment.',
+      'GoldEye eligibility mentions 18K to 22K gold. BIS Hallmarked ornaments with a valid HUID make the verification trail cleaner and faster for final branch assessment.',
     badge: 'HUID Preferred',
     badgeClass: 'bg-gold-50 text-gold-700 border-gold-200',
   },
@@ -71,7 +71,7 @@ const GUIDELINES = [
     title: 'Interest Rate',
     summary: 'Starting from 11% p.a.',
     detail:
-      'Poonawalla Fincorp publishes gold-loan rates starting from 11% p.a. Final pricing may vary by scheme, loan amount, tenure, and policy checks, with charges disclosed before disbursal.',
+      'GoldEye publishes gold-loan rates starting from 11% p.a. Final pricing may vary by scheme, loan amount, tenure, and policy checks, with charges disclosed before disbursal.',
     badge: 'Competitive',
     badgeClass: 'bg-brand-50 text-brand-600 border-brand-200',
   },
@@ -91,7 +91,7 @@ const GUIDELINES = [
     title: 'Gold Security & Storage',
     summary: '100% insured vault · fully audited',
     detail:
-      'Your gold is stored in RBI-approved, fire-proof, tamper-evident vaults with comprehensive insurance. A physical receipt is issued at the time of pledging. You may inspect your gold at any time at a Poonawalla Fincorp branch.',
+      'Your gold is stored in RBI-approved, fire-proof, tamper-evident vaults with comprehensive insurance. A physical receipt is issued at the time of pledging. You may inspect your gold at any time at a GoldEye branch.',
     badge: 'Fully Insured',
     badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
@@ -147,7 +147,7 @@ function GoldPriceBar() {
   )
 }
 
-// ─── Hero, quick actions, and Poonawalla carousel ──────────────────────────────
+// ─── Hero, quick actions, and GoldEye carousel ──────────────────────────────
 
 const QUICK_ACTIONS = [
   { id: 'evaluations', Icon: LayoutDashboard, title: 'My Evaluations', subtitle: 'View past results' },
@@ -163,7 +163,7 @@ const HERO_AD_SLIDES = [
     id: 'gold-momentum',
     tone: 'is-copper',
     Icon: IndianRupee,
-    kicker: 'Poonawalla Gold Loan',
+    kicker: 'GoldEye Gold Loan',
     headline: 'Gold that moves your goals.',
     copy: 'Unlock funds against jewellery with quick approval and minimal paperwork.',
     image: '/assets/hero/gold-ring-red-card.jpg',
@@ -209,7 +209,7 @@ const HERO_AD_SLIDES = [
 const FAQ_ITEMS = [
   {
     question: 'What type of gold is accepted for loan?',
-    answer: 'Poonawalla Fincorp accepts eligible gold jewellery, generally 18K to 22K. BIS hallmarked gold with HUID keeps verification smoother.',
+    answer: 'GoldEye accepts eligible gold jewellery, generally 18K to 22K. BIS hallmarked gold with HUID keeps verification smoother.',
   },
   {
     question: 'How much loan can I get against my gold?',
@@ -229,7 +229,7 @@ const FAQ_ITEMS = [
   },
   {
     question: 'What interest rate will I get?',
-    answer: 'Poonawalla Fincorp publishes gold-loan rates starting from 11% p.a. Final rate depends on amount, tenure, scheme, and policy checks.',
+    answer: 'GoldEye publishes gold-loan rates starting from 11% p.a. Final rate depends on amount, tenure, scheme, and policy checks.',
   },
   {
     question: 'Can I repay early or renew the loan?',
@@ -237,7 +237,7 @@ const FAQ_ITEMS = [
   },
   {
     question: 'Does GoldEye give final approval?',
-    answer: 'GoldEye helps with a fast pre-check. Final loan approval, valuation, and disbursal happen after Poonawalla branch verification.',
+    answer: 'GoldEye helps with a fast pre-check. Final loan approval, valuation, and disbursal happen after GoldEye branch verification.',
   },
 ]
 
@@ -308,7 +308,7 @@ function LoanEssentialsPanel() {
           </div>
           <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand-600 px-2.5 py-1 text-white" aria-hidden>
             <Landmark className="h-3 w-3 text-white" />
-            <span className="text-[10px] font-black uppercase tracking-wider">Poonawalla</span>
+            <span className="text-[10px] font-black uppercase tracking-wider">GoldEye</span>
           </div>
         </div>
 
@@ -423,7 +423,7 @@ function PoonawallaHeroCarousel({ onStart }: { onStart: () => void }) {
   const { Icon } = slide
 
   return (
-    <section className="mx-5 mt-3" aria-label="Poonawalla Fincorp offers">
+    <section className="mx-5 mt-3" aria-label="GoldEye offers">
       <div className={clsx('poonawalla-ad-card', slide.tone)}>
         <div className="ad-card-media" aria-hidden>
           <img src={slide.image} alt="" />
@@ -432,7 +432,7 @@ function PoonawallaHeroCarousel({ onStart }: { onStart: () => void }) {
         <div className="relative z-10 flex min-h-[238px] flex-col">
           <div className="flex items-center justify-between gap-3">
             <span className="ad-brand-pill">
-              <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" />
+              <span className="font-display font-extrabold tracking-tight">GoldEye</span>
             </span>
             <span className="ad-slide-count">{active + 1}/{HERO_AD_SLIDES.length}</span>
           </div>
@@ -678,7 +678,7 @@ export function DashboardHome() {
           </div>
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-stone-400 leading-none">
-              Poonawalla Fincorp
+              GoldEye
             </p>
             <p className="text-sm font-display font-bold text-stone-900 leading-tight tracking-[-0.01em]">
               {greeting}, {firstName}
@@ -730,7 +730,7 @@ export function DashboardHome() {
         <div id="contact-strip" className="mx-5 mt-5 grid grid-cols-2 gap-3">
           <a href="tel:18001036444"
             className="flex items-center gap-2.5 px-3.5 py-3 bg-white border border-stone-200 rounded-2xl shadow-card active:scale-95 transition-transform"
-            aria-label="Call Poonawalla Fincorp support"
+            aria-label="Call GoldEye support"
           >
             <div className="w-8 h-8 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0" aria-hidden>
               <Phone className="w-3.5 h-3.5 text-brand-600" />
@@ -771,7 +771,7 @@ export function DashboardHome() {
             ))}
           </div>
           <p className="text-center text-[9px] font-medium text-stone-400 mt-2 tracking-wide">
-            Poonawalla Fincorp Ltd · CIN: L65910MH2005PLC268542
+            GoldEye
           </p>
         </div>
       </main>

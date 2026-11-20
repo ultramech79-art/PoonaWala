@@ -105,7 +105,7 @@ export function Home() {
 
       {/* Header */}
       <div className="relative z-30 px-5 py-4 flex items-center justify-between">
-        <img src="/assets/poonawalla_logo_full.png" alt="Poonawalla Fincorp" className="h-14 w-auto object-contain" />
+        <span className="font-display font-extrabold tracking-tight text-stone-900 text-lg">GoldEye</span>
         {state.authToken && (
           <button onClick={() => navigate('/profile', { state: { from: '/' } })} className="w-9 h-9 rounded-2xl bg-white border border-stone-200 flex items-center justify-center shadow-xs">
             <UserRound className="w-4 h-4 text-stone-600" />
@@ -197,7 +197,7 @@ export function Home() {
         </div>
 
         <p className="text-center text-[9px] font-bold text-stone-300 uppercase tracking-[0.2em] mt-4">
-          Poonawalla Fincorp
+          GoldEye
         </p>
       </div>
     </div>

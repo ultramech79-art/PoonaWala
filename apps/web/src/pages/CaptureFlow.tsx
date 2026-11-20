@@ -8,7 +8,7 @@ import { ChevronRight, Volume2, CheckCircle, XCircle, Loader2, RotateCcw, Music,
 import { speak, prefetchSpeech } from '../lib/tts'
 import { localizeFeedback } from '../lib/feedbackMessages'
 import { clsx } from 'clsx'
-import { evaluateFrameAPI, verifyHuidAPI, type FrameEvalResult, type HuidVerificationResult } from '../lib/api'
+import { evaluateFrameAPI, type FrameEvalResult } from '../lib/api'
 import { resizeDataUrl } from '../lib/utils'
 import Lottie from 'lottie-react'
 import goldAnim from '../assets/gold-analysis.json'
@@ -57,7 +57,6 @@ export function CaptureFlow() {
     state,
     setScannedKarat,
     setHuid,
-    setHuidVerification,
     setPageEvidence,
     initSession,
   } = useSessionStore()
@@ -139,8 +138,6 @@ export function CaptureFlow() {
   const [selectedKarat, setSelectedKarat] = useState<number | null>(state.scannedKarat || null)
   const [activeTab, setActiveTab] = useState<'scan' | 'manual'>('scan')
   const [showHallmarkGuide, setShowHallmarkGuide] = useState(false)
-  const [huidVerifying, setHuidVerifying] = useState(false)
-  const [huidVerifyResult, setHuidVerifyResult] = useState<HuidVerificationResult | null>(state.huidVerification ?? null)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const spokenStep = useRef(-1)
@@ -300,50 +297,6 @@ export function CaptureFlow() {
     setCameraKey(k => k + 1)
   }
 
-  const handleVerifyHuid = async (huid: string, origin: 'photo' | 'manual' = 'manual') => {
-    if (!huid || huid.length !== 6) return
-    setHuid(huid)
-    setHuidVerifying(true)
-    setHuidVerifyResult(null)
-    try {
-      const result = await verifyHuidAPI(huid)
-      const isVerified = String(result.status).toUpperCase() === 'VERIFIED'
-      setHuidVerifyResult(result)
-      setHuidVerification(result)
-      // Preserve how the HUID was obtained ('photo' vs 'manual') so the scoring
-      // system can tell a photo-verified HUID apart from a manually-typed one.
-      setPageEvidence('huid', {
-        code: huid,
-        source: origin,
-        verifiedVia: isVerified ? origin : null,
-        status: result.status,
-        verified: isVerified,
-        confidence: result.confidence,
-        purity: result.purity,
-        articleType: result.article_type,
-        jewellerName: result.jeweller_name,
-        hallmarkDate: result.hallmark_date,
-      })
-      if (result.purity) {
-        const kMap: Record<string, number> = { '24K999': 24, '22K916': 22, '18K750': 18, '14K585': 14, '9K375': 9 }
-        const k = kMap[result.purity]
-        if (k) { setScannedKarat(k); setSelectedKarat(k) }
-      }
-    } catch {
-      const errorResult = { huid, status: 'AGENT_ERROR' as const, confidence: 0, purity: null, article_type: null, jeweller_name: null, hallmark_date: null, error: 'Verifier unavailable — check ngrok URL' }
-      setHuidVerifyResult(errorResult)
-      setPageEvidence('huid', {
-        code: huid,
-        source: origin,
-        verifiedVia: null,
-        status: errorResult.status,
-        verified: false,
-        confidence: 0,
-      })
-    }
-    setHuidVerifying(false)
-  }
-
   const handleEnterDemo = useCallback(async () => {
     if (!step.demoUrl) return
 
@@ -394,10 +347,8 @@ export function CaptureFlow() {
 
   // ── Hallmark confidence score ─────────────────────────────────────────────
   const hallmarkConfidence = step.type === 'macro' ? (() => {
-    if (huidVerifyResult?.status === 'VERIFIED') return 98
     if (evalState === 'approved' && selectedKarat) return 85
     if (evalState === 'approved') return 80
-    if (huidVerifyResult?.status === 'NEEDS_MANUAL_REVIEW') return 60
     if (selectedKarat && manualHuid) return 60
     if (selectedKarat) return 60
     if (manualHuid) return 60
@@ -406,12 +357,11 @@ export function CaptureFlow() {
 
   const hasManualHuidOverride = step.type === 'macro' && !!manualHuid
   const hasSelectedPurity = step.type === 'macro' && !!selectedKarat
-  // Macro step: proceed if photo approved, OR purity selected/manual HUID entered (photo optional), OR BIS verified
+  // Macro step: proceed if photo approved, OR purity selected/manual HUID entered (photo optional)
   const macroCanProceed = step.type === 'macro' && (
     evalState === 'approved' ||
     hasSelectedPurity ||
-    hasManualHuidOverride ||
-    !!huidVerifyResult
+    hasManualHuidOverride
   )
   const canProceed = (
     macroCanProceed ||
@@ -568,12 +518,11 @@ export function CaptureFlow() {
                       style={{ width: `${hallmarkConfidence}%` }} />
                   </div>
                   <p className="text-[10px] text-stone-400 mt-1">
-                    {huidVerifyResult?.status === 'VERIFIED' ? 'BIS CARE verified — highest confidence' :
-                      evalState === 'approved' && selectedKarat ? 'Photo + purity detected' :
+                    {evalState === 'approved' && selectedKarat ? 'Photo + purity detected' :
                         evalState === 'approved' ? 'Photo quality approved' :
                           selectedKarat && manualHuid ? 'Manual purity + HUID entered' :
                             selectedKarat ? 'Manual purity only — lower confidence' :
-                              'Enter purity or verify HUID to increase confidence'}
+                              'Enter purity or HUID to increase confidence'}
                   </p>
                 </div>
               )}
@@ -602,7 +551,7 @@ export function CaptureFlow() {
                       { mark: '375 / 9K', meaning: '9 Karat gold — 37.5% pure' },
                       { mark: '999 / 24K', meaning: '24 Karat — 99.9% pure gold bar/coin' },
                       { mark: 'BIS ▲', meaning: 'Bureau of Indian Standards certified mark' },
-                      { mark: 'HUID', meaning: '6-digit unique ID — verifiable on BIS Care app' },
+                      { mark: 'HUID', meaning: '6-digit unique hallmark ID' },
                       { mark: 'DM', meaning: "Dealer's Mark — jeweller's own identification code" },
                       { mark: 'AHC mark', meaning: 'Assaying & Hallmarking Centre seal' },
                       { mark: 'KDM', meaning: 'Old cadmium solder mark — now banned by BIS' },
@@ -661,50 +610,6 @@ export function CaptureFlow() {
                               {(currentEval?.result?.detected?.huid_code as string) || manualHuid || '—'}
                             </span>
                           </div>
-                          {/* Verify HUID via BIS when detected */}
-                          {((currentEval?.result?.detected?.huid_code as string) || manualHuid) && !huidVerifyResult && (
-                            <button
-                              onClick={() => {
-                                const detectedCode = currentEval?.result?.detected?.huid_code as string
-                                handleVerifyHuid(detectedCode || manualHuid, detectedCode ? 'photo' : 'manual')
-                              }}
-                              disabled={huidVerifying}
-                              className="w-full py-2 rounded-xl text-xs font-bold bg-brand-600 text-white disabled:opacity-50"
-                            >
-                              {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Verify HUID with BIS CARE →'}
-                            </button>
-                          )}
-                          {/* BIS result inline */}
-                          {huidVerifyResult && (
-                            <div className={clsx(
-                              'rounded-xl border p-3 space-y-1.5',
-                              huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
-                                huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
-                                  'bg-red-50 border-red-200'
-                            )}>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-bold text-stone-600">BIS CARE</span>
-                                <span className={clsx(
-                                  'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                                  huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
-                                    huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
-                                      'bg-red-100 text-red-700'
-                                )}>
-                                  {huidVerifyResult.status.replace('_', ' ')}
-                                </span>
-                              </div>
-                              {huidVerifyResult.error ? (
-                                <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
-                              ) : (
-                                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                                  {huidVerifyResult.purity && <><span className="text-stone-500">Purity</span><span className="font-semibold">{huidVerifyResult.purity}</span></>}
-                                  {huidVerifyResult.jeweller_name && <><span className="text-stone-500">Jeweller</span><span className="font-semibold">{huidVerifyResult.jeweller_name}</span></>}
-                                  {huidVerifyResult.hallmark_date && <><span className="text-stone-500">Date</span><span className="font-semibold">{huidVerifyResult.hallmark_date}</span></>}
-                                  {huidVerifyResult.article_type && <><span className="text-stone-500">Article</span><span className="font-semibold capitalize">{huidVerifyResult.article_type}</span></>}
-                                </div>
-                              )}
-                            </div>
-                          )}
                           <p className="text-[11px] text-stone-600 leading-relaxed italic border-t border-stone-200 pt-2">
                             {currentEval?.result?.feedback || 'Take a clear photo of the Hallmark stamp for automatic extraction.'}
                           </p>
@@ -723,10 +628,9 @@ export function CaptureFlow() {
                               const val = e.target.value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
                               setManualHuid(val);
                               setHuid(val || null);
-                              setHuidVerifyResult(null);
                               // Record the typed HUID as an INDEPENDENT (manual) item HUID
                               // so the bill cross-check can match against it even before
-                              // (or without) BIS verification.
+                              // (or without) any verification.
                               if (val.length === 6) {
                                 setPageEvidence('huid', { code: val, source: 'manual', status: 'MANUAL_ENTRY', verified: false })
                               }
@@ -735,74 +639,8 @@ export function CaptureFlow() {
                             className="input-field font-mono flex-1"
                             maxLength={6}
                           />
-                          <button
-                            onClick={() => handleVerifyHuid(manualHuid, 'manual')}
-                            disabled={manualHuid.length !== 6 || huidVerifying}
-                            className={clsx(
-                              'px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap',
-                              manualHuid.length === 6 && !huidVerifying
-                                ? 'bg-brand-600 border-brand-600 text-white'
-                                : 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
-                            )}
-                          >
-                            {huidVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify BIS'}
-                          </button>
                         </div>
                       </div>
-
-                      {/* BIS Verification Result */}
-                      {huidVerifyResult && (
-                        <div className={clsx(
-                          'rounded-2xl border p-3 space-y-2',
-                          huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
-                            huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-50 border-red-200' :
-                              'bg-red-50 border-red-200'
-                        )}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-stone-700">BIS CARE Result</span>
-                            <span className={clsx(
-                              'text-[10px] font-bold px-2 py-0.5 rounded-full',
-                              huidVerifyResult.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
-                                huidVerifyResult.status === 'NOT_VERIFIED' ? 'bg-red-100 text-red-700' :
-                                  'bg-red-100 text-red-700'
-                            )}>
-                              {huidVerifyResult.status.replace('_', ' ')}
-                            </span>
-                          </div>
-                          {huidVerifyResult.error ? (
-                            <p className="text-xs text-red-600">{huidVerifyResult.error}</p>
-                          ) : (
-                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                              {huidVerifyResult.purity && (
-                                <>
-                                  <span className="text-stone-500">Purity</span>
-                                  <span className="font-semibold text-stone-800">{huidVerifyResult.purity}</span>
-                                </>
-                              )}
-                              {huidVerifyResult.article_type && (
-                                <>
-                                  <span className="text-stone-500">Article</span>
-                                  <span className="font-semibold text-stone-800 capitalize">{huidVerifyResult.article_type}</span>
-                                </>
-                              )}
-                              {huidVerifyResult.jeweller_name && (
-                                <>
-                                  <span className="text-stone-500">Jeweller</span>
-                                  <span className="font-semibold text-stone-800">{huidVerifyResult.jeweller_name}</span>
-                                </>
-                              )}
-                              {huidVerifyResult.hallmark_date && (
-                                <>
-                                  <span className="text-stone-500">Hallmark Date</span>
-                                  <span className="font-semibold text-stone-800">{huidVerifyResult.hallmark_date}</span>
-                                </>
-                              )}
-                              <span className="text-stone-500">Confidence</span>
-                              <span className="font-semibold text-stone-800">{huidVerifyResult.confidence}%</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
 
                       <div>
                         <label className="label mb-2 block">Purity / Karat</label>
@@ -916,7 +754,7 @@ export function CaptureFlow() {
 
         {/* Bottom actions */}
         <div className="px-5 pb-6 pt-3 space-y-2 sticky-action">
-          {evalState === 'rejected' && !hasManualHuidOverride && !hasSelectedPurity && !huidVerifyResult ? (
+          {evalState === 'rejected' && !hasManualHuidOverride && !hasSelectedPurity ? (
             <button onClick={handleRetake} className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded-2xl py-3 font-semibold transition-colors flex items-center justify-center gap-2">
               <RotateCcw className="w-5 h-5" />
               Retake Photo
