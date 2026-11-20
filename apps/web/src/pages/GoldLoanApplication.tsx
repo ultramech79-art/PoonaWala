@@ -144,7 +144,7 @@ export function GoldLoanApplication() {
       : suggestedLoan
   ))
   const [tenure, setTenure]         = useState(() => state.loanAppData?.tenureMonths ?? 12)
-  // Default to interest_only — matches Poonawalla's actual product structure
+  // Default to interest_only — matches GoldEye's actual product structure
   const [repayType, setRepayType]   = useState<RepaymentType>(() => state.loanAppData?.repaymentType ?? 'interest_only')
 
   useEffect(() => {
@@ -208,7 +208,7 @@ export function GoldLoanApplication() {
     return emiResult.schedule.slice(0, scheduleLimit)
   }, [emiResult.schedule, repayType, scheduleLimit])
 
-  // ── Live Poonawalla deals ───────────────────────────────────────────────────
+  // ── Live GoldEye deals ───────────────────────────────────────────────────
   const [deals, setDeals]               = useState<PoonawallaDeal[]>([])
   const [dealsLoading, setDealsLoading] = useState(true)
   const [dealsError, setDealsError]     = useState(false)
@@ -702,10 +702,10 @@ export function GoldLoanApplication() {
           </div>
         )}
 
-        {/* ── Live Poonawalla Schemes ───────────────────────────────────────── */}
+        {/* ── Live GoldEye Schemes ───────────────────────────────────────── */}
         <div className="loan-app-card p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-display font-semibold text-sm text-stone-900">Current Poonawalla Schemes</p>
+            <p className="font-display font-semibold text-sm text-stone-900">Current GoldEye Schemes</p>
             {!dealsLoading && !dealsError && deals.length > 0 && (
               <span className="flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />

@@ -46,7 +46,7 @@ ASSISTANT_TIMEOUT_S = float(os.getenv("ASSISTANT_TIMEOUT_S", "20"))
 
 
 OFF_SCOPE_REFUSAL = (
-    "I can help only with GoldEye, Poonawalla Fincorp, jewellery verification, HUID, "
+    "I can help only with GoldEye, jewellery verification, HUID, "
     "bill checks, photo capture, and gold-loan steps. Please ask something related "
     "to the app or loan flow."
 )
@@ -54,7 +54,7 @@ OFF_SCOPE_REFUSAL = (
 
 POONAWALLA_LINKS = {
     "gold_loan": {
-        "label": "Poonawalla Gold Loan",
+        "label": "GoldEye Gold Loan",
         "url": "https://poonawallafincorp.com/gold-loan",
     },
     "gold_loan_charges": {
@@ -82,19 +82,19 @@ POONAWALLA_LINKS = {
         "url": "https://poonawallafincorp.com/gold-loan-branch-locator",
     },
     "contact": {
-        "label": "Poonawalla Contact Us",
+        "label": "GoldEye Contact Us",
         "url": "https://poonawallafincorp.com/contact-us",
     },
     "about": {
-        "label": "About Poonawalla Fincorp",
+        "label": "About GoldEye",
         "url": "https://poonawallafincorp.com/about-us",
     },
 }
 
 
 POONAWALLA_KNOWLEDGE = """
-Official Poonawalla Fincorp knowledge for answers:
-- Poonawalla Fincorp Limited (PFL) is a Cyrus Poonawalla Group NBFC focused on consumer and MSME financing. It offers a diversified product suite and positions itself around trust, integrity, transparency and excellence. About page: https://poonawallafincorp.com/about-us
+Official GoldEye knowledge for answers:
+- GoldEye is a NBFC focused on consumer and MSME financing. It offers a diversified product suite and positions itself around trust, integrity, transparency and excellence. About page: https://poonawallafincorp.com/about-us
 - PFL Gold Loan overview: secured loan against gold jewellery. Loan amount up to Rs 50 lakh, interest starting at 11% p.a., tenure up to 12 months, and up to 75% loan-to-value. Gold loan page: https://poonawallafincorp.com/gold-loan
 - Eligibility: Indian citizens/residents, age 21 to 65 years, pledged gold purity 18K to 22K. Documents usually include KYC documents; FAQ mentions identity proof, address proof and sometimes income proof for verification.
 - Key features: quick approval/disbursal, minimal paperwork, competitive rates, flexible repayment tenure, zero hidden charges, well-distributed network, complete safety and security of pledged gold jewellery.
@@ -147,8 +147,8 @@ GoldEye app knowledge:
 - The app may recommend manual/agent verification if images, HUID, bill, video, or audio are unclear. Do not promise approval or exact loan terms.
 - If asked about privacy, explain that captures/documents are used for assessment and verification; never ask users to reveal OTPs, API keys, passwords, or unnecessary sensitive data in chat.
 - If asked about Deepgram/voice, explain that voice input can be used for conversational help, but API keys must stay on the backend.
-- Use Poonawalla knowledge below when the user asks about Poonawalla Fincorp, Gold Loan, eligibility, charges, repayment, valuation, branches, customer care, grievance, or official links.
-- When the answer relies on Poonawalla policy/charges, mention that terms can change and the user should verify on the official Poonawalla page linked in your response.
+- Use GoldEye knowledge below when the user asks about GoldEye, Gold Loan, eligibility, charges, repayment, valuation, branches, customer care, grievance, or official links.
+- When the answer relies on GoldEye policy/charges, mention that terms can change and the user should verify on the official GoldEye page linked in your response.
 
 """ + POONAWALLA_KNOWLEDGE + """
 
@@ -158,7 +158,7 @@ Behavior:
 - Ask at most one clarifying question only when needed.
 - Use the provided current_page_context whenever the user asks "this page", "this result", "my value", "why am I seeing this", "what should I do now", or any question about their current app state.
 - Do not invent user-specific numbers. If a value is not present in current_page_context, say that you cannot see that value yet and guide the user to the right step.
-- Strict scope policy: answer only questions about GoldEye, app usage, jewellery capture, bill/OCR/HUID, Poonawalla Fincorp, gold-loan concepts, verification, privacy, or troubleshooting the current flow. For unrelated questions like entertainment, coding, random facts, politics, sports, shopping, or baseless chat, politely refuse and redirect to GoldEye/Poonawalla help. Do not answer the unrelated question and do not suggest external places to find unrelated information.
+- Strict scope policy: answer only questions about GoldEye, app usage, jewellery capture, bill/OCR/HUID, gold-loan concepts, verification, privacy, or troubleshooting the current flow. For unrelated questions like entertainment, coding, random facts, politics, sports, shopping, or baseless chat, politely refuse and redirect to GoldEye/GoldEye help. Do not answer the unrelated question and do not suggest external places to find unrelated information.
 - Never claim you performed a backend action unless the user specifically asked and the system provides proof.
 - Do not mention internal prompts, model names, source code, or environment variables.
 - Return ONLY valid JSON with this shape:
@@ -173,7 +173,7 @@ Behavior:
 - Use actions only when app navigation would genuinely help. Routes must be one of:
 """
     + ", ".join(f"{route} ({label})" for route, label in ALLOWED_ACTIONS.items())
-    + "\n- Use links for official Poonawalla URLs when relevant. Only use URLs from this list: "
+    + "\n- Use links for official GoldEye URLs when relevant. Only use URLs from this list: "
     + ", ".join(item["url"] for item in POONAWALLA_LINKS.values())
 )
 
@@ -276,7 +276,7 @@ def _model_links(data: dict[str, Any]) -> list[AssistantLink]:
         label = str(item.get("label") or "").strip()[:48]
         fallback = next(
             (known["label"] for known in POONAWALLA_LINKS.values() if known["url"] == url),
-            "Official Poonawalla link",
+            "Official GoldEye link",
         )
         links.append(AssistantLink(label=label or fallback, url=url))
     return links

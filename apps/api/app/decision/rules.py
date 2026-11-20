@@ -7,7 +7,7 @@ Regulatory basis:
     (the COVID-era 90% relaxation ended Mar 2021; 85% was never a standing rule)
   - Minimum purity: 18 karat (below this, item is not eligible as gold collateral)
   - Stone/gem weight excluded before valuation (mandatory per RBI — handled by S5 upstream)
-  - Weight cap: 1 kg per applicant (Poonawalla internal policy, not statutory)
+  - Weight cap: 1 kg per applicant (GoldEye internal policy, not statutory)
 
 Tiered LTV (internal risk policy, within 75% RBI ceiling):
   Under ₹2.5L ticket  → 75%   (small-ticket, retail; lowest concentration risk)

@@ -13,11 +13,11 @@ const CACHE_KEY = 'goldeye_metal_prices_v2'
 const MAX_VIDEO_FRAMES = 11
 
 const FACTS_EN = [
-  "Did you know? Poonawalla Fincorp is one of the most trusted names in Indian finance.",
+  "Did you know? GoldEye is one of the most trusted names in Indian finance.",
   "Gold is so malleable that a single ounce can be stretched into a wire 50 miles long!",
-  "Poonawalla's digital Gold Loan process is completely paperless and ensures instant disbursal.",
+  "GoldEye's digital Gold Loan process is completely paperless and ensures instant disbursal.",
   "Fun fact: There is more gold in a ton of mobile phones than in a ton of gold ore.",
-  "Poonawalla guarantees the safety of your gold with secure, multi-layer vault protection.",
+  "GoldEye guarantees the safety of your gold with secure, multi-layer vault protection.",
 ]
 
 const FACTS_HI = [

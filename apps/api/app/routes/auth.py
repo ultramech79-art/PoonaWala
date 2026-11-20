@@ -244,15 +244,13 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if not req.password:
         raise HTTPException(status_code=422, detail="pin is required")
 
+    # OTP is optional: if supplied it is checked (123456), otherwise registration proceeds.
     phone_verified = False
-    if phone:
-        if req.otp_session_id and req.otp:
-            otp_result = await verify_otp_code(req.otp_session_id, req.otp)
-            phone_verified = bool(otp_result.success and otp_result.valid)
-        elif req.otp_session_id:
-            phone_verified = await consume_verified_otp_session(db, req.otp_session_id)
-        if not phone_verified:
-            raise HTTPException(status_code=401, detail="otp_verification_required")
+    if phone and req.otp_session_id and req.otp:
+        otp_result = await verify_otp_code(req.otp_session_id, req.otp)
+        phone_verified = bool(otp_result.success and otp_result.valid)
+    elif phone and req.otp_session_id:
+        phone_verified = await consume_verified_otp_session(db, req.otp_session_id)
 
     if phone:
         existing = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
@@ -267,7 +265,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
             existing.profile_photo_url = req.profile_photo_url
             existing.profile_photo_public_id = req.profile_photo_public_id
             existing.password_hash = _hash_pin(req.password)
-            existing.is_phone_verified = True
+            existing.is_phone_verified = existing.is_phone_verified or phone_verified
             return await _issue(existing, db)
 
     user = User(

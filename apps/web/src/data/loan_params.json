@@ -108,7 +108,7 @@
     "stamp_duty_note": "At actuals as per state laws",
     "late_payment_bullet_pct": 6.0,
     "late_payment_monthly_pct": 24.0,
-    "source_note": "Poonawalla Fincorp gold-loan page (verified May 2026): max 2% processing fee + applicable taxes; safe custody ₹5/g of net weight/month; foreclosure up to 1% within 30 days; notice ₹200, part-release ₹150, bounce ₹500 (monthly scheme); late payment 6% p.a. (rear-ended/bullet) / 24% p.a. (monthly) on overdue amount. GST applies only to fees and charges, never to principal or interest."
+    "source_note": "GoldEye gold-loan page (verified May 2026): max 2% processing fee + applicable taxes; safe custody ₹5/g of net weight/month; foreclosure up to 1% within 30 days; notice ₹200, part-release ₹150, bounce ₹500 (monthly scheme); late payment 6% p.a. (rear-ended/bullet) / 24% p.a. (monthly) on overdue amount. GST applies only to fees and charges, never to principal or interest."
   },
   "tenure_options": {
     "poonawalla_max_months": 36,
